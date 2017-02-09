@@ -1,12 +1,12 @@
 #!/usr/bin/env perl
-#main TAMOC routine
+#main MATAFILER routine
 #ex
-#./TAMOC.pl map2tar /g/scb/bork/hildebra/SNP/test/refCtg.fasta,/g/scb/bork/hildebra/SNP/test/refCtg.fasta test1,test2
-#./TAMOC.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa TEC2
-#./TAMOC.pl map2tar /g/bork3/home/hildebra/results/prelimGenomes/TEC3/MM3.TEC3.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC3/TEC3ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC4/MM3.TEC4.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC4/TEC4ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC5/MM4.TEC5.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC5/TEC5ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC6/MM29.TEC6.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC6/TEC6ref.fasta TEC3,TEC3r,TEC4,TEC4r,TEC5,TEC5r,TEC6,TEC6r
+#./MATAFILER.pl map2tar /g/scb/bork/hildebra/SNP/test/refCtg.fasta,/g/scb/bork/hildebra/SNP/test/refCtg.fasta test1,test2
+#./MATAFILER.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa TEC2
+#./MATAFILER.pl map2tar /g/bork3/home/hildebra/results/prelimGenomes/TEC3/MM3.TEC3.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC3/TEC3ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC4/MM3.TEC4.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC4/TEC4ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC5/MM4.TEC5.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC5/TEC5ref.fasta,/g/bork3/home/hildebra/results/prelimGenomes/TEC6/MM29.TEC6.scaffs.fna,/g/bork3/home/hildebra/results/prelimGenomes/TEC6/TEC6ref.fasta TEC3,TEC3r,TEC4,TEC4r,TEC5,TEC5r,TEC6,TEC6r
 #/g/bork5/hildebra/results/TEC2/v5/T6/TEC6.ctgs.rn.fna
-#./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa frz11; ./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna Tara; ./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna IGC
-#./TAMOC.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa,/g/bork3/home/hildebra/results/TEC2/v5/T6/TEC6.ctgs.rn.fna T2d,T6d
+#./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa frz11; ./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna Tara; ./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna IGC
+#./MATAFILER.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa,/g/bork3/home/hildebra/results/TEC2/v5/T6/TEC6.ctgs.rn.fna T2d,T6d
 
 #The Metagenomic Assembly, Genomic Recovery and Assembly Independent Mapping Tool
 
@@ -109,7 +109,7 @@ my $mapF = ""; my $baseID = "empty_ass_metag";
 #my $krkFiltBin = "/g/scb/bork/hildebra/DB/kraken/./kraken-filter";
 
 
-#local TAMOC scripts --------------------------
+#local MATAFILER scripts --------------------------
 my $cLSUSSUscript = getProgPaths("cLSUSSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/catchLSUSSU.pl";
 my $lotusLCA_cLSU = getProgPaths("lotusLCA_cLSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/lotus_LCA_blast2.pl";
 my $krakCnts1 = getProgPaths("krakCnts_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/krak_count_tax.pl";
@@ -164,7 +164,7 @@ my $calcD2s = 0;
 my $DoKraken = 0; my $RedoKraken = 0; my $KrakTaxFailCnts=0;
 my $pseudoAssembly = 0; #in case no assembly is possible (soil single reads), just filter for reads X long 
 my $DoFreeGlbTmp = 0; my $defaultReadLength = 100;
-my $maxReqDiaDB = 6; #max number of databases supported by TAMOC
+my $maxReqDiaDB = 6; #max number of databases supported by METAFILER
 my $reqDiaDB = "ABR";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
 
 
@@ -1275,7 +1275,7 @@ close $QSBopt{LOG};
 
 
 
-print "\n$sharedTmpDirP\n".$baseOut."\nFINISHED TAMOC\n";
+print "\n$sharedTmpDirP\n".$baseOut."\nFINISHED MATAFILER\n";
 if ($statStr ne ""){
 	open O,">$baseOut/metagStats.txt";
 	print O $statStr;
