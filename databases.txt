@@ -1,0 +1,4 @@
+#List of databases in the pipeline
+my $FOAMhmm = "/g/bork3/home/hildebra/DB/FUNCT/FOAM/FOAM-hmm_rel1.hmm";
+my $eggDB = "/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/eggnog4.proteins.all.fa";
+my $ABresHMM = "/g/bork/forslund/morehmms/Resfams.hmm";
