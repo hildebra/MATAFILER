@@ -4,13 +4,13 @@ MFLRDir	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/
 ## external programs
 
 #	programs	ESSENTIAL
-samtools	/g/bork3/home/hildebra/bin/samtools-1.3.1/st131/bin/samtools
+samtools	[MFLRDir]/bin/samtools
 spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.9.1-Linux/bin/spades.py
-bwt2	/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2
+bwt2	[MFLRDir]/bin/bowtie2
 #bwa	/g/bork3/home/hildebra/bin/bwa/./bwa
-prodigal	/g/bork5/hildebra/bin/Prodigal-2.6.1/prodigal
-sambamba	/g/bork3/home/hildebra/bin/sambamba/sambamba_v0.6.4
-pigz	/g/bork3/home/hildebra/bin/bins/pigz
+prodigal	[MFLRDir]/bin/prodigal
+sambamba	[MFLRDir]/bin/sambamba_v0.6.4
+pigz	[MFLRDir]/bin/pigz
 
 
 
@@ -29,7 +29,7 @@ BESST	/g/bork3/home/hildebra/bin/BESST/./runBESST
 gapfiller	perl /g/bork5/hildebra/bin/GapFiller/GapFiller_n.pl
 
 #		gene catalogue
-cdhit	/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
+cdhit	[MFLRDir]/bin/cd-hit
 
 #		miTag related
 lambda	/g/bork3/home/hildebra/bin/lambda/lambda-1.0.0-Linux-x86_64/bin/lambda
@@ -56,20 +56,20 @@ metPhl2Merge	/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.
 kraken	/g/scb/bork/hildebra/DB/kraken/./kraken
 
 #functional profiling
-diamond	/g/bork5/hildebra/bin/diamond/./diamond
+diamond	[MFLRDir]/bin/./diamond
 
 #if read merge is attempted in any step (typically for miTag, profiling)
-flash	/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash
+flash	[MFLRDir]/bin/flash
 
 
 
-#my own C++ progs 
-rare	/g/bork3/home/hildebra/dev/C++/Rarefaction/rtk/rtk
-sdm	/g/bork3/home/hildebra/dev/C++/sdm/sdm
-LCA	/g/bork3/home/hildebra/dev/C++/LCA/./LCA
-readCov	/g/bork3/home/hildebra/dev/C++/rdCov/./rdCover
+#my own C++ progs 	ESSENTIAL
+rare	[MFLRDir]/bin/rtk
+sdm	[MFLRDir]/bin/sdm
+LCA	[MFLRDir]/bin/./LCA
+readCov	[MFLRDir]/bin/./rdCover
 
-#local scripts
+#local scripts 	ESSENTIAL
 cLSUSSU_scr	perl [MFLRDir]/miTag/catchLSUSSU.pl
 lotusLCA_cLSU_scr	[MFLRDir]/miTag/lotus_LCA_blast2.pl
 krakCnts_scr	[MFLRDir]/secScripts/krak_count_tax.pl
@@ -92,7 +92,7 @@ bamHdFilt_scr	[MFLRDir]/secScripts/./correctBamHD.pl
 hmmBestHit_scr [MFLRDir]/secScripts/bmn-HMMerBestHit.py
 mrgDia_scr	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/./combine_DIA.pl
 
-#options for filters etc
+#options for filters etc	ESSENTIAL
 baseSDMopt_rel	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_inifilter_relaxed.txt
 baseSDMopt = /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_inifilter.txt
 baseSDMoptMiSeq	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_miSeq.txt
