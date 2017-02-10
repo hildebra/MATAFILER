@@ -15,9 +15,9 @@ sub getProgPaths($ ){
 	my $TMCpath = "";my $Tset=0;
 	while (<I>){
 		next if (m/^#/);
-		if (!$Tset && m/^MFLRDir\t(.+)$/){
+		if (!$Tset && m/^MFLRDir\t([^#]+)/){
 			$Tset=1;$TMCpath = $1;
-		}elsif (m/^$srchVar\t(.+)$/){
+		}elsif (m/^$srchVar\t([^#]+)/){
 			my $reV = $1;
 			$reV =~s/\[MFLRDir\]/$TMCpath/;
 			close I;return $reV;
