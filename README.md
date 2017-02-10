@@ -9,9 +9,14 @@ Most importantly set up the config.txt (symlink to Mods/MATAFILERcfg.txt). A bun
 In general, LCA and sdm can be obtained from the LotuS pipeline. 
 programs under the header "ESSENTIAL" are essential to have to run the pipeline.
 The pipeline is in alpha state, expect to have some headache getting it to run, though I will help where I can in the process. Note that some essential programs are already in the bin folder, check that all of them are executable (otherwise do 'chmod +x bin/*').
+
 Last, some Perl libraries need to be globally available. To do this add the following to your .bashrc:
+
 export PERL5LIB=absolute_path_to_METAFILER_dir:$PERL5LIB
+
 where 'absolute_path_to_METAFILER_dir' is simply the dir the README.md is in, that you are now reading.
+
+The pipeline expects a path /scratch that is globally available on all nodes and a /tmp that is locally available on each node.
 
 ##QUICKSTART
 Most importantly you need a mapping file to your files. See 'examples' dir for some map examples (also explaining how to do compound assemblies, compound mapping). These tags are important in the mapping file:
