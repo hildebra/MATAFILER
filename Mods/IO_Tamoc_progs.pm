@@ -7,6 +7,27 @@ use strict;
 use Exporter qw(import);
 our @EXPORT_OK = qw(inputFmtSpades jgi_depth_cmd createGapFillopt getProgPaths buildMapperIdx);
 
+
+sub getProgPaths($ ){
+	my ($srchVar) =  @_;
+	my $optF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/Mods/MATAFILERcfg.txt";
+	open I,"<$optF" or die "Can't open $optF\n";
+	my $TMCpath = "";my $Tset=0;
+	while (<I>){
+		next if (m/^#/);
+		if (!$Tset && m/^MFLRDir\t(.+)$/){
+			$Tset=1;$TMCpath = $1;
+		}elsif (m/^$srchVar\t(.+)$/){
+			my $reV = $1;
+			$reV =~s/\[MFLRDir\]/$TMCpath/;
+			close I;return $reV;
+		}
+	}
+	close I;
+	die "Can't find program $srchVar\n";
+	return "";
+}
+
 sub buildMapperIdx($ $ $ $){
 	my ($REF,$ncore,$lrgDB,$MapperProg) = @_;
 	my $bwt2Bin = getProgPaths("bwt2");
@@ -26,24 +47,7 @@ sub buildMapperIdx($ $ $ $){
 	return ($dbCmd,$bwtIdx);
 }
 
-sub getProgPaths($ ){
-	my ($srchVar) =  @_;
-	open I,"<MATAFILERcfg.txt";
-	my $TMCpath = "";my $Tset=0;
-	while (<I>){
-		next if (m/^#/);
-		if (!$Tset && m/^MFLRDir\t(.+)$/){
-			$Tset=1;$TMCpath = $1;
-		}elsif (m/^$srchVar\t(.+)$/){
-			my $reV = $1;
-			$reV =~s/\[MFLRDir\]/$TMCpath/;
-			close I;return $reV;
-		}
-	}
-	close I;
-	die "Can't find program $srchVar\n";
-	return "";
-}
+
 sub inputFmtSpades($ $ $ $){
 	my ($p1ar,$p2ar,$singlAr,$logDir) = @_;
 	my @p1 = @{$p1ar}; my @p2 = @{$p2ar};

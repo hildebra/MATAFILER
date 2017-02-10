@@ -103,6 +103,7 @@ my $pigzBin  = getProgPaths("pigz");
 my $sdmBin = getProgPaths("sdm");#"/g/bork3/home/hildebra/dev/C++/sdm/./sdm";
 my $rareBin = getProgPaths("rare");#"/g/bork3/home/hildebra/dev/C++/rare/rare";
 my $readCov_Bin =getProgPaths("readCov");
+my $jgiDepthBin = getProgPaths("jgiDepth");#"/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths";
 
 my $baseDir = ""; my $baseOut = "";
 my $mapF = ""; my $baseID = "empty_ass_metag";
@@ -2604,7 +2605,7 @@ sub bam2cram($ $ $ $ $ $ $){#save further space: convert the bam to cram
 sub jgi_depth_cmd_depr($){
 	my ($nxtBAM) = @_;
 	my $covCmd = "";
-	$covCmd .= "\n/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths";
+	$covCmd .= "\n$jgiDepthBin";
 	$covCmd .= " --outputDepth $nxtBAM.jgi.depth.txt  --percentIdentity 97 --pairedContigs $nxtBAM.jgi.pairs.sparse $nxtBAM > $nxtBAM.jgi.cov\n";
 	$covCmd .= "\ngzip $nxtBAM.jgi.*\n\n";
 	if (-e "$nxtBAM.jgi.cov"){$covCmd="";}

@@ -11,6 +11,7 @@ bwt2	[MFLRDir]/bin/bowtie2
 prodigal	[MFLRDir]/bin/prodigal
 sambamba	[MFLRDir]/bin/sambamba_v0.6.4
 pigz	[MFLRDir]/bin/pigz
+jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths
 
 
 
