@@ -285,7 +285,6 @@ sub read_matrix($){
 #check which mean abundance profile single MG have, and how multi MGs correlate to this 
 #then selects best correlating MG to be "the one" that just fits
 sub getCorrs(){
-	
 	foreach my $k(keys %SpecIgenes){
 		my @tarGenes; my $gcnt =0;
 		foreach my $c(keys %{$SpecIgenes{$k}}){
@@ -304,8 +303,16 @@ sub getCorrs(){
 		
 		#doesn't need norm, since we do spearman correlation
 		#but now corr and see which genes just fit best of the multi choices..
-		
-		
+		foreach my $c(keys %{$SpecIgenes{$k}}){
+			if ($SpecIgenes{$k}{$c} =~ m/,/){#single copy, use this gene
+				die "$SpecIgenes{$k}{$c}\n";
+				my @spl = split /,/,$SpecIgenes{$k}{$c};
+				my @subCors;
+				foreach my $sg (@spl){
+					push (@subCors,  calculate_spearman_correlation(\@tarGenes,${$FMGmatrix{ $sg }})   );
+				}
+			}
+		}
 	}
 }
 

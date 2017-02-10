@@ -4,26 +4,30 @@
 - Build a gene catalog based on these assemblies and predicted genes, build abundance matrices from these and annotate the genes functionally (geneCat.pl)
 
 ##INSTALL
-- How to install:
-Most importantly set up the config.txt (symlink to Mods/MATAFILERcfg.txt). A bunch of programs needs to be present on your system, and in this file you either need to link to the dir or the executable. Follow the examples set up on my system, to see what kind of file is needed. There are comments that define for which part of the pipeline you need what programs.
-In general, LCA and sdm can be obtained from the LotuS pipeline. 
+- How to install:  
+Most importantly set up the config.txt (symlink to Mods/MATAFILERcfg.txt). A bunch of programs needs to be present on your system, and in this file you either need to link to the dir or the executable. Follow the examples set up on my system, to see what kind of file is needed. There are comments that define for which part of the pipeline you need what programs.  
+In general, LCA and sdm can be obtained from the LotuS pipeline.  
 programs under the header "ESSENTIAL" are essential to have to run the pipeline.
-The pipeline is in alpha state, expect to have some headache getting it to run, though I will help where I can in the process. Note that some essential programs are already in the bin folder, check that all of them are executable (otherwise do 'chmod +x bin/*').
-
-Last, some Perl libraries need to be globally available. To do this add the following to your .bashrc:
-
-export PERL5LIB=absolute_path_to_METAFILER_dir:$PERL5LIB
-
-where 'absolute_path_to_METAFILER_dir' is simply the dir the README.md is in, that you are now reading.
-
+The pipeline is in alpha state, expect to have some headache getting it to run, though I will help where I can in the process. Note that some essential programs are already in the bin folder, check that all of them are executable (otherwise do 'chmod +x bin/*').  
+Last, some Perl libraries need to be globally available. To do this add the following to your .bashrc:  
+export PERL5LIB=absolute_path_to_METAFILER_dir:$PERL5LIB  
+where 'absolute_path_to_METAFILER_dir' is simply the dir the README.md is in, that you are now reading.  
 The pipeline expects a path /scratch that is globally available on all nodes and a /tmp that is locally available on each node.
 
 ##QUICKSTART
+### Create a mapping file for your experiment
 Most importantly you need a mapping file to your files. See 'examples' dir for some map examples (also explaining how to do compound assemblies, compound mapping). These tags are important in the mapping file:
-- #SmplID	Path - map always has to start with the #SmplID tag, Path is the relative path to fastq[.gz] files for each sample
-- #DirPath	Base directory where subdir with the fastqs can be found
+- #SmplID	Path - map always has to start with the *#SmplID* tag. This will be used in all subsequent tables, intermediary files etc to identify a sample and shoul be as short and descriptive as possible. *DO NOT USE SPECIAL CHARACTERS IN THE SMPLID, keep it basic*!  
+*Path* is the relative path to fastq[.gz] files for each sample (see #DirPath, this needs to be set to the absolute path). All files ending with .fq or .fastq (can have .gz after) in the dir will be used for that specific samples. 1. or 2. indicates first or second read. E.g. al0-0_12s005629-2-1_lane3.2.fq.gz is the second read, here the pipeline expects to have al0-0_12s005629-2-1_lane3.1.fq.gz in the same dir.  
+Further, you can add the following specifics for each single sample:   
+*AssmblGrps* - set this to a number or string. all samples with the same tag will be assembled together (e.g. samples from the same patient at different time points).  
+*MapGrps* - set a tag here as in AssmblGrps. All reads from these samples will be thrown together, when mapping against target sequences (only works with option "map2tar" and "map2DB").
+*SupportReads* - in case you have additional reads, that are not normal illumina hiSeq, e.g. miSeq or hiSeq in mate pair sequence mode.
+ 
+- #DirPath	Base directory where subdir with the fastqs can be found. You can insert this on several lines, if the base path changes for all samples afterwards.
 - #OutPath	Where to write the output (can be massive, make sure you have enough space)
 - #RunID	The directory below OutPath, where results are stored. Also serves as global identifier for this run
 - #mocatFiltPath	If for some reason you are forced to use mocat filtered fastqs and not the original, unfiltered files (strongly recommended), than you can indicate in which subdir these mocat files can be found
 
-After this follow the sample IDs and the relative path, where to find the input fastqs.
+After this follow the sample IDs and the relative path, where to find the input fastqs.  
+See _examples/example_map_assemblies.map_ for a very complicated mapping file with several source dirs.
