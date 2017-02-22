@@ -14,6 +14,7 @@ sub getProgPaths($ ){
 	open I,"<$optF" or die "Can't open $optF\n";
 	my $TMCpath = "";my $Tset=0;
 	while (<I>){
+		chomp;
 		next if (m/^#/);
 		if (!$Tset && m/^MFLRDir\t([^#]+)/){
 			$Tset=1;$TMCpath = $1;

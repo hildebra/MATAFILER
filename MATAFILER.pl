@@ -84,7 +84,7 @@ my $metPhl2Bin = getProgPaths("metPhl2");#"/g/bork3/home/hildebra/bin/metaphlan2
 my $metPhl2Merge = getProgPaths("metPhl2Merge");#"/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
 #my $spadesBin = "/g/bork5/hildebra/bin/SPAdes-3.7.0-dev-Linux/bin/spades.py";
 my $spadesBin = getProgPaths("spades");#"/g/bork3/home/hildebra/bin/SPAdes-3.7.1-Linux/bin/spades.py";
-my $usBin = getProgPaths("usearch");#"/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh";
+#my $usBin = getProgPaths("usearch");#"/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh";
 my $bwt2Bin = getProgPaths("bwt2");#"/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2";
 my $bwaBin = getProgPaths("bwa");#"/g/bork3/home/hildebra/bin/bwa-0.7.12/bwa";
 my $d2metaBin = getProgPaths("d2meta");#"/g/bork3/home/hildebra/bin/d2Meta/d2Meta/d2Meta.out";
@@ -178,7 +178,7 @@ my $doSubmit=1;
 my $rewrite=0;my $rewrite2ndMap = 0;
 
 
-if ( 1 ){ #real data 
+if ( 0 ){ #real data 
 	if ( 0 ){ #MM samples
 		$importMocat=0;	
 		die "Sure you want to rewrite?\n" if ($rewrite);
@@ -330,18 +330,21 @@ if ( 1 ){ #real data
 		#$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/soil_map_d.txt"; $doDateFileCheck = 1; $reqDiaDB = "CZy"; $DoRibofind = 0;$DoMetaPhlan = 0; $DoKraken = 0;
 	}
 } else {
-	$from=0; $to=50;$rewrite =0;
+	$from=0; $to=1;$rewrite =0;
 	$doBam2Cram =0; $DoAssembly=1;
-	$Spades_Cores=12;$Spades_Memory = 24;
+	$Spades_Cores=12;$Spades_Memory = 34;
 	$Spades_HDspace=100;
 	$bwt_Cores = 5;$humanFilter=0;
 	$doReadMerge=0;
-	if (1){
+	if (0){
 		$baseID = "SimuA";  $DoRibofind=0; $RedoRiboFind = 0;$RedoRiboAssign=0; $DO_EUK_GENE_PRED=1;
 		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simus2.txt";#_singl
-		$baseOut = "/g/scb/bork/hildebra/SNP/$baseID/"; 
 		$RedoKraken=0; $DoKraken = 0; $globalKraTaxkDB = "soilOrgs";#$globalKraTaxkDB = "minikraken_2015/";
-		$baseDir = "/g/bork5/hildebra/data/Simulations/";#"/g/bork5/kultima/MM/"
+	} elsif (1){ #Luis
+		$DoRibofind=0; $RedoRiboFind = 0;$RedoRiboAssign=0; $DO_EUK_GENE_PRED=0;
+		$mapF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/LuisSimu.map";#_singl
+		$RedoKraken=0; $DoKraken = 0; $globalKraTaxkDB = "soilOrgs";#$globalKraTaxkDB = "minikraken_2015/";
+		$rawFileSrchStr1 = '.*1\.fq\.gz$';$rawFileSrchStr2 = '.*2\.fq\.gz$';
 	} else { #fungi & 2 bacs, 8 times repeated
 		$DO_EUK_GENE_PRED = 1;
 		
@@ -596,7 +599,6 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die $samples[$JNUM]."\n";
 	next if (exists($jmp{$JNUM}));
 	$dir2rd = $map{$samples[$JNUM]}{dir};
-	
 	#print "$samples[$JNUM]  $map{$samples[$JNUM]}{dir}  $map{$samples[$JNUM]}{rddir}  $map{$samples[$JNUM]}{wrdir}\n";	next;
 	my $SmplName = $map{$samples[$JNUM]}{SmplID};
 	push (@allSmplNames,$SmplName);
@@ -611,7 +613,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		$curDir = $map{$samples[$JNUM]}{rddir};	$curOutDir = $map{$samples[$JNUM]}{wrdir};	
 	}
 
-	#die "$curOutDir\n$baseOut\n";
+	#die "$curDir\n$curOutDir\n$baseOut\n";
 	
 	my $samplReadLength = $defaultReadLength; #some default value
 	if (exists $map{$samples[$JNUM]}{readLength}){
@@ -905,6 +907,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	if ($scaffTarExternal ne "" &&  $map{$samples[$JNUM]}{"SupportReads"} !~ /mate/i && $scaffTarExtLibTar ne $samples[$JNUM] ){print"scNxt\n";next;}
 	#has this sample extra reads (e.g. long reads?)
 	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $calcD2s || $calcKraken\n";
+	#die "$curDir\n";
 	my ($jdep,$cfp1ar,$cfp2ar,$cfpsar,$WT,$rawFiles, $mmpuNum, $libInfoRef, $jdepUZ) = 
 		seedUnzip2tmp($curDir,$map{$samples[$JNUM]}{SupportReads},$curUnzipDep,$nodeSpTmpD,
 		$GlbTmpPath,$waitTime,$importMocat,$AsGrps{$cMapGrp}{CntMap},$calcUnzip);
@@ -2294,15 +2297,17 @@ sub seedUnzip2tmp(){
 		#die $fastp2."\n".$xtraRdsTech."\n";
 	}
 	
-
+#$fastp = "/g/bork1/coelho/DD_DeCaF/eggnog-simulations/simulated-samples/sample-0/";
 
 	#if ($fastp ne "") {print "Looking for fq.gz in ".$fastp;} else { print "No primary dir.. "; }
 	if ($fastp2 ne ""){ print " and $fastp2";}
-	print "\n";
+	#print "\n";
+	#die "$fastp\n";
 	my @pa1; my @pa2; my @pas; my @paX1; my @paX2;
 	if ($fastp ne ""){
 		if ($mocatImport==0){
-			opendir(DIR, $fastp) or die "$!: $fastp\n";	
+			opendir(DIR, $fastp) or die "Can't find: $fastp\n";	
+		
 			if ($readsRpairs){
 				@pa2 = sort ( grep { /$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
 				@pa1 = sort ( grep { /$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
@@ -2316,7 +2321,7 @@ sub seedUnzip2tmp(){
 			@pas = sort ( grep { /.*single\.f[^\.]*q\.gz$/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 		}
 	}
-	#print "@pa1\n";
+	#die "@pa1\n";
 	#import xtra long rds
 	if (@pa1 != @pa2 && $readsRpairs){die "For dir $fastp, unequal fastq files exist:\nP1\n".join("\n",@pa1)."\nP2:\n".join("\n",@pa2)."\n";}
 	#check for date of files (special filter)

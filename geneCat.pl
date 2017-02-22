@@ -77,6 +77,8 @@ my $sortSepScr = getProgPaths("sortSepReLen_scr");#"perl $thisDir/secScripts/sep
 my $secCogBin = getProgPaths("secCogBin_scr");#"perl $thisDir/secScripts/parseBlastFunct2.pl";
 my $extre100Scr = getProgPaths("extre100_scr");#"perl $thisDir/helpers/extrAllE100GC.pl";
 my $hmmBestHitScr = getProgPaths("hmmBestHit_scr");
+my $genelengthScript = getProgPaths("genelength_scr");#= "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/geneLengthFasta.pl";
+
 #die "$extre100Scr\n";
 #my $thisDir = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/";
 
@@ -737,6 +739,7 @@ sub submCDHIT($ $ $ $ $){
 	}
 	
 	$cmd .= "$GCcalc $tmpDir/compl.incompl.$cdhID.fna $tmpDir/compl.incompl.$cdhID.fna.GC\n";
+	$cmd .= "$genelengthScript $tmpDir/compl.incompl.$cdhID.fna $tmpDir/compl.incompl.$cdhID.fna.length\n";
 
 	#move to final location
 	$cmd .= "mv $tmpDir/compl.incompl.$cdhID.fna* $OutD\n";

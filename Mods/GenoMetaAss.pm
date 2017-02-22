@@ -7,7 +7,7 @@ use List::MoreUtils 'first_index';
 use Exporter qw(import);
 our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD qsubSystem emptyQsubOpt 
 		 readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
-		readFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond);
+		readFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median);
 
 
 
@@ -30,6 +30,20 @@ if (length($text) % 3 != 0){
 	my $ltr = length($text) % 3;
 	my $lt = length($text);
 	$text = substr $text,0,($lt -$ltr);
+}
+
+sub median
+{
+    my @vals = sort {$a <=> $b} @_;
+    my $len = @vals;
+    if($len%2) #odd?
+    {
+        return $vals[int($len/2)];
+    }
+    else #even
+    {
+        return ($vals[int($len/2)-1] + $vals[int($len/2)])/2;
+    }
 }
 
 my %convertor = (
@@ -422,18 +436,17 @@ sub readMap{
 	open I,"<$inF" or die "Can't open $inF\n";
 	#AssGrps
 	while (<I>){
-		$cnt++;
+		$cnt++; chomp;
 		if (m/^#/ && $cnt > 0 ){#check for ssome global parameters
-			if (m/^#DirPath\s(\S+)/){$dir2dirs = $1; push(@dir2dirsA,$dir2dirs);}
-			if (m/^#OutPath\s(\S+)/){$dir2out = $1; $inDirSet=0;}
+			if (m/^#DirPath\s+(\S+).*$/){$dir2dirs = $1; $dir2dirs.="/" unless ($dir2dirs=~m/\/$/); push(@dir2dirsA,$dir2dirs);}
+			if (m/^#OutPath\s(\S+)/){$dir2out = $1; $inDirSet=0;$dir2out .= "/" if ($dir2out !~ m/\/$/);}
 			if (m/^#RunID\s(\S+)/){$baseID = $1; $inDirSet=0;}
 			if (m/^#mocatFiltPath\s(\S+)/){$mocatFiltPath = $1;}
-			$dir2out .= "/" if ($dir2out !~ m/\/$/);
 			if (!$inDirSet && $dir2out ne "" && $baseID ne ""){$dir2out.=$baseID unless ($dir2out =~ m/$baseID[\/]*$/); $inDirSet =1;}
 			$dir2out .= "/" if ($dir2out !~ m/\/$/);
 			next;
 		}
-		chomp;	my @spl = split(/\t/);
+		my @spl = split(/\t/);
 		if ($cnt == 0){
 			$dirCol = first_index { /Path/ } @spl;
 			$smplCol = first_index { /#SmplID/ } @spl;
@@ -452,11 +465,13 @@ sub readMap{
 		die "inPath has to be set in mapping file!\n" if ($dir2dirs eq "");
 		my $curSmp = $spl[$smplCol];
 		my $altCurSmp = "";
-		print $curSmp." ";
+		#print $curSmp." ";
 		die "Double sample ID $curSmp\n" if (exists $ret{$curSmp});
-		$ret{$curSmp}{dir} = $spl[$dirCol];
-		$ret{$curSmp}{rddir} = $dir2dirs.$spl[$dirCol]."/";
-		$ret{$curSmp}{wrdir} = $dir2out.$spl[$dirCol]."/";
+		my $cdir = $spl[$dirCol]; $cdir.="/" unless ($cdir =~ m/\/$/);
+		$ret{$curSmp}{dir} = $cdir;
+		$ret{$curSmp}{rddir} = $dir2dirs.$cdir;
+		$ret{$curSmp}{wrdir} = $dir2out.$cdir;
+		#die "$ret{$curSmp}{wrdir}\n";
 		$ret{$curSmp}{SmplID} = $curSmp;
 		$ret{$curSmp}{mapFinSmpl} = $curSmp;
 		$ret{$curSmp}{assFinSmpl} = $curSmp;
@@ -679,7 +694,7 @@ sub readFasta{
 	my %Hseq;
 	if (-z $fil){ return \%Hseq;}
 	my $FAS;
-	open($FAS,"<","$fil") || print("Couldn't open FASTA file $fil\n",88);
+	open($FAS,"<","$fil") || die ("Couldn't open FASTA file $fil\n");
 	#my $FAS = gzipopen($fil,"fasta file to readFasta",1);
 	my $temp; my $line; 
 	my $trHe =<$FAS>; chomp ($trHe);  $trHe = substr($trHe,1);
