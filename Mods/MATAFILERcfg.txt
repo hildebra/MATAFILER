@@ -20,7 +20,7 @@ pal2nal	perl /g/bork3/home/hildebra/bin/pal2nal.v14/pal2nal.pl
 phyml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/phyml
 raxml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/raxmlHPC-PTHREADS-SSE3
 msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
-clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.0-Ubuntu-x86_64
+clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 
 
@@ -78,7 +78,7 @@ genelength_scr	[MFLRDir]/secScripts/geneLengthFasta.pl
 secCogBin_scr	[MFLRDir]/secScripts/parseBlastFunct2.pl
 KrisABR_scr	perl [MFLRDir]/secScripts/ABRblastFilter2.pl
 sepCts_scr	perl [MFLRDir]/secScripts/separateContigs.pl
-assStat_scr	perl [MFLRDir]/assemblathon_stats.pl
+assStat_scr	perl [MFLRDir]/secScripts/assemblathon_stats.pl
 renameCtg_scr	[MFLRDir]/secScripts/renameCtgs.pl
 sizFilt_scr	perl [MFLRDir]/secScripts/sizeFilterFas.pl
 buildTree_scr	[MFLRDir]/helpers/buildTree.pl
@@ -90,8 +90,9 @@ secCogBin_scr	[MFLRDir]/secScripts/parseBlastFunct.pl
 extre100_scr	[MFLRDir]/helpers/extrAllE100GC.pl
 decoyDB_scr	[MFLRDir]/secScripts/./deployMapDB.pl
 bamHdFilt_scr	[MFLRDir]/secScripts/./correctBamHD.pl
-hmmBestHit_scr [MFLRDir]/secScripts/bmn-HMMerBestHit.py
+hmmBestHit_scr	[MFLRDir]/secScripts/bmn-HMMerBestHit.py
 mrgDia_scr	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/./combine_DIA.pl
+mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_inifilter_relaxed.txt

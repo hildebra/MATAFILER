@@ -30,7 +30,7 @@ my $msapBin = getProgPaths("msaprobs");
 #some runtim options...
 #my $ncore = 20;#RAXML cores
  my $ntFrac =2; 
- my $clustalUse = 0; #do MSA with clustal (1) or msaprobs (0)
+ my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0)
 
 my $ntCnt =999999999999999999;
 if (@ARGV < 2){die "Not enough input args!!!\n";}
@@ -47,7 +47,7 @@ my $cmd =""; my %usedGeneNms;
 if (!$Ete){
 	my $treeD = "$outD/TMCtree/";
 	my $raxD = "$treeD";
-	system "rm -r $treeD";
+	system "rm -r $treeD" if (-d $treeD);
 	system "mkdir -p $outD/MSA/  $treeD";
 	my $multAli = "$outD/MSA/MSAli.fna";
 	my $multAliSyn = $multAli.".syn.fna";
@@ -88,8 +88,11 @@ if (!$Ete){
 				$cmd = "$msapBin -num_threads $ncore $tmpInMSA > $tmpOutMSA2";
 			}
 			#die $cmd;
-			system $cmd;
+			system $cmd if (-z $tmpOutMSA2);
+			#die;
 			convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
+			
+			die("XX\n");
 			synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,0);
 			system "rm $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
 			push (@MSAs,$tmpOutMSA);
@@ -260,7 +263,7 @@ sub convertMultAli2NT($ $ $){
 	#$hr1= readFasta($NTs);
 	#my %NTs = %{$hr1};
 	if ($tmpMSA){$cmd .= "rm $inMSA;mv $outMSA $inMSA;\n";}
-	system $cmd;
+	die $cmd;
 }
 
 sub synPosOnlyAA($ $){#only leaves "constant" AA positions in MSA file.. 

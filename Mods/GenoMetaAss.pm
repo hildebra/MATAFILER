@@ -467,8 +467,9 @@ sub readMap{
 		my $altCurSmp = "";
 		#print $curSmp." ";
 		die "Double sample ID $curSmp\n" if (exists $ret{$curSmp});
-		my $cdir = $spl[$dirCol]; $cdir.="/" unless ($cdir =~ m/\/$/);
-		$ret{$curSmp}{dir} = $cdir;
+		my $cdir = $spl[$dirCol]; 
+		$ret{$curSmp}{dir} = $cdir;#this one should stay without a tag
+		$cdir.="/" unless ($cdir =~ m/\/$/);
 		$ret{$curSmp}{rddir} = $dir2dirs.$cdir;
 		$ret{$curSmp}{wrdir} = $dir2out.$cdir;
 		#die "$ret{$curSmp}{wrdir}\n";

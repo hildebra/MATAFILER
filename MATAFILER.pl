@@ -16,11 +16,14 @@ use strict;
 use File::Basename;
 use Cwd 'abs_path';
 use POSIX;
+use Getopt::Long qw( GetOptions );
+
 use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt readFastHD prefix_find);
 use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades createGapFillopt  buildMapperIdx);
 
 #use Mods::TamocFunc qw(runDiamond);
 
+sub help; sub annoucnce_MATAFILER;
 sub seedUnzip2tmp; sub clean_tmp; sub cleanInput; #unzipping reads; removing these at later stages ; remove tmp dirs
 sub readG2M; sub check_matesL;
 sub mapReadsToRef;  sub bamDepth;
@@ -52,13 +55,8 @@ sub metphlanMapping;sub mergeMP2Table;
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
-#program configuration
-my $Spades_Cores=48; my $Spades_Memory = 200; #in GB
-my $Spades_HDspace = 100; #required space in GB
-my $Spades_Kmers = "-k 27,33,55,71";
-my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??? ; remove Dups (can be costly if many ref seqs present)
-my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
-my $bwtMapMem = "3G";
+my $MATFILER_ver = 0.1;
+
 #----------------- defaults ----------------- 
 my $rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';
 my $rawFileSrchStr2 = '.*2\.f[^\.]*q\.gz$';
@@ -70,10 +68,9 @@ my %sdm_opt; #empty object that can be used to modify default sdm parameters
 my $mateInsertLength =20000; #controls expected mate insert size , import for bowtie2 mappings
 my %jmp=();
 my $logDir = "";
-my $sharedTmpDirP = "/scratch/bork/hildebra/";
+my $sharedTmpDirP = "/scratch/MATAFILER/";
 $sharedTmpDirP = "/g/scb/bork/hildebra/tmp/" if (`hostname` !~ m/submaster/);
-my $nodeTmpDirBase = "/tmp/hildebra/";
-
+my $nodeTmpDirBase = "/tmp/MATAFILER/";
 
 #die $sharedTmpDirP;
 
@@ -129,7 +126,7 @@ my $mrgDiScr = getProgPaths("mrgDia_scr");
 
 
 my $mergeTblScript = "/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
-my $mergeMiTagScript = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/miTagTaxTable.pl";
+my $mergeMiTagScript = getProgPaths("mrgMiTag_scr");#"/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/miTagTaxTable.pl";
 
 
 
@@ -161,21 +158,83 @@ my $doDateFileCheck = 0; #very specific option for Moh's reads that were of diff
 my $DoDiamond = 0; my $rewriteDiamond =0; my $redoDiamondParse = 0; #redoes matching of reads; redoes interpretation
 my $MapperProg = 1;#1=bowtie2, 2=bwa
 my $DO_EUK_GENE_PRED = 0;
-my $calcD2s = 0; 
+my $DoCalcD2s = 0; 
 my $DoKraken = 0; my $RedoKraken = 0; my $KrakTaxFailCnts=0;
 my $pseudoAssembly = 0; #in case no assembly is possible (soil single reads), just filter for reads X long 
 my $DoFreeGlbTmp = 0; my $defaultReadLength = 100;
 my $maxReqDiaDB = 6; #max number of databases supported by METAFILER
 my $reqDiaDB = "ABR";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
+#program configuration
+my $Spades_Cores=48; my $Spades_Memory = 200; #in GB
+my $Spades_HDspace = 100; #required space in GB
+my $Spades_Kmers = "-k 27,33,55,71";
+my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??? ; remove Dups (can be costly if many ref seqs present)
+my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
+my $MappingMem = "3G";
 
 
 
 
 #control broad flow
-my $from=0; my $to=500;
+my $from=0; my $to=1000;
 
 my $doSubmit=1; 
 my $rewrite=0;my $rewrite2ndMap = 0;
+
+
+GetOptions(
+	"help|?" => \&help,
+	"map=s"      => \$mapF,
+	#flow related
+	"rm_tmpdir_reads=i" => \$remove_reads_tmpDir,
+	"rm_tmpInput=i" => \$removeInputAgain,
+	"globalTmpDir=s" => \$sharedTmpDirP,
+	"nodeTmpDir=s" => \$nodeTmpDirBase,
+	#input FQ related
+	"inputFQregex1=s" => \$rawFileSrchStr1,
+	"inputFQregex2=s" => \$rawFileSrchStr2,
+	"mergeReads=i" => \$doReadMerge,
+	"pairedReadInput=i" => \$readsRpairs, #determines if read pairs are expected in each in dir
+	"inputReadLength=i" => \$defaultReadLength,
+	#assembly related
+	"spadesCores=i" => \$Spades_Cores,
+	"spadesMemory=i" => \$Spades_Memory, #in GB
+	"spadesKmers=s" => \$Spades_Kmers, #comma delimited list
+	"binSpeciesMG=i" => \$DoBinning,
+	"reAssembleMG=i" => \$redoAssembly,
+	"assembleMG=i" => \$DoAssembly,
+	#gene prediction on assembly
+	"predictEukGenes=i" => \$DO_EUK_GENE_PRED,#severely limits total predicted gene amount (~25% of total genes)
+	#mapping related
+	"mappingMem=i" => \$MappingMem, #mem for bwa/bwt2 in GB
+	"rmDuplicates=i" => \$doRmDup,
+	#functional profiling (diamond)
+	"profileFunct=i"=> \$DoDiamond,
+	"reParseFunct=i" => \$redoDiamondParse,
+	"reProfileFunct=i" => \$rewriteDiamond,
+	"diamondCores=i" => \$dia_Cores,
+	#ribo profiling
+	"profileRibosome=i" => \$DoRibofind,
+	"riobsomalAssembly=i"  => \$doRiboAssembl,
+	"reProfileRibosome=i" => \$RedoRiboFind ,  
+	"reRibosomeLCA=i"=> \$RedoRiboAssign,
+	#other tax profilers..
+	"profileMetaphlan2=i"=> \$DoMetaPhlan,
+	"profileKraken=i"=> \$DoKraken,
+	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
+	#D2s distance
+	"calcInterMGdistance=i" => \$DoCalcD2s,
+	"from=i" => \$from,
+	"to=i" => \$to,
+
+  );
+ #die "$rawFileSrchStr1\n";
+$MappingMem .= "G";
+#say hello to user 
+annoucnce_MATAFILER();
+
+die "No mapping file provided (-map)\b" if ($mapF eq "");
+
 
 
 if ( 0 ){ #real data 
@@ -216,8 +275,6 @@ if ( 0 ){ #real data
 			
 		}
 		#
-		$baseOut = "/g/scb/bork/hildebra/SNP/$baseID/";
-		$baseDir = "/g/bork5/kultima/MM/";
 #		$Spades_Kmers = "-k 27,33,55,71,99";
 		$Spades_Kmers = "-k 25,43,67,87,127";
 	} elsif (0) { #ColPark 
@@ -268,7 +325,7 @@ if ( 0 ){ #real data
 		$RedoKraken=0;
 	} elsif ( 0 ) { #Anna single cell seq
 		$rawFileSrchStr1 = '.*1_sequence\.txt\.gz$';$rawFileSrchStr2 = '.*2_sequence\.txt\.gz$';
-		$DoNP=0;$humanFilter=0; $calcD2s=0; $DoDiamond = 0;  $redoDiamondParse = 0;  $rewriteDiamond=0;
+		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 0;  $redoDiamondParse = 0;  $rewriteDiamond=0;
 		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;
 		$DoAssembly=1; $DoBinning=1; $Spades_Kmers = "-k 27,33,55,71,101,127";
 		$mapF = "/g/bork3/home/hildebra/data/AnnaPry/singleCell.map";
@@ -276,7 +333,7 @@ if ( 0 ){ #real data
 	} elsif ( 0 ) { #Yongkyu fungi samples
 		$rawFileSrchStr1 = '.*1_sequence\.f[^\.]*q\.gz$';
 		$rawFileSrchStr2 = '.*2_sequence\.f[^\.]*q\.gz$';
-		$DoNP=0;$humanFilter=0; $calcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
+		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
 		$DoAssembly=1;$DoRibofind = 1; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0; $DoBinning=0;
 		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "minikraken_2015";#= "minikraken_2015/";
 		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
@@ -288,14 +345,14 @@ if ( 0 ){ #real data
 		$Spades_Kmers = "-k 21,33,67,111,127";
 		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/IHMS.txt"; 
 	} elsif (0) { #MetaHit samples
-		$DoNP=0;$humanFilter=0; $calcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
+		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
 		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;$DoAssembly=0; $DoBinning=0;
 		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "virusDB";#= "minikraken_2015/";
 		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
 		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MetaHit.txt"; 
 	} elsif ( 0 ) { #NIH & HMP skin samples
 		$from = 0;
-		$DoNP=0;$humanFilter=1; $calcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
+		$DoNP=0;$humanFilter=1; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
 		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;$DoAssembly=0; $DoBinning=0;
 		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "virusDB";#= "minikraken_2015/";
 		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
@@ -310,8 +367,8 @@ if ( 0 ){ #real data
 		$DO_EUK_GENE_PRED=0;
 		$doRmDup=0;
 		$removeInputAgain=0; $doReadMerge=1; $remove_reads_tmpDir=0;
-		$bwtMapMem = "5G"; #for mapping to refgenomes
-		$DoNP=0;$humanFilter=0; $calcD2s=0; 
+		$MappingMem = "5G"; #for mapping to refgenomes
+		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; 
 		$DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
 		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;
 		$defaultReadLength = 250;
@@ -322,15 +379,14 @@ if ( 0 ){ #real data
 		$rawFileSrchStr2 = '.*R2_00\d\.f[^\.]*q\.gz$|.*_2\.f[^\.]*q\.gz$';
 		$DoBinning=0;
 		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		$baseOut = "/g/scb/bork/hildebra/Tamoc/$baseID/";
 		$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt"; 
 		#$mapF = "/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map";$DoAssembly=0;$pseudoAssembly =1;$rawFileSrchStrSingl='.*\.fq\.gz$'; $readsRpairs=0;$sdm_opt{maxSeqLength}=10000000;$sdm_opt{minSeqLength}=90; $splitFastaInput = 1000;
 		#$mapF = "/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map";$Spades_Kmers = "-k 21,33,67,77";$doReadMerge=0; $from=0;$to=10;$DoDiamond=1;$defaultReadLength=100;
 
 		#$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/soil_map_d.txt"; $doDateFileCheck = 1; $reqDiaDB = "CZy"; $DoRibofind = 0;$DoMetaPhlan = 0; $DoKraken = 0;
 	}
-} else {
-	$from=0; $to=1;$rewrite =0;
+} elsif (0) {
+	$from=1; $to=300;$rewrite =0;
 	$doBam2Cram =0; $DoAssembly=1;
 	$Spades_Cores=12;$Spades_Memory = 34;
 	$Spades_HDspace=100;
@@ -409,7 +465,7 @@ if (0 && $Spades_HDspace > 100){
 
 
 #do I need to redo d2s?
-if ($calcD2s) {$calcD2s = !-e "$baseOut/d2StarComp/d2meta.stone";}
+if ($DoCalcD2s) {$DoCalcD2s = !-e "$baseOut/d2StarComp/d2meta.stone";}
 
 #die();
 #----------- map all reads to a specific reference ---------
@@ -441,7 +497,7 @@ if (@ARGV > 2 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB") ){
 	my $bwt2NameAll = $ARGV[2];
 	my @refDB = split(/,/,$refDBall);
 	my @bwt2Name = split(/,/,$bwt2NameAll);
-	$MapperProg=1;  $bwtMapMem = "6G";$bwt_Cores=12;
+	$MapperProg=1;  $MappingMem = "6G";$bwt_Cores=12;
 	
 	#decoy mapping setup (only required in map2tar
 	$make2ndMapDecoy{Lib} = "";
@@ -551,7 +607,7 @@ system "cp $mapF $globalLogDir/inmap.txt";
 
 my $present = 0; my $totalChecked=0;
 my @samples = @{$map{smpl_order}}; my @allSmplNames;
-my @allFilter1; my @allFilter2;
+my @allFilter1; my @allFilter2; my @inputRawFQs; 
 if ($to > @samples){
 	print "Reset range of samples to ". @samples."\n";
 	$to = @samples;
@@ -840,8 +896,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 				$statStr5.="SMPLID\tDIR\t".$statsHD5."\n".$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";
 			} else {$statStr.=$samples[$JNUM]."\t$dir2rd\t".$curStats."\n"; $statStr5.=$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";}
 		}
-		#die "$boolScndMappingOK && !$calcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
-		if ($boolScndMappingOK && !$calcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
+		#die "$boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
+		if ($boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
 			#free some scratch
 			system "rm -r $GlbTmpPath/rawRds" if ($DoFreeGlbTmp);
 			print "next";next;
@@ -893,12 +949,12 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$samples[$JNUM]}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
 
 	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && 
-				($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $calcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
+				($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
 #die "$assemblyFlag\n$seqCleanFlag\n";
 	my $calcUnzip=0;
 	$calcUnzip=1 if ($seqCleanFlag  || $mapAssFlag || !$boolScndMappingOK); #in these cases I need raw reads anyways..
 	#die "$calcUnzip = $seqCleanFlag  || $mapAssFlag || !$boolScndMappingOK\n";
-	#die "!$boolScndMappingOK || (!-e $GlbTmpPath/seqClean/filterDone.stone && ( $nonPareilFlag || $calcDiamond || $calcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan)) );\n";
+	#die "!$boolScndMappingOK || (!-e $GlbTmpPath/seqClean/filterDone.stone && ( $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan)) );\n";
 
 #	#-----------------------  END FLAGS  ------------------------  
 
@@ -906,11 +962,12 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die "$pseudAssFlag\n$boolGenePredOK\n$pseudoAssFileFinal\n";
 	if ($scaffTarExternal ne "" &&  $map{$samples[$JNUM]}{"SupportReads"} !~ /mate/i && $scaffTarExtLibTar ne $samples[$JNUM] ){print"scNxt\n";next;}
 	#has this sample extra reads (e.g. long reads?)
-	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $calcD2s || $calcKraken\n";
+	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken\n";
 	#die "$curDir\n";
 	my ($jdep,$cfp1ar,$cfp2ar,$cfpsar,$WT,$rawFiles, $mmpuNum, $libInfoRef, $jdepUZ) = 
 		seedUnzip2tmp($curDir,$map{$samples[$JNUM]}{SupportReads},$curUnzipDep,$nodeSpTmpD,
 		$GlbTmpPath,$waitTime,$importMocat,$AsGrps{$cMapGrp}{CntMap},$calcUnzip);
+	push(@inputRawFQs,$rawFiles);
 	if($scaffTarExtLibTar eq $samples[$JNUM]){
 		@scaffTarExternalOLib1 = @{$cfp1ar}; @scaffTarExternalOLib2 = @{$cfp2ar};
 		next unless ($map{$samples[$JNUM]}{"SupportReads"} =~ /mate/i );
@@ -1276,8 +1333,12 @@ d2metaDist(\@allSmplNames,\@allFilter1,\@allFilter2,$sdmjNamesAll,$baseOut."/d2S
 
 close $QSBopt{LOG};
 
-
-
+#print input files, sorted by samples
+open O,">$baseOut/Input_raw.txt";
+for (my $i=0;$i<@allSmplNames;$i++){
+	print O "$allSmplNames[$i]\t$inputRawFQs[$i]\n"
+}
+close O;
 
 print "\n$sharedTmpDirP\n".$baseOut."\nFINISHED MATAFILER\n";
 if ($statStr ne ""){
@@ -1426,7 +1487,7 @@ sub d2metaDist{
 	my ($arSmpls,$arPaths1,$arPaths2,$deps,$outPath) = @_;
 	
 	my @paths = @{$arPaths1}; my @Smpls = @{$arSmpls};
-	if(!$calcD2s){return;}
+	if(!$DoCalcD2s){return;}
 	if (@paths < 1){print "Not enough samples for d2s!\n";return;}
 	print "Calculating kmer distances for ".@paths." samples\n";
 	system "mkdir -p $outPath/LOGandSUB";
@@ -2808,7 +2869,7 @@ sub mapReadsToRef{
 		$jobN = "_BT$JNUM$outNms[0]"; $bamFresh = 1; 
 		($jobN,$tmpCmd) = qsubSystem($logDir.$bashN."bwtMap.sh",
 				$unzipcmd.$algCmd.$unalignCmd.$nodeCln,
-				$Ncore,$bwtMapMem,$jobN,$jDepe,"",$immediateSubm,\@General_Hosts,\%QSBopt) ;
+				$Ncore,$MappingMem,$jobN,$jDepe,"",$immediateSubm,\@General_Hosts,\%QSBopt) ;
 		$retCmds .= $tmpCmd;
 	}
 	#xtraSamSteps1 = isSorted
@@ -3505,8 +3566,13 @@ my $cmdd= ("/g/bork3/home/hildebra/dev/Perl/assemblies/./sizeFilterFas.pl $fasta
 return ($fasta.".filt",$cmdd);
 }
 
-
-
+sub annoucnce_MATAFILER{
+	print "This is MATAFILER $MATFILER_ver\n";
+}
+sub help {
+	print "Help for MATAFILER version $MATFILER_ver\n";
+	exit(0);
+}
 
 
 

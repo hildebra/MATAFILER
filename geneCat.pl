@@ -52,17 +52,17 @@ my $extraRdsFAA = "";
 $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $extraRdsFNA
 #die $cdhID."\n";
 my $justCDhit = 0;
-my $bactGenesOnly = 1;
+my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
 my $doSubmit = 1; my $qsubNow = 1;
-my $doFMGseparation = 0; #cluster FMGs separately?
+my $doFMGseparation = 1; #cluster FMGs separately?
 my $doGeneMatrix =0; #in case of SOIL I really don't need to have a gene abudance matrix / sample
 $baseOut.="/" unless ($baseOut =~ m/\/$/);
 
 
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
 my $cdhitBin = getProgPaths("cdhit");#/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
-#my $vsearchBin = "/g/bork5/hildebra/bin/vsearch1.0/bin/vsearch-1.0.0-linux-x86_64";
+my $vsearchBin = "";#"/g/bork5/hildebra/bin/vsearch1.0/bin/vsearch-1.0.0-linux-x86_64";
 my $diaBin = getProgPaths("diamond");#"/g/bork5/hildebra/bin/diamond/./diamond";
 my $bwt2Bin = getProgPaths("bwt2");#"/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2";
 my $samBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
@@ -90,7 +90,7 @@ my $ABresHMM = getProgPaths("ABresHMM_DB");#"/g/bork/forslund/morehmms/Resfams.h
 
 my $tmpDir = "/tmp/hildebra/GC/";# submaster
 my $GLBtmp = "/scratch/bork/hildebra/GC/";
-#$tmpDir = "/local/hildebra/GC/";# upsilon
+$tmpDir = "/local/hildebra/GC/";# upsilon
 #my $tmpDir =  "/alpha/data/hildebra/tmp/";#
 
 $baseOut =~ m/\/([^\/]+)\/?$/;
@@ -121,6 +121,7 @@ COG0124=>94.5,COG0184=>98.2,COG0185=>99,COG0186=>99,COG0197=>99,COG0200=>98.4,CO
 
 my $selfScript=Cwd::abs_path($PROGRAM_NAME);#dirname($0)."/".basename($0);
 my $OutD = $baseOut;#."GeneCatalog/";
+system "mkdir -p $OutD" unless (-d $OutD);
 print $mapF."\n";
 if ($mapF =~ m/^\??$/){
 	if (-e "$baseOut/LOGandSUB/GCmaps.inf"){
@@ -224,9 +225,11 @@ foreach my $smpl(@samples){
 	$AsGrps{$cAssGrp}{CntAss} ++;	print $cAssGrp."-".$AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss};
 	if ($AsGrps{$cAssGrp}{CntAss}  >= $AsGrps{$cAssGrp}{CntAimAss} ){ $assGo = 1;}
 	my $SmplName = $map{$smpl}{SmplID};
+	#$dir2rd = "/g/scb/bork/hildebra/SNP/SimuL/sample-0/";
 	my $metaGD = "$dir2rd/assemblies/metag/";
 	if (!-e "$metaGD/longReads.fasta.filt.sto"){$metaGD = `cat $dir2rd/assemblies/metag/assembly.txt`; chomp $metaGD;}
 	my $inFMGd = "$metaGD/ContigStats/FMG/";
+	#print "\n$metaGD\n";
 	#print "$dir2rd/assemblies/metag/scaffolds.fasta.filt\n";
 	unless ($assGo){print "Not last in comb assembly: ".$map{$smpl}{dir}."\n"; next;}
 	if ((!-e "$metaGD/scaffolds.fasta.filt" || !-e "$metaGD/longReads.fasta.filt") && !-e "$metaGD/$path2nt"){# && -d $inFMGd){
@@ -591,7 +594,7 @@ sub clusterFNA($ $ $ $ $ $){
 		$cmd .= $mmseqs2Bin;
 	} else {
 		#	$defaultsCDH = "-d 0 -c 0.$cdhID -g 0 -T $numCor -M ".int(($totMem+30)*1024) if (@ARGV>3);
-		$cmd .= $cdhitBin."-est -i $inFNA -o $oFNA -n 9 -G 1 -aS $aS -aL $aL -d 0 -c $ID -g 0 -T $numCor -g 0 -d 0 -M ".int(($totMem+30)*1024)."\n";
+		$cmd .= $cdhitBin."-est -i $inFNA -o $oFNA -n 9 -G 1 -aS $aS -aL $aL -d 0 -c $ID -g 0 -T $numCor -M ".int(($totMem+30)*1024)."\n";
 	}
 	return $cmd;
 }
@@ -636,7 +639,7 @@ sub submCDHIT($ $ $ $ $){
 			$cmd .= "gunzip $tmpDir/compl.$cdhID.fna*\n" if (-s "$bdir/compl.$cdhID.fna.gz" || -s "$bdir/compl.$cdhID.fna.clstr.gz");
 		} else {
 			#$cmd .= $cdhitBin."-est -i $bdir/compl.fna -o $tmpDir/compl.$cdhID.fna  -n 9 -G 1 -aS 0.95 -aL 0.6 $defaultsCDH \n" ;
-			$cmd .= clusterFNA( "$bdir/compl.fna", "$tmpDir/compl.$cdhID.fna",0.95,0.6,"0.$cdhID",$numCor);
+			$cmd .= clusterFNA( "$bdir/compl.fna", "$tmpDir/compl.$cdhID.fna",0.95,0.6,"$cdhID",$numCor);
 			$cmd .= "cp $tmpDir/compl.$cdhID.fna* $bdir\n" unless ($copycat);
 		}
 	} else {
@@ -995,7 +998,7 @@ sub secondaryCls(){
 	#my @keys = sort { length($remGenes{$a}) <=> length($remGenes{$b}) } keys(%h);
 
 #	systemW($cdhitBin."-est -i $inD/incompl.NAl.srt.$cdhID.fna -o $outfna -n 9 -G 0 -aL 0.3 -aS 0.8 $defaultsCDH\n") unless (-e $outfna);
-	$cmd = clusterFNA( "$inD/incompl.NAl.srt.$cdhID.fna", "$outfna",0.8,0.6,"0.$cdhID",$numCor);
+	$cmd = clusterFNA( "$inD/incompl.NAl.srt.$cdhID.fna", "$outfna",0.8,0.6,"$cdhID",$numCor);
 	systemW($cmd);
 	#$cmd .= "rm -f $inD/incompl.NAl.$cdhID.fna\n";
 	#$cmd .= "rm -f $inD/P35compl.NAl.$cdhID.fna $inD/35compl.$cdhID.align.sam $inD/incompl.$cdhID.align.sam\n";

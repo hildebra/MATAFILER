@@ -99,7 +99,7 @@ my %czyTax;
 my @aminBLE = split /,/,$minBLE;
 #my @aminPID = (40,45,50,55,60,65,70,75,80,85,90,95);
 #@aminBLE = ("1e-9") x scalar(@aminPID);
-my @aminPID = ("50") x scalar(@aminBLE);
+my @aminPID = ("30") x scalar(@aminBLE);
 
 my %NOGkingd ; my %KEGGtax;
 my %COGdef ;my %g2COG ; my %c2CAT ;
@@ -151,7 +151,7 @@ if ($mode == 2 || $mode == 4){ #scan for all reads finished
 
 #read DB file
 my $readLim = 1000000; my $lcnt=0;my $lastQ=""; my $stopInMiddle=0; my $reportGeneCat=0;
-my %COGhits; my %CAThits; my %GENEhits;
+my %COGhits; my %CAThits; my %GENEhits; my $O2;
 for (my $i=0; $i<@aminBLE ; $i++){$COGhits{$i} = {}; $CAThits{$i} = {}; $GENEhits{$i} = {};}
 if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	#die "$blInf\n";
@@ -164,9 +164,10 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 		my $cmd = "zcat $KGBf $KGEf | sort | gzip > $blInf\n";
 		system $cmd."\n";
 	}
-	my $outPath = $inP.$pathXtra;
+	
 	my ($I,$OK) = gzipopen($blInf,"diamond output file",1); 
-	my ($O2,$OK2) = gzipwrite($blInf,"diamond output file",1); 
+	my $OK2;
+	($O2,$OK2) = gzipwrite($blInf,"diamond output file",1); 
 	my @splSave;
 	
 	while (1){
@@ -217,7 +218,7 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	
 	for (my $i=0; $i<@aminBLE ; $i++){
 		my $pathXtra = "/CNT_".$aminBLE[$i]."_".$aminPID[$i]."/";
-		
+		my $outPath = $inP.$pathXtra;
 		writeAllTable($DBmode."parse",$outPath,$aminBLE[$i],$aminPID[$i],$i);#$st1{$i}, $CAThits{$i},$st3{$i});
 	}
 	system "touch $blInf.stone";
