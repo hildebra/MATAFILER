@@ -1,5 +1,7 @@
 #base path to pipeline  ESSENTIAL
 MFLRDir	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/
+globalTmpDir	/scratch/MATAFILER/
+nodeTmpDir	/tmp/MATAFILER/
 
 ## external programs
 
@@ -22,6 +24,7 @@ raxml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/raxmlHPC-PTHREADS-SSE3
 msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
+trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
 
 
 #		scaffolding operations (imrpoving assemblies with mate pairs)
@@ -109,7 +112,8 @@ baseSDMoptMiSeq_rel	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt
 FOAMhmm_DB	/g/bork3/home/hildebra/DB/FUNCT/FOAM/FOAM-hmm_rel1.hmm
 eggNOG_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/eggnog4.proteins.all.fa
 ABresHMM_DB	/g/bork/forslund/morehmms/Resfams.hmm
-eggNOG40_path_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/
+#eggNOG40_path_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/
+eggNOG40_path_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOGmapper/
 Moh_path_DB	/g/bork3/home/hildebra/DB/FUNCT/MohFuncts/
 CAZy_path_DB	/g/bork3/home/hildebra/DB/FUNCT/CAZy/
 ABRfors_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_FORS/

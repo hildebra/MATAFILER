@@ -74,8 +74,13 @@ my $nodeTmpDirBase = "/tmp/MATAFILER/";
 
 #die $sharedTmpDirP;
 
-#programs --------------------------
+#dirs from config file
+$sharedTmpDirP = getProgPaths("globalTmpDir");
+$nodeTmpDirBase = getProgPaths("nodeTmpDir");
 
+
+
+#programs --------------------------
 my $smtBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
 my $metPhl2Bin = getProgPaths("metPhl2");#"/g/bork3/home/hildebra/bin/metaphlan2/metaphlan2.py";
 my $metPhl2Merge = getProgPaths("metPhl2Merge");#"/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
@@ -163,7 +168,7 @@ my $DoKraken = 0; my $RedoKraken = 0; my $KrakTaxFailCnts=0;
 my $pseudoAssembly = 0; #in case no assembly is possible (soil single reads), just filter for reads X long 
 my $DoFreeGlbTmp = 0; my $defaultReadLength = 100;
 my $maxReqDiaDB = 6; #max number of databases supported by METAFILER
-my $reqDiaDB = "ABR";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
+my $reqDiaDB = "";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
 #program configuration
 my $Spades_Cores=48; my $Spades_Memory = 200; #in GB
 my $Spades_HDspace = 100; #required space in GB
@@ -196,6 +201,7 @@ GetOptions(
 	"mergeReads=i" => \$doReadMerge,
 	"pairedReadInput=i" => \$readsRpairs, #determines if read pairs are expected in each in dir
 	"inputReadLength=i" => \$defaultReadLength,
+	"filterHumanRds=i" => \$humanFilter,
 	#assembly related
 	"spadesCores=i" => \$Spades_Cores,
 	"spadesMemory=i" => \$Spades_Memory, #in GB
@@ -213,6 +219,7 @@ GetOptions(
 	"reParseFunct=i" => \$redoDiamondParse,
 	"reProfileFunct=i" => \$rewriteDiamond,
 	"diamondCores=i" => \$dia_Cores,
+	"diamondDBs=s" => \$reqDiaDB,#NOG,MOH,ABR,ABRc,ACL,KGM,CZy
 	#ribo profiling
 	"profileRibosome=i" => \$DoRibofind,
 	"riobsomalAssembly=i"  => \$doRiboAssembl,
@@ -228,12 +235,16 @@ GetOptions(
 	"to=i" => \$to,
 
   );
- #die "$rawFileSrchStr1\n";
+# die "$to\n";
+ # ------------------------------------------ options post processing ------------------------------------------
+die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G";
+if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
+
+
 #say hello to user 
 annoucnce_MATAFILER();
 
-die "No mapping file provided (-map)\b" if ($mapF eq "");
 
 
 
@@ -416,8 +427,6 @@ if ( 0 ){ #real data
 		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simu3.txt";#200, 250 bp
 		#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simu4.txt";#200, 100 bp
 		#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simus_Fungi2.txt";#_singl
-		$baseOut = "/g/scb/bork/hildebra/SNP/$baseID/";
-		$baseDir = "/g/bork5/hildebra/data/Simulations/";#"/g/bork5/kultima/MM/"
 	}
 }
 
@@ -482,6 +491,8 @@ $baseID = $map{baseID} if (exists($map{baseID} ));
 my $runTmpDirGlobal = "$sharedTmpDirP/$baseID/";
 my $runTmpDBDirGlobal = "$runTmpDirGlobal/DB/";
 system "mkdir -p $runTmpDBDirGlobal" unless (-d $runTmpDBDirGlobal);
+#and check that this dir exists...
+die "Can't create $runTmpDBDirGlobal\n" unless (-d $runTmpDBDirGlobal);
 my $globaldDiaDBdir = $runTmpDBDirGlobal."DiamDB/";
 system "mkdir -p $globaldDiaDBdir" unless (-d $globaldDiaDBdir);
 
@@ -947,9 +958,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $assemblyFlag = 0; $assemblyFlag = 1 if (!-s $finAssLoc && $DoAssembly);
 	my $mapAssFlag = 0; $mapAssFlag = 1 if (!-e "$curOutDir/mapping/$SmplName-smd.bam.coverage.gz" && $assemblyFlag );
 	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$samples[$JNUM]}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
-
-	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && 
-				($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
+	my $dowstreamAnalysisFlag = 0; $dowstreamAnalysisFlag=1 if ( ($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
+	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && $dowstreamAnalysisFlag );
+				;
 #die "$assemblyFlag\n$seqCleanFlag\n";
 	my $calcUnzip=0;
 	$calcUnzip=1 if ($seqCleanFlag  || $mapAssFlag || !$boolScndMappingOK); #in these cases I need raw reads anyways..
@@ -1009,11 +1020,11 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		if ($useSDM!=0) {
 			#$ifastp
 			($arp1,$arp2,$singAr,$matAr,$sdmjN) = sdmClean($cfp1ar,$cfp2ar,$cfpsar,\@libInfo,$nodeSpTmpD."sdm/",$GlbTmpPath."mateCln/",
-					,$GlbTmpPath."seqClean/",$curSDMopt,$jdep.";$sdmjN") ;
+					,$GlbTmpPath."seqClean/",$curSDMopt,$jdep.";$sdmjN",$dowstreamAnalysisFlag) ;
 			
 		}
 		#die "@{$singAr}";
-		($mergRdsHr,$mergJbN) = mergeReads($arp1,$arp2,$sdmjN,$GlbTmpPath."merge_clean/",$doReadMerge);
+		($mergRdsHr,$mergJbN) = mergeReads($arp1,$arp2,$sdmjN,$GlbTmpPath."merge_clean/",$doReadMerge,$dowstreamAnalysisFlag);
 		#my %mrr = %{$mergRdsHr}; die "$mrr{pair1}\n$mrr{pair2}\n$mrr{mrg}\n";
 		#raw files only required for mapping reads to assemblies, so delete o/w
 		#die "!$DoAssembly && $importMocat";
@@ -2186,11 +2197,11 @@ sub scaffoldCtgs(){
 
 #($mergRdsHsh,$mergJbN) = mergeReads($arp1,$arp2,$sdmjN,$GlbTmpPath."merge_clean/");
 sub mergeReads(){
-	my ($arp1,$arp2,$jdep,$outdir,$doMerge) = @_;
+	my ($arp1,$arp2,$jdep,$outdir,$doMerge,$runThis) = @_;
 	my $numCores = 8;
 	my $outT = "sdmCln";
 	my %ret = (mrg => "", pair1 => "", pair2 => "");
-	if (!$doMerge || !$readsRpairs){return (\%ret,"");}
+	if (!$doMerge || !$readsRpairs || !$runThis){return (\%ret,"");}
 	if (@{$arp1} > 1 ){die "Array with reads provided to merging routine is too large!\n@{$arp1}\n";}
 	my $mergCmd = "$flashBin -M 250 -o $outT -d $outdir -t $numCores ${$arp1}[0] ${$arp2}[0]\n";
 	my $stone = "$outdir/$outT.sto";
@@ -2209,7 +2220,7 @@ sub mergeReads(){
 }
  
 sub sdmClean(){
-	my ($ar1,$ar2,$ars,$libInfoAr,$tmpD,$mateD,$finD,$sdmO,$jobd) = @_;
+	my ($ar1,$ar2,$ars,$libInfoAr,$tmpD,$mateD,$finD,$sdmO,$jobd,$runThis) = @_;
 	#create ifasta path
 	#die "cllll\n";
 	if (@{$ar1} == 0 && @{$ars}==0){die "Empty array to sdmClean given\n";}
@@ -2287,7 +2298,7 @@ sub sdmClean(){
 	}
 	#die("ass inp flaw: $assInputFlaw\n");
 
-	if ($presence==0 || $assInputFlaw==1){
+	if ( ($presence==0 || $assInputFlaw==1 )&& $runThis){
 		$jobName = "_SDM$JNUM"; my $tmpCmd;
 		($jobName, $tmpCmd) = qsubSystem($logDir."sdmReadCleaner.sh",$cmd,1,"1G",$jobName,$jobd.";".$jdep,"",1,\@General_Hosts,\%QSBopt);
 	}
@@ -2476,6 +2487,7 @@ sub seedUnzip2tmp(){
 	#die $unzipcmd."\n";
 	#print "  HH ".-s $testf2 < -s $testf1." FF \n";
 	my $tmpCmd;
+	#die "$calcUnzp";
 	if ($calcUnzp){ #submit & check for files
 		my $presence=1;
 		for (my $i=0;$i<@pa1;$i++){	if (!-e $pa1[0] || -z $pa1[0]){$presence=0;}	}

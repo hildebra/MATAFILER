@@ -25,8 +25,9 @@ my $fastq2phylip = getProgPaths("fastq2phylip_scr");
 my $phymlBin = getProgPaths("phyml");
 my $raxmlBin = getProgPaths("raxml");
 my $msapBin = getProgPaths("msaprobs");
+my $trimalBin = getProgPaths("trimal");
 
-
+die "TODO trimalBin\n";
 #some runtim options...
 #my $ncore = 20;#RAXML cores
  my $ntFrac =2; 

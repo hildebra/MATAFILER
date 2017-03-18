@@ -2,6 +2,9 @@
 #annotates specI's in the dataset
 #also creates specI abundance tables
 #  ./annotateMGwMotus.pl /g/bork3/home/hildebra/data/SNP/GCs/T2_HM3_GNM3_ABR 12
+
+/g/bork3/home/hildebra/dev/python/python get_ranks.py 9606 7227
+
 use warnings;
 use strict;
 
