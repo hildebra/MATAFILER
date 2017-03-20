@@ -556,20 +556,27 @@ sub emptyQsubOpt($ $ $){
 	return \%ret;
 }
 
-sub findQsubSys(){
-	my $qs = "lsf";
-	my $bpath = `which bsub  2>/dev/null`;chomp $bpath;my $bpresent=0; 
-	$bpresent=1 if ($bpath !~ m/\n/ && -e $bpath);
-	my $qpath = `which qsub  2>/dev/null`; chomp $qpath;
-	my $qpresent=0; $qpresent=1 if ($qpath !~ m/\n/ && -e $qpath);
-	#print "$qpath\n";
-	if (!$bpresent && $qpresent){
-		$qs = "sge";
-	}elsif (!$qpresent){
-		print "Warning: No queing system found (qsub / bsub command)\nUsing LSF, though this will likely cause errors\n";
+sub findQsubSys($){
+	my ($iniVal) = @_;
+	#my $iniVal = "lsf";
+	if ($iniVal ne ""){
+		$iniVal = lc $iniVal; $iniVal = "lsf" if ($iniVal eq "bsub");$iniVal = "sge" if ($iniVal eq "qsub");
+	} else {
+		$iniVal = "lsf";
+		my $bpath = `which bsub  2>/dev/null`;chomp $bpath;my $bpresent=0; 
+		$bpresent=1 if ($bpath !~ m/\n/ && -e $bpath);
+		my $qpath = `which qsub  2>/dev/null`; chomp $qpath;
+		my $qpresent=0; $qpresent=1 if ($qpath !~ m/\n/ && -e $qpath);
+		#print "$qpath\n";
+		if (!$bpresent && $qpresent){
+			$iniVal = "sge";
+		}elsif (!$qpresent){
+			print "Warning: No queing system found (qsub / bsub command)\nUsing LSF (bsub), though this will likely cause errors\n";
+			
+		}
 	}
-	die $qs."\n";
-	return $qs;
+	print "Using qsubsystem: $iniVal\n";
+	return $iniVal;
 }
 
 sub qsubSystem($ $ $ $ $ $ $ $ $ $){

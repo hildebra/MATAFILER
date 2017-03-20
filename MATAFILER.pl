@@ -63,7 +63,7 @@ my $rawFileSrchStr2 = '.*2\.f[^\.]*q\.gz$';
 my $rawFileSrchStrSingl = "";
 my $rawFileSrchStrXtra1= '.*1_sequence\.f[^\.]*q\.gz$';
 my $rawFileSrchStrXtra2= '.*2_sequence\.f[^\.]*q\.gz$';
-my $submSytem = findQsubSys();
+my $submSytem = "";
 
 my %sdm_opt; #empty object that can be used to modify default sdm parameters
 
@@ -244,7 +244,7 @@ GetOptions(
 die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G";
 if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
-$submSytem = lc $submSytem; $submSytem = "lsf" if ($submSytem eq "bsub");$submSytem = "sge" if ($submSytem eq "qsub");
+$submSytem = findQsubSys($submSytem);
 $Spades_Kmers = "-k $Spades_Kmers" unless ($Spades_Kmers =~ m/^-k/);
 
 #say hello to user 
