@@ -5,7 +5,7 @@ use strict;
 use List::MoreUtils 'first_index'; 
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD qsubSystem emptyQsubOpt 
+our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
 		 readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
 		readFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median);
 
@@ -541,17 +541,35 @@ sub randStr($){
 	return $newletter;
 }
 
-sub emptyQsubOpt($ $){
-	my ($doSubm,$locChkStr) = @_;
+sub emptyQsubOpt($ $ $){
+	my ($doSubm,$locChkStr,$qmode) = @_;
+	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
 	my %ret = (
 		rTag => randStr(3),
 		doSubmit => $doSubm,
 		LocationCheckStrg => $locChkStr,
 		doSync => 0,
 		tmpSpace => "30G",
+		qmode => $qmode,
 		#LOG => undef,
 	);
 	return \%ret;
+}
+
+sub findQsubSys(){
+	my $qs = "lsf";
+	my $bpath = `which bsub  2>/dev/null`;chomp $bpath;my $bpresent=0; 
+	$bpresent=1 if ($bpath !~ m/\n/ && -e $bpath);
+	my $qpath = `which qsub  2>/dev/null`; chomp $qpath;
+	my $qpresent=0; $qpresent=1 if ($qpath !~ m/\n/ && -e $qpath);
+	#print "$qpath\n";
+	if (!$bpresent && $qpresent){
+		$qs = "sge";
+	}elsif (!$qpresent){
+		print "Warning: No queing system found (qsub / bsub command)\nUsing LSF, though this will likely cause errors\n";
+	}
+	die $qs."\n";
+	return $qs;
 }
 
 sub qsubSystem($ $ $ $ $ $ $ $ $ $){
@@ -572,6 +590,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	my $xtra = "";
 	my $memory = $mem;
 	my $rTag = $optHR->{rTag};
+	my $qmode = $optHR->{qmode};
 	my @restrHosts = @{$restrHostsAR};
 	#different format for bsub
 	if ($memory =~ s/G$//){$memory *= 1024 * $ncores;};
@@ -587,7 +606,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 
 
 
-	if (`hostname` !~ m/submaster/){
+	#if (`hostname` !~ m/submaster/){
+	if ($qmode eq "sge"){
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
 		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe smp $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n#\$ -v LD_LIBRARY_PATH=/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64\n#\$ -v TMPDIR=/dev/shm\n";
 		print O "#\$ -v PERL5LIB=/g/bork5/hildebra/bin/ensembl-tools-release-81/scripts/variant_effect_predictor/:/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/:/g/bork3/home/hildebra/bin/vcftools/vcft/lib/perl5/site_perl/5.16.0/:\$PERL5LIB\n";

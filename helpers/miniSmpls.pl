@@ -2,7 +2,7 @@
 #does minimus2 assembly of several assemblies of the same genome from different runs (same patient though)
 use warnings;
 use strict;
-use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt readFasta);
+use Mods::GenoMetaAss qw(readMap qsubSystem readFasta);
 use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades createGapFillopt  buildMapperIdx);
 sub nucEstDbl;
 my $renameCtgScr = getProgPaths("renameCtg_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/renameCtgs.pl";

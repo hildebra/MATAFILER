@@ -18,7 +18,7 @@ use Cwd 'abs_path';
 use POSIX;
 use Getopt::Long qw( GetOptions );
 
-use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt readFastHD prefix_find);
+use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt findQsubSys readFastHD prefix_find);
 use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades createGapFillopt  buildMapperIdx);
 
 #use Mods::TamocFunc qw(runDiamond);
@@ -55,7 +55,7 @@ sub metphlanMapping;sub mergeMP2Table;
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
-my $MATFILER_ver = 0.1;
+my $MATFILER_ver = 0.11;
 
 #----------------- defaults ----------------- 
 my $rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';
@@ -63,6 +63,8 @@ my $rawFileSrchStr2 = '.*2\.f[^\.]*q\.gz$';
 my $rawFileSrchStrSingl = "";
 my $rawFileSrchStrXtra1= '.*1_sequence\.f[^\.]*q\.gz$';
 my $rawFileSrchStrXtra2= '.*2_sequence\.f[^\.]*q\.gz$';
+my $submSytem = findQsubSys();
+
 my %sdm_opt; #empty object that can be used to modify default sdm parameters
 
 my $mateInsertLength =20000; #controls expected mate insert size , import for bowtie2 mappings
@@ -74,7 +76,7 @@ my $nodeTmpDirBase = "/tmp/MATAFILER/";
 
 #die $sharedTmpDirP;
 
-#dirs from config file
+#dirs from config file--------------------------
 $sharedTmpDirP = getProgPaths("globalTmpDir");
 $nodeTmpDirBase = getProgPaths("nodeTmpDir");
 
@@ -127,10 +129,10 @@ my $sizSplitScr = getProgPaths("sizSplit_scr");#"perl /g/bork3/home/hildebra/dev
 my $splitKgdContig = getProgPaths("contigKgdSplit_scr");
 my $decoyDBscr = getProgPaths("decoyDB_scr"); #
 my $bamHdFilt_scr = getProgPaths("bamHdFilt_scr");
+
+#merge of output tables scripts --------------------------
 my $mrgDiScr = getProgPaths("mrgDia_scr");
-
-
-my $mergeTblScript = "/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
+my $mergeTblScript = getProgPaths("metPhl2Merge");#"/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
 my $mergeMiTagScript = getProgPaths("mrgMiTag_scr");#"/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/miTagTaxTable.pl";
 
 
@@ -172,7 +174,7 @@ my $reqDiaDB = "";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"
 #program configuration
 my $Spades_Cores=48; my $Spades_Memory = 200; #in GB
 my $Spades_HDspace = 100; #required space in GB
-my $Spades_Kmers = "-k 27,33,55,71";
+my $Spades_Kmers = "27,33,55,71";
 my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??? ; remove Dups (can be costly if many ref seqs present)
 my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
 my $MappingMem = "3G";
@@ -195,6 +197,7 @@ GetOptions(
 	"rm_tmpInput=i" => \$removeInputAgain,
 	"globalTmpDir=s" => \$sharedTmpDirP,
 	"nodeTmpDir=s" => \$nodeTmpDirBase,
+	"submSystem=s" => \$submSytem,  #qsub,SGE,bsub,LSF
 	#input FQ related
 	"inputFQregex1=s" => \$rawFileSrchStr1,
 	"inputFQregex2=s" => \$rawFileSrchStr2,
@@ -235,12 +238,14 @@ GetOptions(
 	"to=i" => \$to,
 
   );
+ 
 # die "$to\n";
  # ------------------------------------------ options post processing ------------------------------------------
 die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G";
 if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
-
+$submSytem = lc $submSytem; $submSytem = "lsf" if ($submSytem eq "bsub");$submSytem = "sge" if ($submSytem eq "qsub");
+$Spades_Kmers = "-k $Spades_Kmers" unless ($Spades_Kmers =~ m/^-k/);
 
 #say hello to user 
 annoucnce_MATAFILER();
@@ -436,7 +441,8 @@ if ( 0 ){ #real data
 #queing capability
 my $JNUM=0;
 #my $LocationCheckStrg=""; #command that is put in front of every qsub, to check if drives are connected, sub checkDrives
-my $QSBoptHR = emptyQsubOpt($doSubmit,"");
+
+my $QSBoptHR = emptyQsubOpt($doSubmit,"",$submSytem);
 my %QSBopt = %{$QSBoptHR};
 my @Spades_Hosts = (); my @General_Hosts = ();
 #figure out if only certain node subset has enough HDD space
