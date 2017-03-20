@@ -77,8 +77,8 @@ my $nodeTmpDirBase = "/tmp/MATAFILER/";
 #die $sharedTmpDirP;
 
 #dirs from config file--------------------------
-$sharedTmpDirP = getProgPaths("globalTmpDir");
-$nodeTmpDirBase = getProgPaths("nodeTmpDir");
+$sharedTmpDirP = getProgPaths("globalTmpDir",0);
+$nodeTmpDirBase = getProgPaths("nodeTmpDir",0);
 
 
 
@@ -244,7 +244,6 @@ GetOptions(
 die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G";
 if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
-$submSytem = findQsubSys($submSytem);
 $Spades_Kmers = "-k $Spades_Kmers" unless ($Spades_Kmers =~ m/^-k/);
 
 #say hello to user 
@@ -441,7 +440,7 @@ if ( 0 ){ #real data
 #queing capability
 my $JNUM=0;
 #my $LocationCheckStrg=""; #command that is put in front of every qsub, to check if drives are connected, sub checkDrives
-
+$submSytem = findQsubSys($submSytem);
 my $QSBoptHR = emptyQsubOpt($doSubmit,"",$submSytem);
 my %QSBopt = %{$QSBoptHR};
 my @Spades_Hosts = (); my @General_Hosts = ();

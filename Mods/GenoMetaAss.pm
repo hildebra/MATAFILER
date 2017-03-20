@@ -541,20 +541,7 @@ sub randStr($){
 	return $newletter;
 }
 
-sub emptyQsubOpt($ $ $){
-	my ($doSubm,$locChkStr,$qmode) = @_;
-	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
-	my %ret = (
-		rTag => randStr(3),
-		doSubmit => $doSubm,
-		LocationCheckStrg => $locChkStr,
-		doSync => 0,
-		tmpSpace => "30G",
-		qmode => $qmode,
-		#LOG => undef,
-	);
-	return \%ret;
-}
+
 
 sub findQsubSys($){
 	my ($iniVal) = @_;
@@ -578,7 +565,20 @@ sub findQsubSys($){
 	print "Using qsubsystem: $iniVal\n";
 	return $iniVal;
 }
-
+sub emptyQsubOpt($ $ $){
+	my ($doSubm,$locChkStr,$qmode) = @_;
+	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
+	my %ret = (
+		rTag => randStr(3),
+		doSubmit => $doSubm,
+		LocationCheckStrg => $locChkStr,
+		doSync => 0,
+		tmpSpace => "30G",
+		qmode => $qmode,
+		#LOG => undef,
+	);
+	return \%ret;
+}
 sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	#args: 1[file to save bash & error & output] 2[actual bash cmd] 3[cores reserved for job]
 	# 4["1G": Ram usage per core in GB] 5[0/1: synchronous execution] 6[name of job] 

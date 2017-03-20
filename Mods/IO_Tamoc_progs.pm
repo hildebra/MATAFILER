@@ -8,8 +8,12 @@ use Exporter qw(import);
 our @EXPORT_OK = qw(inputFmtSpades jgi_depth_cmd createGapFillopt getProgPaths buildMapperIdx);
 
 
-sub getProgPaths($ ){
-	my ($srchVar) =  @_;
+sub getProgPaths{
+	my @var = @_;
+	my $srchVar = $var[0] ;
+	my $required=1;
+	if (@var > 1){$required = $var[1];}
+	#die "$srchVar\n$required\n";
 	my $optF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/Mods/MATAFILERcfg.txt";
 	open I,"<$optF" or die "Can't open $optF\n";
 	my $TMCpath = "";my $Tset=0;
@@ -25,7 +29,7 @@ sub getProgPaths($ ){
 		}
 	}
 	close I;
-	die "Can't find program $srchVar\n";
+	die "Can't find program $srchVar\n" if ($required);
 	return "";
 }
 
