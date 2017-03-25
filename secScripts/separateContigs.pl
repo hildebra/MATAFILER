@@ -14,6 +14,7 @@ sub findMicrSat;
 use Mods::GenoMetaAss qw(systemW is_integer reverse_complement_IUPAC);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
 
+die "Not enough input args\n" if (@ARGV < 2);
 my $inD = $ARGV[0];
 my $assD = $ARGV[1];
 my $subparts = $ARGV[2];
@@ -24,6 +25,7 @@ my $readLength = $ARGV[3];
 my $rdCovBin =getProgPaths("readCov");
 my $growthBin =getProgPaths("growthP");
 my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
+my $FMGrwkScr = getProgPaths("FMGrwk_scr");
 my $compoundBinningScr = getProgPaths("cmpBinScr");#"/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/compoundBinning.pl";
 my $mrepsB = getProgPaths("mreps");#"/g/bork3/home/hildebra/bin/mreps/./mreps";
 
@@ -76,7 +78,6 @@ my $oDess = "$outD/ess100genes/";my $outDFMG = "$outD/FMG/";
 if ($subparts =~ m/e/){
 	print "Searching for core proteins in predicted genes..    ";
 	###############################   fetchMG  ###############################
-	my $FMGrwkScr = getProgPaths("FMGrwk_scr");
 	system("mkdir -p $outDFMG");
 	$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $outDFMG -l $FMGd/lib -t 1 -d $genesNT $proteins"; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
 	$cmd .= "; $FMGrwkScr $outDFMG";
@@ -128,7 +129,7 @@ if ($subparts =~ m/e/){
 		close O;
 	}
 	sleep (3);
-	systemW("touch $oDess/e100split.sto;";
+	systemW("touch $oDess/e100split.sto;");
 	#required for maxbin
 	#rm $oDess/assembly.hmm*");
 	#die ($protIDs[0]."\n");

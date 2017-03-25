@@ -74,7 +74,7 @@ diamond	[MFLRDir]/bin/./diamond
 flash	[MFLRDir]/bin/flash
 
 #microsats
-mreps [MFLRDir]/bin/./mreps
+mreps	[MFLRDir]/bin/mreps
 
 #binning
 kmerFreqs [MFLRDir]/bin/./calc.kmerfreq.pl
