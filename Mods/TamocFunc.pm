@@ -7,7 +7,53 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(sortgzblast uniq);
+our @EXPORT_OK = qw(sortgzblast uniq getE100);
+use Mods::GenoMetaAss qw(systemW );
+use Mods::IO_Tamoc_progs qw(getProgPaths);
+
+sub getE100($ $ $){
+	my ($oDess,$proteins,$genesNT) = @_;
+	my $hmmbin = getProgPaths("hmmsearch");#"/g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries/hmmsearch";
+	my $essDB = getProgPaths("essentialHMM");#"/g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/essential.hmm";
+	my $essEukDB = getProgPaths("essentialEUK");#"/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
+	systemW("mkdir -p $oDess");
+	my $cmd = "";
+	$cmd .= "$hmmbin --domtblout $oDess/assembly.hmm.orfs.txt -o $oDess/assembly.hmmsout.txt --cut_tc --cpu 1 --notextw $essDB $proteins\n";
+	$cmd .= "tail -n+4 $oDess/assembly.hmm.orfs.txt | sed \'s/\\s\\s*/ /g\' | sed \'s/^#.*//g\' | cut -f1,4 -d \" \" > $oDess/ess100.id.txt\n";
+
+	if (!-s "$oDess/ess100.id.txt" && !-e "$oDess/e100split.sto"){
+		print "\nDetecting 100 essential proteins\n";
+		systemW $cmd ."\n";
+	}
+	my $protIDss = `cut -f1 -d " " $oDess/ess100.id.txt `;
+	my $protClsTmp = `cut -f2 -d " " $oDess/ess100.id.txt `;
+	my @protIDs = split("\n",$protIDss);
+	my @protCls = split("\n",$protClsTmp);
+	my $phr = readFasta("$proteins");
+	my $ghr = readFasta("$genesNT");
+	my %prots = %{$phr}; my %essProt;
+	my %genes = %{$ghr};
+
+	my %seen;
+	#split 100 essentials into separate files for each gene class
+	#my @unique = grep { ! $seen{$_}++ } @faculty;
+	foreach ( grep { ! $seen{$_}++ } @protCls){
+		open O,">$oDess/pe100_".$_.".faa";	close O;
+		open O,">$oDess/ge100_".$_.".fna";	close O;
+	}
+	for (my$i=0;$i<@protIDs;$i++){
+		my $id = $protIDs[$i];
+		next if ($id eq "");
+		if (!exists($prots{$id})){die "Can't find $id protein in file $proteins\n";}
+		if (!exists($genes{$id})){die "Can't find $id protein in file $proteins\n";}
+		open O,">>$oDess/pe100_".$protCls[$i].".faa" or die "Can't open $oDess/pe100_$protCls[$i].faa";
+		print O ">$id\n$prots{$id}\n";
+		close O;
+		open O,">>$oDess/ge100_".$protCls[$i].".fna"or die "Can't open $oDess/ge100_$protCls[$i].faa";
+		print O ">$id\n$genes{$id}\n";
+		close O;
+	}
+}
 
 sub uniq {
     my %seen;
