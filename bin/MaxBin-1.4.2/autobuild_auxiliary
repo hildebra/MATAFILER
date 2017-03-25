@@ -1,0 +1,138 @@
+#!/usr/bin/perl -w
+use strict;
+use FindBin qw($Bin);
+
+my $URLBASE = "http://downloads.jbei.org/data/microbial_communities/MaxBin/getfile.php";
+my $TARGET = "$Bin/auxiliary";
+my $setting_f = "$Bin/setting";
+my $velvet_f = "velvet_1.2.07.tar.gz";
+my $hmmer_f = "hmmer-3.1b1.tar.gz";
+my $frag_f = "FragGeneScan1.19.tar.gz";
+my $bowtie_f = "bowtie2-2.2.3-source.zip";
+my $velvet_dir = "velvet_1.2.07";
+my $hmmer_dir = "hmmer-3.1b1";
+my $frag_dir = "FragGeneScan1.19";
+my $bowtie_dir = "bowtie2-2.2.3";
+
+
+my $cmd;
+
+if (-d $TARGET)
+{
+	$cmd = "rm -rf $TARGET";
+	system($cmd);
+}
+mkdir($TARGET);
+print "Downloading and building auxiliary software packages from mirror sites...\n";
+
+chdir($TARGET);
+print "Downloading and Building Velvet...\n";
+$cmd = "wget $URLBASE\?$velvet_f -O $velvet_f  1>/dev/null 2>/dev/null";
+system($cmd);
+if (!(-e $velvet_f))
+{
+	print "Velvet was not downloaded successfully. Please make sure that wget works properly.";
+	exit;
+}
+$cmd = "tar -zxvf $velvet_f 1>/dev/null 2>/dev/null";
+system($cmd);
+chdir($velvet_dir);
+$cmd = "make \'MAXKMERLENGTH=55\' 1>/dev/null 2>/dev/null";
+system($cmd);
+
+if (!(-e "velveth" && -e "velvetg"))
+{
+	print "Velvet was not built successfully.\n";
+	printError();
+	exit;
+}
+
+chdir($TARGET);
+print "Downloading and Building HMMER3...\n";
+$cmd = "wget $URLBASE\?$hmmer_f -O $hmmer_f 1>/dev/null 2>/dev/null";
+system($cmd);
+if (!(-e $hmmer_f))
+{
+	print "HMMER3 was not downloaded successfully. Please make sure that wget works properly.";
+	exit;
+}
+$cmd = "tar -zxvf $hmmer_f 1>/dev/null 2>/dev/null";
+system($cmd);
+chdir($hmmer_dir);
+$cmd = "configure 1>/dev/null 2>/dev/null";
+system($cmd);
+$cmd = "make 1>/dev/null 2>/dev/null";
+system($cmd);
+
+if (!(-e "src/hmmsearch"))
+{
+	print "HMMER3 was not built successfully.\n";
+	printError();
+	exit;
+}
+
+chdir($TARGET);
+print "Downloading and Building Bowtie2...\n";
+$cmd = "wget $URLBASE\?$bowtie_f -O $bowtie_f 1>/dev/null 2>/dev/null";
+system($cmd);
+if (!(-e $bowtie_f))
+{
+	print "Bowtie2 was not downloaded successfully. Please make sure that wget works properly.";
+	exit;
+}
+$cmd = "unzip $bowtie_f 1>/dev/null 2>/dev/null";
+system($cmd);
+chdir($bowtie_dir);
+$cmd = "make 1>/dev/null 2>/dev/null";
+system($cmd);
+
+if (!(-e "bowtie2-align-s"))
+{
+	print "Bowtie2 was not built successfully.\n";
+	printError();
+	exit;
+}
+
+chdir($TARGET);
+print "Downloading and Building FragGeneScan...\n";
+$cmd = "wget $URLBASE\?$frag_f -O $frag_f 1>/dev/null 2>/dev/null";
+system($cmd);
+if (!(-e $frag_f))
+{
+	print "FragGeneScan was not downloaded successfully. Please make sure that wget works properly.";
+	exit;
+}
+$cmd = "tar -zxvf $frag_f 1>/dev/null 2>/dev/null";
+system($cmd);
+chdir($frag_dir);
+$cmd = "make 1>/dev/null 2>/dev/null";
+system($cmd);
+$cmd = "make fgs 1>/dev/null 2>/dev/null";
+system($cmd);
+
+if (!(-e "FragGeneScan"))
+{
+	print "FragGeneScan was not built successfully. Out of disk space?\n";
+	printError();
+	exit;
+}
+
+# Update setting file
+open(FILE, ">$setting_f");
+print FILE "[FragGeneScan] $TARGET/$frag_dir\n";
+print FILE "[Bowtie2] $TARGET/$bowtie_dir\n";
+print FILE "[HMMER3] $TARGET/$hmmer_dir\/src\n";
+print FILE "[Velvet] $TARGET/$velvet_dir\n";
+close(FILE);
+
+print "All required auxiliary software packages were downloaded and built successfully.\nYou can start using MaxBin now.\n";
+
+
+sub printError
+{
+	print "\n";
+	print "I am sorry. It looks like I cannot install the auxiliary software automatically for you.\n";
+	print "Please follow the instruction in README to install the auxiliary software packages and set paths in [setting] file.\n";
+	print "Feel free to contact me at ywwei\@lbl.gov if you have questions.\n";
+}
+

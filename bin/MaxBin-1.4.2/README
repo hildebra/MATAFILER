@@ -1,0 +1,148 @@
+Program name: MaxBin
+Version: 1.4.1
+Developer: Yu-Wei Wu (ywwei@lbl.gov)
+Affiliation: Joint BioEnergy Institute, Lawrence Berkeley National Laboratory
+
+
+
+
+===================== Quick installation guideline ===========================================
+=== 1. Download MaxBin and unzip it
+=== 2. Enter src directory under MaxBin and "make" it.
+=== 3. Run "autobuild_auxiliary" to download, compile, and set the auxiliary software packages
+=== 4. MaxBin should be ready to go.
+===================== End of Quick installation guideline ====================================
+
+
+
+
+
+=== What MaxBin can do? ===
+MaxBin is a software that is capable of clustering metagenomic contigs into different bins, each consists of contigs from one species. MaxBin uses the nucleotide composition information and contig abundance information to do achieve binning through an Expectation-Maximization algorithm. MaxBin is also capable of reassemling the contigs in each bin to generate better assemblies. 
+
+
+=== Support platform ===
+MaxBin was developed and maintained on Linux platform. It should be able to be compiled and run on any Linux. Currently MaxBin does not support Mac platform.
+
+
+=== Installation ===
+The installation of MaxBin is two-fold. MaxBin needs some auxiliary software packages to run correctly. The installation steps of MaxBin is as follows.
+
+1. Enter MaxBin directory abd run "make" under that directory. This will build the MaxBin executable. The commands are:
+   $ cd src
+   $ make
+   $ cd ..
+
+2. Download and compile auxiliary software packages. There are two ways:
+
+   - The easiest way is execute the script "autobuild_auxiliary." It will attempt to download all auxiliary software packages from mirror sites, compile them, and set the runtime environment. It is highly recommended that you try this option for less hassle.
+
+   - The manual way. Auxiliary packages include Bowtie2, FragGeneScan, Velvet, and Hmmer3. Please follow the instructions in the software packages to compile and install them.
+
+	* Bowtie2 (tested version: bowtie2-2.0.0-beta7)
+	  http://bowtie-bio.sourceforge.net/bowtie2/index.shtml
+	* FragGeneScan (tested version: FragGeneScan 1.18)
+	  http://omics.informatics.indiana.edu/FragGeneScan/
+	* Hmmer3 (tested version: HMMER 3.0.0 64 bit)
+	  http://hmmer.janelia.org/
+	* Velvet (tested version: Velvet 1.2.07)
+	  http://www.ebi.ac.uk/~zerbino/velvet/
+	  (By default MaxBin will attempt to run Velvet with kmer = 55. Please compile Velvet using "make 'MAXKMERLENGTH=55'."
+
+	* You also need to Specify the software paths. There are two different ways.
+
+	  a. Export the paths of software executables in system path. For example, in ubuntu linux you can add a line in ~/.bashrc file:
+             export PATH=/usr/local/bin/FragGeneScan_1.18:/usr/local/bin/hmmer3:/usr/local/bin/bowtie2:/local/bin/velvet_1.2.07:$PATH
+             (This is just an example; you can specify your own software locations freely)
+
+	  b. Alternatively, you can specify the software paths in the "setting" file under MaxBin directory. The file is in the follow format:
+
+             [FragGeneScan] /local/bin/FragGeneScan1.18
+             [Bowtie2] /local/bin/bowtie2-2.0.0-beta7
+             [HMMER3] /local/bin/hmmer-3.0-linux-intel-x86_64/binaries
+             [Velvet] /local/bin/velvet_1.2.07
+
+             (This is just an example. Please specify your own software locations.)
+
+
+
+
+---Plotting the number of each marker gene in each contig---
+MaxBin provides the functionality to plot the single copy marker genes in each bin using R (with gplots package installed). Please install R beforehand and make sure that R and Rscript can be executed by type the two commands in the command line.
+
+
+=== Run MaxBin ===
+To run MaxBin, please type in "perl run_MaxBin.pl" or just "run_MaxBin.pl". You will see options. Here are the options:
+
+(required) -contig (contig filename)
+(required) -out (output file header)
+(optional) -abund (contig abundance files. To be explained in Abundance session below.)
+(optional) -reads (interleaved paired-end FASTA reads file. To be explained in Abundance session below.)
+(optional) -thread (number of threads)
+(optional) -plotmarker (specify this option if you want to plot the markers in each contig. Installing R is a must for this option to work.)
+(optional) -verbose (as is. Warning: output log will be very long.)
+(optional) -markerset (choose between 107 marker genes by default or 40 marker genes. see Marker Gene Note for more information.)
+(optional) -reassembly (attempt to re-assemble the recruited genomes on "interleaved paired-end fasta file" only. See Reassembly Note for description)
+
+
+=== Reassembly Note ===
+Reassembly option is still highly experimental. By default MaxBin accepts all fastq or fasta files; however you need to feed MaxBin "interleaved paired-end fasta file" if you were to use this option. An example of interleaved paired-end fasta file is as follows:
+
+>reads1.1
+AAAAA
+>reads1.2
+CCCCC
+>reads2.1
+TTTTT
+>reads2.2
+GGGGG
+>reads3.1
+AAAAA
+>reads3.2
+TTTTT
+
+If both -abund and -reads are specified, MaxBin will bin the metagenome using given abundance information and then separate the reads into individual files.
+
+
+=== Marker Gene Note ===
+By default MaxBin will look for 107 marker genes present in >95% of bacteria. Alternatively you can also choose 40 marker gene sets that are universal among bacteria and archaea (Wu et al., PLoS ONE 2013). This option may be better suited for environment dominated by archaea; however it tend to split genomes into more bins. You can choose between different marker gene sets and see which one works better.
+
+
+=== Abundance ===
+The contig abundance information can be provided in two ways: user can choose to provide the abundance file or MaxBin will use Bowtie2 to map the sequencing reads against contigs and generate the abundance information.
+
+---if you have the abundance information---
+Please make sure that your abundance information is provided in the following format (\t stands for a tab delimiter):
+
+(contig header)\t(abundance)
+
+For example, assume I have three contigs named A0001, A0002, and A0003, then my abundance file will look like
+
+A0001	30.89
+A0002	20.02
+A0003	78.93
+
+---if you don't have abundance information---
+Don't worry, MaxBin will generate this information for you from sequencing reads. Please specify the reads file (in fasta format) in -reads.
+
+
+===MaxBin Output===
+Assume your output file header is (out). MaxBin will generate information using this file header as follows.
+
+(out).0XX.fasta -- the XX bin. XX are numbers, e.g. out.001.fasta
+(out).summary -- a summary file describing which contigs are being classified into which bin.
+(out).log -- a log file recording the core steps of MaxBin algorithm
+(out).marker -- marker gene presence numbers for each bin. This table is ready to be plotted by R or other 3rd-party software.
+(out).marker.pdf -- visualization of the marker gene presence numbers using R. Will only appear if -plotmarker is specified.
+(out).noclass -- this file stores all sequences that pass the minimum length threshold but are not classified successfully.
+(out).tooshort -- this file stored all sequences that do not meet the minimum length threshold.
+
+(if -reassembly is given)
+(out).reads.0xx -- the collected reads for the 0xx bin.
+(out).reads.noclass - reads that cannot be assigned to any bin.
+
+
+===Bug or problems===
+Encounter bugs, problems, or have any suggestions? Please contact Yu-Wei Wu (ywwei@lbl.gov).
+
+

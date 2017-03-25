@@ -5,7 +5,7 @@ nodeTmpDir	/tmp/MATAFILER/
 
 ## external programs
 
-#	programs	ESSENTIAL
+#	programs / DBs	ESSENTIAL
 samtools	[MFLRDir]/bin/samtools
 spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.10.1-Linux/bin/spades.py
 bwt2	[MFLRDir]/bin/bowtie2
@@ -14,7 +14,10 @@ prodigal	[MFLRDir]/bin/prodigal
 sambamba	[MFLRDir]/bin/sambamba_v0.6.4
 pigz	[MFLRDir]/bin/pigz
 jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths
-FMGdir	[MFLRDir]/fetchMG/
+FMGdir	[MFLRDir]/bin/fetchMG/
+hmmsearch	[MFLRDir]/bin/hmmsearch
+essentialHMM	[MFLRDir]/DB/essential.hmm
+
 
 
 #		SNPs / tree building - not public currently
@@ -76,7 +79,7 @@ mreps [MFLRDir]/bin/./mreps
 #binning
 kmerFreqs [MFLRDir]/bin/./calc.kmerfreq.pl
 maxBinFrmt	perl [MFLRDir]/secScripts/maxBin_rewrk.pl
-maxBin	perl /g/bork5/hildebra/bin/MaxBin-1.4.2/run_MaxBin.pl
+maxBin	perl [MFLRDir]/bin/MaxBin-1.4.2/run_MaxBin.pl
 
 
 #my own C++ progs 	ESSENTIAL

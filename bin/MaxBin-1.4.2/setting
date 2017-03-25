@@ -1,0 +1,4 @@
+[FragGeneScan] /g/bork5/hildebra/bin/FragGeneScan1.18
+[Bowtie2] /g/bork5/hildebra/bin/bowtie2-2.2.4 
+[HMMER3] /g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries 
+[Velvet] /g/bork5/hildebra/bin/velvet_1.2.10 

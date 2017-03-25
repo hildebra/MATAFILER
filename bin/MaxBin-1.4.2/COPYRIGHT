@@ -1,0 +1,10 @@
+MaxBin is distributed under BSD license. Please refer to LICENSE file for licensing terms.
+
+--
+
+MaxBin includes the following 3rd-party software in its distribution.
+
+Boost library 1.53.0 - Boost software license
+
+Boost software license permits preparation of derivative works. See BOOST_LICENSE.
+
