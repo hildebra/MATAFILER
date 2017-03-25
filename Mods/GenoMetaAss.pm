@@ -565,8 +565,12 @@ sub findQsubSys($){
 	print "Using qsubsystem: $iniVal\n";
 	return $iniVal;
 }
-sub emptyQsubOpt($ $ $){
-	my ($doSubm,$locChkStr,$qmode) = @_;
+sub emptyQsubOpt{
+	my ($doSubm) = $_[0];
+	my $locChkStr = $_[1];
+	my $qmode;
+	if (@_ > 2){$qmode = $_[2];}
+	else {$qmode = findQsubSys("");}
 	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
 	my %ret = (
 		rTag => randStr(3),

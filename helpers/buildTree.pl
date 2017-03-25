@@ -26,12 +26,15 @@ my $phymlBin = getProgPaths("phyml");
 my $raxmlBin = getProgPaths("raxml");
 my $msapBin = getProgPaths("msaprobs");
 my $trimalBin = getProgPaths("trimal");
+my $pigzBin  = getProgPaths("pigz");
 
-die "TODO trimalBin\n";
+#die "TODO $trimalBin\n";
+#trimal -in /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/COG0185.faa -out /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/tst.fna -backtrans /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/inMSA0.fna -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon
 #some runtim options...
 #my $ncore = 20;#RAXML cores
  my $ntFrac =2; 
- my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0)
+ my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
+ if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
 
 my $ntCnt =999999999999999999;
 if (@ARGV < 2){die "Not enough input args!!!\n";}
@@ -48,12 +51,15 @@ my $cmd =""; my %usedGeneNms;
 if (!$Ete){
 	my $treeD = "$outD/TMCtree/";
 	my $raxD = "$treeD";
+	my $raxLogD = "$raxD/Logs/";
 	system "rm -r $treeD" if (-d $treeD);
-	system "mkdir -p $outD/MSA/  $treeD";
+	system "mkdir -p  $raxLogD" unless (-d $raxLogD);
+	system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
 	my $multAli = "$outD/MSA/MSAli.fna";
 	my $multAliSyn = $multAli.".syn.fna";
 
 	my @MSAs; my @MSAsSyn;#full MSAs and MSAs with syn pos only
+	my @MSrm;
 	#my @xx = keys %FAA; die "$xx[0] $xx[1]\n$FAA{HM29_COG0185}\n";
 	if ($cogCats ne ""){
 		my $hr = readFasta($aaFna); my %FAA = %{$hr};
@@ -89,15 +95,16 @@ if (!$Ete){
 				$cmd = "$msapBin -num_threads $ncore $tmpInMSA > $tmpOutMSA2";
 			}
 			#die $cmd;
-			system $cmd if (-z $tmpOutMSA2);
+			system $cmd unless (-s $tmpOutMSA2);
 			#die;
 			convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
 			
-			die("XX\n");
+			#die("XX\n") if ($spl2[1] eq "COG0081");
 			synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,0);
 			system "rm $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
 			push (@MSAs,$tmpOutMSA);
 			push (@MSAsSyn,$tmpOutMSAsyn);
+			push (@MSrm,$tmpOutMSA2,$tmpOutMSA);
 			$cnt ++;
 			print "$cnt ";
 		}
@@ -106,6 +113,7 @@ if (!$Ete){
 		#merge cogcats - can go to tree from here
 		mergeMSAs(\@MSAs,\%samples,$multAli,0);
 		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1);
+		system "rm ".join(" ",@MSrm);#." ".join(" ",@MSAsSyn); pigzBin
 	} else {#no marker way, single gene
 		my $tmpInMSA = $aaFna;
 		my $tmpInMSAnt = $fnFna;
@@ -142,21 +150,24 @@ if (!$Ete){
 	my $raTmpF = "RXMtmp"; my $raxFile = "RXMall";
 	my $raxFile2 = "RXMsyn";
 	my @thrs;
-	my $tcmd = "$fastq2phylip -c 50 $multAli> $multAli.ph\n";
+	my $tcmd = "$fastq2phylip -c 50 $multAli > $multAli.ph\n";
 	$tcmd .= "$fastq2phylip -c 50 $multAliSyn >$multAliSyn.ph\n";
 	if (system $tcmd) {die "fasta2phylim failed:\n$tcmd\n";}
 
-	
+	my $raxDef = " --silent -m GTRGAMMA";
 	#raxml - on all sites
-	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAli.ph -m GTRGAMMA -n $raTmpF -w $raxD\n";
-	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph -m GTRGAMMA -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF\n";
+	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAli.ph $raxDef -n $raTmpF -w $raxD > $raxLogD/ini.log\n";
+	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
+	$tcmd .= "$raxmlBin -T$ncore -f x -p 31416 -s $multAli.ph $raxDef -n all -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
 #die $tcmd."\n";	
 	push(@thrs, threads->create(sub{system $tcmd;}));
 
 	#raxml - on syn sites only
-	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph -m GTRGAMMA -n $raTmpF.s -w $raxD\n";
-	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAliSyn.ph -m GTRGAMMA -n $raxFile2 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s\n";
+	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph $raxDef -n $raTmpF.s -w $raxD  > $raxLogD/ini_syn.log\n";
+	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAliSyn.ph $raxDef -n $raxFile2 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
+	$tcmd .= "$raxmlBin -T$ncore -f x -p 31416 -s $multAliSyn.ph $raxDef -n syn -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
 	push(@thrs, threads->create(sub{system $tcmd;}));
+	
 
 	#phyml
 	if ($doPhym){
@@ -169,9 +180,12 @@ if (!$Ete){
 		my $state = $thrs[$t]->join();
 		if ($state){print "Thread $t exited with state $state\n";}
 	}
-	system "rm  $multAli.ph $multAliSyn.ph";
+	system "rm  $multAli.ph $multAliSyn.ph $raxD/*_info* $raxD/*_log* $raxD/*_parsimony* $raxD/*_result*";
+	system "mv $raxD/RAxML_fastTreeSH_Support.RXMsyn $raxD/RXML_sym.nwk";
+	system "mv $raxD/RAxML_fastTreeSH_Support.RXMall $raxD/RXML_allsites.nwk";
 	
-	
+	#die "$distTree_scr -d -a --dist-output $raxD/distance.syn.txt $raxD/RXML_sym.nwk\n";
+
 	
 	###################### ETE ######################3
 } else {
@@ -257,14 +271,19 @@ sub convertMultAli2NT($ $ $){
 	my ($inMSA,$NTs,$outMSA) = @_;
 	my $tmpMSA=0;
 	if ($inMSA eq $outMSA){$outMSA .= ".tmp"; $tmpMSA=1;}
-	my $cmd = "$pal2nal $inMSA $NTs -output fasta -nostderr -codontable 11 > $outMSA\n";
+	my $cmd = "";
+	#"$pal2nal $inMSA $NTs -output fasta -nostderr -codontable 11 > $outMSA\n";
+	
+	#$cmd = "$trimalBin -in $inMSA -out $outMSA -backtrans $NTs -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon\n";
+	$cmd = "$trimalBin -in $inMSA -out $outMSA -backtrans $NTs -keepheader -ignorestopcodon  -gt 0.1 -cons 60\n";
 	#die "$inMSA,$NTs,$outMSA\n";
 	#my $hr1= readFasta($inMSA);
 	#my %MSA = %{$hr1};
 	#$hr1= readFasta($NTs);
 	#my %NTs = %{$hr1};
 	if ($tmpMSA){$cmd .= "rm $inMSA;mv $outMSA $inMSA;\n";}
-	die $cmd;
+	#print $cmd;
+	die "Can't execute $cmd\n" if (system $cmd);
 }
 
 sub synPosOnlyAA($ $){#only leaves "constant" AA positions in MSA file.. 
@@ -334,21 +353,39 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 
 	#assumes correct 3 frame for all sequences in inMSA
 	my $hr = readFasta($inMSA); my %FNA = %{$hr};
-	my %FAA;
-	if (1  || !$ffold){
-		$hr = readFasta($inAAMSA); %FAA = %{$hr};
-	}
+	#my %FAA;
+	#if (0  || !$ffold){
+	#	$hr = readFasta($inAAMSA); %FAA = %{$hr};
+	#}
 	#print "$inMSA\n$inAAMSA\n$outMSA\n";
-	my @aSeq = keys %FAA; my %outFNA;
+	my @aSeq = keys %FNA; my %outFNA;
 	for (my $j=0;$j<@aSeq;$j++){$outFNA{$aSeq[$j]}="";}
-	my $len = length ($FAA{$aSeq[0]});
+	my $len = length ($FNA{$aSeq[0]});
 	my $nsyn=0;my $syn=0;
-	for (my $i=0; $i< $len; $i+=1){
-		my $iniAA = substr $FAA{$aSeq[0]},$i,1; my $isSame = 1;
+	for (my $i=0; $i< $len; $i+=3){ #goes over every position
+		my $j =0;
+		my $iniAA = "-";
+		while (1){ #check for first informative position
+			my $iniCodon = substr $FNA{$aSeq[$j]},$i,3;
+			if ($iniCodon =~ m/---/ || $iniCodon =~ m/N/){$j++; last if ($j >= @aSeq); next;}
+			die "error: $iniCodon\n" if ($iniCodon =~ m/-/); #should not happen
+			$iniAA = $convertor{$iniCodon};#substr $FAA{$aSeq[0]},$i,1; 
+			last;
+		}
+		#die "$iniAA\n";
+		my $isSame = 1;
 		next unless (!$ffold || $ffd{$iniAA} == 4);
 	#print $i." $iniAA ";
-		for (my $j=1;$j<@aSeq;$j++){
-			my $newAA = substr $FAA{$aSeq[$j]},$i,1;
+		for (;$j<@aSeq;$j++){
+			my $newCodon = substr $FNA{$aSeq[$j]},$i,3;
+			my $newAA = "-";
+			if ($newCodon !~ m/-/ && $newCodon !~ m/N/){
+				die "Unkown AA $newCodon\n" unless (exists $convertor{$newCodon} );
+				$newAA = $convertor{$newCodon} ; # substr $FAA{$aSeq[$j]},$i,1;
+			} elsif ($newCodon =~ m/---/ || $newCodon =~ m/N/){
+			} else {
+				die "newCodon wrong $newCodon\n" ;
+			}
 			if ($iniAA ne $newAA && $newAA ne "-"){
 				$isSame =0; last;
 			}
@@ -356,15 +393,16 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 		if ($isSame){#add nts to file
 			for (my $j=0;$j<@aSeq;$j++){
 				if ($ffold){
-					$outFNA{$aSeq[$j]} .= substr $FNA{$aSeq[$j]},($i*3)+2,1;
+					$outFNA{$aSeq[$j]} .= substr $FNA{$aSeq[$j]},($i)+2,1;
 				} else {
-					$outFNA{$aSeq[$j]} .= substr $FNA{$aSeq[$j]},$i*3,3;
+					$outFNA{$aSeq[$j]} .= substr $FNA{$aSeq[$j]},$i,3;
 				}
 				#print substr $FNA{$aSeq[$j]},$i*3,3 . " ";
 			}
 			$syn++;
 		} else {$nsyn++;}
 	}
+	#die $inMSA."\n";
 	open O ,">$outMSA" or die "Can't open outMSA $outMSA\n";
 	for (my $j=0;$j<@aSeq;$j++){
 		print O ">$aSeq[$j]\n$outFNA{$aSeq[$j]}\n";

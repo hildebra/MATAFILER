@@ -12,7 +12,7 @@ sub readGFF;
 sub geneAbundance; sub runMaxBin;
 sub findMicrSat;
 use Mods::GenoMetaAss qw(systemW is_integer reverse_complement_IUPAC);
-
+use Mods::IO_Tamoc_progs qw(getProgPaths );
 
 my $inD = $ARGV[0];
 my $assD = $ARGV[1];
@@ -20,7 +20,13 @@ my $subparts = $ARGV[2];
 my $readLength = $ARGV[3];
 
 
-my $rdCovBin = "/g/bork3/home/hildebra/dev/C++/rdCov/./rdCover";
+#my $rdCovBin = "/g/bork3/home/hildebra/dev/C++/rdCov/./rdCover";
+my $rdCovBin =getProgPaths("readCov");
+my $growthBin =getProgPaths("growthP");
+my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
+my $compoundBinningScr = getProgPaths("cmpBinScr");#"/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/compoundBinning.pl";
+my $mrepsB = getProgPaths("mreps");#"/g/bork3/home/hildebra/bin/mreps/./mreps";
+
 
 my $inScaffs = "$assD/scaffolds.fasta.filt";
 my $proteins = "$assD/genePred/proteins.shrtHD.faa";
@@ -66,23 +72,23 @@ if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC") && $subparts =~ m/g/)
 }
 
 ###############################   essential proteins  ###############################
+my $oDess = "$outD/ess100genes/";my $outDFMG = "$outD/FMG/";
 if ($subparts =~ m/e/){
 	print "Searching for core proteins in predicted genes..    ";
 	###############################   fetchMG  ###############################
-	my $outDFMG = "$outD/FMG/";
+	
 	system("mkdir -p $outDFMG");
-	my $FMGd = "/g/bork5/hildebra/bin/fetchMG/";
 	$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $outDFMG -l $FMGd/lib -t 1 -d $genesNT $proteins"; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
 	$cmd .= "; perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/FMG_rwk.pl $outDFMG";
 	if ( !-s "$outDFMG/COG0012.faa" && !-s "$outDFMG/COG0016.faa"){
 		systemW $cmd;
 	}
-	system "rm  -f $inD/assemblies/metag/genePred/*.cidx";
+	system "rm  -rf $inD/assemblies/metag/genePred/*.cidx $outDFMG/temp $outDFMG/hmmResults";
 	############################### essential 100 proteins ###############################
 	my $hmmbin = "/g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries/hmmsearch";
 	my $essDB = "/g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/essential.hmm";
 	my $essEukDB = "/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
-	my $oDess = "$outD/ess100genes/";
+	
 	systemW("mkdir -p $oDess");
 
 	$cmd = "";
@@ -122,7 +128,9 @@ if ($subparts =~ m/e/){
 		close O;
 	}
 	sleep (3);
-	systemW("touch $oDess/e100split.sto");
+	systemW("touch $oDess/e100split.sto;";
+	#required for maxbin
+	#rm $oDess/assembly.hmm*");
 	#die ($protIDs[0]."\n");
 
 	print "Done\n";
@@ -130,24 +138,30 @@ if ($subparts =~ m/e/){
 	print "No essential proteins requested\n";
 }
 
+###############################   growth prediction of sample  ###############################
+if ($subparts =~ m/g/){
+	systemW("cat $oDess/*.fna >$oDess/alle100.fna") unless (-e "$oDess/alle100.fna");
+	"$growthBin -f $oDess/alle100.fna -g $genesNT -c 0 -T 37 -m";
+}
+
 ###############################   kmer content  ###############################
 #print $cmd."\n";
 if (!-s "$outD/scaff.4kmer.gz" && $subparts =~ m/k/){
 	print "Analyzing kmer content\n";
-	my $KCP = "perl /g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/calc.kmerfreq.pl";
+	my $KCP = getProgPaths("kmerFreqs");#"perl /g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/calc.kmerfreq.pl";
 	systemW "$KCP -i $inScaffs -m 100 -o $outD/scaff.4kmer";
 	systemW "gzip  $outD/scaff.4kmer";
 	#system "gzip $outD/scaff.4kmer";
 	#systemW $cmd."\n";
 }
 
-sleep(5);
+sleep(2);
 ###############################   binning  ###############################
 if ( !-s $inD."Binning/MaxBin/MB.summary" && $subparts =~ m/m/){
 	runMaxBin();
 }
 if ( !-s $inD."Binning/MetaBat/MeBa.sto" &&  $subparts =~ m/m/){
-	system "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/compoundBinning.pl $inD";
+	system "perl $compoundBinningScr $inD";
 }
 
 if (int(-s "$outD/microsat.txt") == 0 && $subparts =~ m/s/){
@@ -156,7 +170,6 @@ if (int(-s "$outD/microsat.txt") == 0 && $subparts =~ m/s/){
 
 sub findMicrSat{
 	my ($scaffs,$rep) = @_;
-	my $mrepsB = "/g/bork3/home/hildebra/bin/mreps/./mreps";
 	my $cmd = "$mrepsB -fasta -minperiod 2 -maxperiod 13 -maxsize 200 $scaffs > $rep\n";
 	#die $cmd;
 	print "Searching for microsattelites..";
@@ -167,21 +180,20 @@ sub findMicrSat{
 
 
 sub runMaxBin {
-print "Running MaxBin..\n";
-my $maxBin = "perl /g/bork5/hildebra/bin/MaxBin-1.4.2/run_MaxBin.pl";
-my $rwkMB = "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/maxBin_rewrk.pl";
-my $covCtgs = "$outDab/Coverage.percontig";
-#my $geneFAA = "/g/bork1/hildebra/SNP/GNMassSimu/AssmblGrp_1/metag/genePred/proteins.shrtHD.faa";
-my $essHMM = "$outD/ess100genes/assembly.hmm.orfs.txt";
-my $outF = "MB";
-my $outD2 = $inD."Binning/MaxBin/";
+	print "Running MaxBin..\n";
+	my $maxBin = getProgPaths("maxBin");#"perl /g/bork5/hildebra/bin/MaxBin-1.4.2/run_MaxBin.pl";
+	my $rwkMB = getProgPaths("maxBinFrmt_scr");# "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/maxBin_rewrk.pl";
+	my $covCtgs = "$outDab/Coverage.percontig";
+	my $essHMM = "$outD/ess100genes/assembly.hmm.orfs.txt";
+	my $outF = "MB";
+	my $outD2 = $inD."Binning/MaxBin/";
 
-print "Binning contigs with MaxBin\n";
-system ("mkdir -p $outD2");
+	print "Binning contigs with MaxBin\n";
+	system ("mkdir -p $outD2");
 
-my $cmd  = "$maxBin -contig $inScaffs -out $outD2/$outF -abund $covCtgs -thread 10 -HMM $essHMM -AA $genesAA\n";
-$cmd .= "$rwkMB $outD2 $outF";
-system $cmd;
+	my $cmd  = "$maxBin -contig $inScaffs -out $outD2/$outF -abund $covCtgs -thread 10 -HMM $essHMM -AA $genesAA\n";
+	$cmd .= "$rwkMB $outD2 $outF";
+	system $cmd;
 }
 
 sub calcGeneCov($ $ $){

@@ -12,9 +12,14 @@ sub getProgPaths{
 	my @var = @_;
 	my $srchVar = $var[0] ;
 	my $required=1;
+	#print $_ . " => " . $INC{$_} . "\n" for keys %INC;
+	
+	my $modDir = $INC{"Mods/IO_Tamoc_progs.pm"};
+	$modDir =~ s/IO_Tamoc_progs.pm//;
 	if (@var > 1){$required = $var[1];}
 	#die "$srchVar\n$required\n";
-	my $optF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/Mods/MATAFILERcfg.txt";
+	#my $optF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/Mods/MATAFILERcfg.txt";
+	my $optF = "$modDir/MATAFILERcfg.txt";
 	open I,"<$optF" or die "Can't open $optF\n";
 	my $TMCpath = "";my $Tset=0;
 	while (<I>){

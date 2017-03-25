@@ -7,14 +7,14 @@ nodeTmpDir	/tmp/MATAFILER/
 
 #	programs	ESSENTIAL
 samtools	[MFLRDir]/bin/samtools
-spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.9.1-Linux/bin/spades.py
+spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.10.1-Linux/bin/spades.py
 bwt2	[MFLRDir]/bin/bowtie2
 bwa	/g/bork3/home/hildebra/bin/bwa/./bwa
 prodigal	[MFLRDir]/bin/prodigal
 sambamba	[MFLRDir]/bin/sambamba_v0.6.4
 pigz	[MFLRDir]/bin/pigz
 jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths
-
+FMGdir	[MFLRDir]/fetchMG/
 
 
 #		SNPs / tree building - not public currently
@@ -25,6 +25,10 @@ msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
+#     experimental
+sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
+br2dCnt	/g/bork3/home/hildebra/bin/bam-readcount/bin/./bam-readcount
+
 
 
 #		scaffolding operations (imrpoving assemblies with mate pairs)
@@ -48,6 +52,7 @@ d2meta	/g/bork3/home/hildebra/bin/d2Meta/d2Meta/d2Meta.out
 nonpareil	/g/bork5/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage sequenced in your samples
 hmmer3	/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
 mmseqs2	/g/bork3/home/hildebra/bin/mmseqs2/bin/mmseqs   #experimental clustering of genes
+growthP	/g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
 
 #no longer used
 #usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
@@ -65,6 +70,13 @@ diamond	[MFLRDir]/bin/./diamond
 #if read merge is attempted in any step (typically for miTag, profiling)
 flash	[MFLRDir]/bin/flash
 
+#microsats
+mreps [MFLRDir]/bin/./mreps
+
+#binning
+kmerFreqs [MFLRDir]/bin/./calc.kmerfreq.pl
+maxBinFrmt	perl [MFLRDir]/secScripts/maxBin_rewrk.pl
+maxBin	perl /g/bork5/hildebra/bin/MaxBin-1.4.2/run_MaxBin.pl
 
 
 #my own C++ progs 	ESSENTIAL
@@ -94,14 +106,15 @@ extre100_scr	[MFLRDir]/helpers/extrAllE100GC.pl
 decoyDB_scr	[MFLRDir]/secScripts/./deployMapDB.pl
 bamHdFilt_scr	[MFLRDir]/secScripts/./correctBamHD.pl
 hmmBestHit_scr	[MFLRDir]/secScripts/bmn-HMMerBestHit.py
-mrgDia_scr	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/./combine_DIA.pl
+mrgDia_scr	[MFLRDir]/helpers/./combine_DIA.pl
 mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
+cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
 
 #options for filters etc	ESSENTIAL
-baseSDMopt_rel	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_inifilter_relaxed.txt
-baseSDMopt	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_inifilter.txt
-baseSDMoptMiSeq	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_miSeq.txt
-baseSDMoptMiSeq_rel	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/data/sdm_opt_miSeq_relaxed.txt
+baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt
+baseSDMopt	[MFLRDir]/data/sdm_opt_inifilter.txt
+baseSDMoptMiSeq	[MFLRDir]/data/sdm_opt_miSeq.txt
+baseSDMoptMiSeq_rel	[MFLRDir]/data/sdm_opt_miSeq_relaxed.txt
 
 
 
