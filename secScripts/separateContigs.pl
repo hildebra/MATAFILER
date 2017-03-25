@@ -87,7 +87,7 @@ if ($subparts =~ m/e/){
 	############################### essential 100 proteins ###############################
 	my $hmmbin = getProgPaths("hmmsearch");#"/g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries/hmmsearch";
 	my $essDB = getProgPaths("essentialHMM");#"/g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/essential.hmm";
-	my $essEukDB = "/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
+	my $essEukDB = getProgPaths("essentialEUK");#"/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
 	
 	systemW("mkdir -p $oDess");
 
