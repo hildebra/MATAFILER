@@ -141,7 +141,7 @@ if ($subparts =~ m/e/){
 ###############################   growth prediction of sample  ###############################
 if ($subparts =~ m/g/){
 	systemW("cat $oDess/*.fna >$oDess/alle100.fna") unless (-e "$oDess/alle100.fna");
-	"$growthBin -f $oDess/alle100.fna -g $genesNT -c 0 -T 37 -m";
+	$cmd = "$growthBin -f $oDess/alle100.fna -g $genesNT -c 0 -T 37 -m";
 }
 
 ###############################   kmer content  ###############################
