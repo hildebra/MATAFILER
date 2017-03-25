@@ -17,7 +17,7 @@ jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/b
 FMGdir	[MFLRDir]/bin/fetchMG/
 hmmsearch	[MFLRDir]/bin/hmmsearch
 essentialHMM	[MFLRDir]/DB/essential.hmm
-
+essentialEUK	[MFLRDir]/DB/eukCore.hmm
 
 
 #		SNPs / tree building - not public currently
@@ -112,6 +112,7 @@ hmmBestHit_scr	[MFLRDir]/secScripts/bmn-HMMerBestHit.py
 mrgDia_scr	[MFLRDir]/helpers/./combine_DIA.pl
 mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
 cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
+FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt

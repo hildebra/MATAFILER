@@ -61,7 +61,7 @@ my $coverage = $inD."mapping/$SmplNm-smd.bam.coverage";
 geneAbundance($coverage) if ($subparts =~ m/a/);
 
 ###############################   GC content  ###############################
-my $GCP = "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/calcGC.pl";
+my $GCP = getProgPaths("calcGC_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/calcGC.pl";
 if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC") && $subparts =~ m/g/){
 	print "Analyzing GC content\n";
 	systemW "$GCP $inScaffs $outD/scaff.GC";
@@ -76,10 +76,10 @@ my $oDess = "$outD/ess100genes/";my $outDFMG = "$outD/FMG/";
 if ($subparts =~ m/e/){
 	print "Searching for core proteins in predicted genes..    ";
 	###############################   fetchMG  ###############################
-	
+	my $FMGrwkScr = getProgPaths("FMGrwk_scr");
 	system("mkdir -p $outDFMG");
 	$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $outDFMG -l $FMGd/lib -t 1 -d $genesNT $proteins"; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
-	$cmd .= "; perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/FMG_rwk.pl $outDFMG";
+	$cmd .= "; $FMGrwkScr $outDFMG";
 	if ( !-s "$outDFMG/COG0012.faa" && !-s "$outDFMG/COG0016.faa"){
 		systemW $cmd;
 	}
