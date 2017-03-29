@@ -11,13 +11,18 @@ our @EXPORT_OK = qw(inputFmtSpades jgi_depth_cmd createGapFillopt getProgPaths b
 sub getProgPaths{
 	my @var = @_;
 	my $srchVar = $var[0] ;
+	my @multVars = ();my @retA;
+	if (ref $srchVar eq 'ARRAY') {
+		print "ARRAY\n";
+		@multVars = @{$srchVar};
+	}
 	my $required=1;
 	#print $_ . " => " . $INC{$_} . "\n" for keys %INC;
 	
 	my $modDir = $INC{"Mods/IO_Tamoc_progs.pm"};
 	$modDir =~ s/IO_Tamoc_progs.pm//;
 	if (@var > 1){$required = $var[1];}
-	#die "$srchVar\n$required\n";
+	#die "$srchVar\n$required\n@multVars\n";
 	#my $optF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/Mods/MATAFILERcfg.txt";
 	my $optF = "$modDir/MATAFILERcfg.txt";
 	open I,"<$optF" or die "Can't open $optF\n";
@@ -26,14 +31,26 @@ sub getProgPaths{
 		chomp;
 		next if (m/^#/);
 		if (!$Tset && m/^MFLRDir\t([^#]+)/){
-			$Tset=1;$TMCpath = $1;
-		}elsif (m/^$srchVar\t([^#]+)/){
+			$Tset=1;$TMCpath = $1;next;
+		}
+		if (@multVars > 0){
+			for (my $k=0;$k<@multVars;$k++){
+				if (m/^$multVars[$k]\t([^#]+)/){
+					my $reV = $1;
+					$reV =~s/\[MFLRDir\]/$TMCpath/;
+					$retA[$k] = $reV;
+				}
+			}
+		} elsif (m/^$srchVar\t([^#]+)/){
 			my $reV = $1;
 			$reV =~s/\[MFLRDir\]/$TMCpath/;
 			close I;return $reV;
 		}
 	}
 	close I;
+	if (@multVars > 0){
+		return \@retA;
+	}
 	die "Can't find program $srchVar\n" if ($required);
 	return "";
 }

@@ -8,7 +8,7 @@ use strict;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(sortgzblast uniq getE100);
-use Mods::GenoMetaAss qw(systemW );
+use Mods::GenoMetaAss qw(systemW readFasta);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 sub getE100($ $ $){
@@ -62,11 +62,12 @@ sub uniq {
 sub sortgzblast{ #function that checks if the diamond output was already sorted (required for paired end stuff with reads)
 	my ($input) = @_;
 	#print "$input\n";
-	if ( $input =~ m/\.srt\.gz$/ ) {
+	if ( $input =~ m/\.srt\.gz$/ ) { #redo srt in case there's a $trial file
 		my $trial = $input; $trial =~ s/\.srt//; my $trialuse=0;
 		if (-e $trial && -e $input && (-s $trial > -s $input)){$input = $trial; $trialuse=1; }#print "trial\n";
 		if (-e $input && !$trialuse){return $input; }
 		if (-e $trial && !-e $input){$input = $trial;}
+		die "something went wrong in gzip sort\n" unless (-e $input);
 	}
 	my $tmpd=""; 
 	my $cmd = "";

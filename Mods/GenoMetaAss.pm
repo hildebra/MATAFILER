@@ -7,7 +7,7 @@ use List::MoreUtils 'first_index';
 use Exporter qw(import);
 our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
 		 readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
-		readFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median);
+		readFasta writeFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median);
 
 
 
@@ -717,6 +717,20 @@ sub readTabByKey{
 	close $I;
 	if ($maxTabs > 2){print "Warning in Tab reader: more than 2 columns were present ($maxTabs)\n";}
 	return %ret;
+}
+
+sub writeFasta($ $){
+	my ($hr,$of) = @_;
+	my %FA = %{$hr};
+	open O,">$of" or die "can't open out fasta $of\n";
+	foreach my $k (keys %FA){
+		if ($k =~ m/^>/){
+			print O $k."\n".$FA{$k}."\n";
+		} else {
+			print O ">".$k."\n".$FA{$k}."\n";
+		}
+	}
+	close O;
 }
 
 sub readFasta{

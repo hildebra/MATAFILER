@@ -1556,6 +1556,7 @@ sub detectRibo(){
 	my $DBrna2 = "$glbTmpDDB/LCADB/";
 	if ($globalRiboDependence{DBcp} eq "" ){
 		my $DBcmd = "";
+		my $DBcores = 1;
 		$globalRiboDependence{DBcp}="alreadyCopied";
 		if ( !-d $DBrna || !-e "$DBrna/ITS_comb.idx.kmer_0.dat" ||  !-e "$DBrna/silva-euk-18s-id95.fasta"  || !-e "$DBrna/silva-euk-28s-id98.idx.kmer_0.dat"){
 			$DBcmd .= "mkdir -p $DBrna\n";
@@ -1570,21 +1571,36 @@ sub detectRibo(){
 			#$DBcmd = "";
 		} 
 		#and get flash DBs as well over to that dir
-		my @LCAdbs = ("/g/bork3/home/hildebra/DB/MarkerG/SILVA/123/SLV_123_LSU_sorted_097_centroids.fasta*","/g/bork3/home/hildebra/dev/lotus//DB//SLV_123_LSU.tax",
-			"/g/bork3/home/hildebra/DB/MarkerG/SILVA/123//SLV_123_SSU_sorted_0.97_centroids*", "/g/bork3/home/hildebra/dev/lotus//DB//SLV_123_SSU.tax",
-			"/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.fa*","/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.tax",
+		my $LCAar = getProgPaths(["LSUdbFA","LSUtax","SSUdbFA","SSUtax","ITSdbFA","ITStax","PR2dbFA","PR2tax"]);
+		my @LCAdbs = @{$LCAar}; 
+		#die "@LCAdbs\n";
+#			("/g/bork3/home/hildebra/DB/MarkerG/SILVA/123/SLV_123_LSU_sorted_097_centroids.fasta*","/g/bork3/home/hildebra/dev/lotus//DB//SLV_123_LSU.tax",
+#			"/g/bork3/home/hildebra/DB/MarkerG/SILVA/123//SLV_123_SSU_sorted_0.97_centroids*", "/g/bork3/home/hildebra/dev/lotus//DB//SLV_123_SSU.tax",
+#			"/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_LSU.fa*","/g/bork3/home/hildebra/dev/lotus//DB//SLV_128_LSU.tax",
+#			"/g/bork3/home/hildebra/DB/MarkerG/SILVA/128//SLV_128_SSU.fa*", "/g/bork3/home/hildebra/dev/lotus//DB//SLV_128_SSU.tax",
+#			"/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.fa*","/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.tax",
 			#"/g/bork3/home/hildebra/dev/lotus//DB//UNITE/sh_refs_qiime_ver7_99_02.03.2015.fasta", "/g/bork3/home/hildebra/dev/lotus//DB//UNITE/sh_taxonomy_qiime_ver7_99_02.03.2015.txt",
-			"/g/bork3/home/hildebra/DB/MarkerG/PR2/gb203_pr2_all_10_28_99p.fasta*", "/g/bork3/home/hildebra/DB/MarkerG/PR2/PR2_taxonomy.txt");
-		if (!-d $DBrna2 || -s "/g/bork3/home/hildebra/DB/MarkerG/SILVA/123/SLV_123_LSU_sorted_097_centroids.fasta" != -s $DBrna2."/SLV_123_LSU_sorted_097_centroids.fasta"
-		|| !-e "$DBrna2/gb203_pr2_all_10_28_99p.fasta" || !-e "$DBrna2/ITS_comb.fa.dna5.fm.sa.val" ){
+#			"/g/bork3/home/hildebra/DB/MarkerG/PR2/gb203_pr2_all_10_28_99p.fasta*", "/g/bork3/home/hildebra/DB/MarkerG/PR2/PR2_taxonomy.txt");
+		#check first if the lambda DB was already built
+		my $lambdaIdxBin = getProgPaths("lambdaIdx");		
+		for (my $kk=0;$kk<@LCAdbs; $kk+=2){
+			my $DB = $LCAdbs[$kk];
+			die "wrong DB checked for index built:$DB\n" if ($DB =~ m/\.tax$/);
+			if (!-f $DB.".dna5.fm.sa.val"  ) {
+				print "Building LAMBDA index anew (may take up to an hour)..\n";
+				$DBcores = 12;
+				$DBcmd .= "$lambdaIdxBin -p blastn -t $DBcores -d $DB\n";
+			}
+		}
+		if (!-d $DBrna2 || -s $LCAdbs[2] != -s $DBrna2."/SLV_128_LSU.tax" || !-e "$DBrna2/gb203_pr2_all_10_28_99p.fasta" || !-e "$DBrna2/ITS_comb.fa.dna5.fm.sa.val" ){
 			$DBcmd .= "mkdir -p $DBrna2\n";
-			$DBcmd.= "cp ". join(" ",@LCAdbs) . " $DBrna2";
+			$DBcmd.= "cp ". join("* ",@LCAdbs) . "* $DBrna2";
 		}
 		my $jN = "_RRDB$JNUM"; my $tmpCmd;
 		#die $DBcmd."\n";
 		#die $DBcmd."$DBrna/ITS_comb.idx.kmer_0.dat";
 		if ($DBcmd ne ""){
-			($jN, $tmpCmd) = qsubSystem($logDir."RiboDBprep.sh",$DBcmd,1,"1G",$jN,"","",1,\@General_Hosts,\%QSBopt);
+			($jN, $tmpCmd) = qsubSystem($logDir."RiboDBprep.sh",$DBcmd,$DBcores,"20G",$jN,"","",1,\@General_Hosts,\%QSBopt);
 			$globalRiboDependence{DBcp} = $jN;
 		}
 	}
@@ -1726,7 +1742,7 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 		my $jN = "_DIDB$shrtDB$JNUM"; my $tmpCmd;
 #		die "$DBcmd";
 		if ($DBcmd ne ""){
-			($jN, $tmpCmd) = qsubSystem($logDir."DiamondDBprep$shrtDB.sh",$DBcmd,$ncoreDB,"1G",$jN,"","",1,\@General_Hosts,\%QSBopt);
+			($jN, $tmpCmd) = qsubSystem($logDir."DiamondDBprep$shrtDB.sh",$DBcmd,$ncoreDB,"20G",$jN,"","",1,\@General_Hosts,\%QSBopt);
 			$globalDiamondDependence{$curDB} = $jN;
 		}
 		#die $DBcmd."\n";

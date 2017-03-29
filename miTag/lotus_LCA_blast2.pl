@@ -54,10 +54,11 @@ if (@ARGV > 5){
 my $DBdir = $ARGV[3];
 
 #datbases
-my $LSUdbFA = "$DBdir/SLV_123_LSU_sorted_097_centroids.fasta";
-my $LSUtax = "$DBdir/SLV_123_LSU.tax";
-my $SSUdbFA= "$DBdir/SLV_123_SSU_sorted_0.97_centroids.fasta";
-my $SSUtax = "$DBdir/SLV_123_SSU.tax";
+#datbases
+my $LSUdbFA = "$DBdir/SLV_128_LSU.fasta";
+my $LSUtax = "$DBdir/SLV_128_LSU.tax";
+my $SSUdbFA= "$DBdir/SLV_128_SSU.fasta";
+my $SSUtax = "$DBdir/SLV_128_SSU.tax";
 #my $ITSdbFA = "$DBdir/sh_refs_qiime_ver7_99_02.03.2015.fasta";my $ITStax = "$DBdir/sh_taxonomy_qiime_ver7_99_02.03.2015.txt";
 my $ITSdbFA = "$DBdir/ITS_comb.fa";my $ITStax = "$DBdir/ITS_comb.tax";
 my $PR2dbFA = "$DBdir/gb203_pr2_all_10_28_99p.fasta";

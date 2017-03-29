@@ -1,6 +1,7 @@
 #base path to pipeline  ESSENTIAL
 MFLRDir	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/
-globalTmpDir	/scratch/MATAFILER/
+globalTmpDir	/scratch/bork/hildebra/MATAFILER/
+#globalTmpDir	/tmp/bork/hildebra/MATAFILER/
 nodeTmpDir	/tmp/MATAFILER/
 
 ## external programs
@@ -45,7 +46,16 @@ cdhit	[MFLRDir]/bin/cd-hit
 #		miTag related
 lambda	/g/bork3/home/hildebra/bin/lambda/lambda-1.0.0-Linux-x86_64/bin/lambda
 lambdaIdx	/g/bork3/home/hildebra/bin/lambda/lambda-1.0.0-Linux-x86_64/bin/lambda_indexer
-srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/	#requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
+#requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
+srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/
+LSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128//SLV_128_LSU.fasta
+LSUtax	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_LSU.tax
+SSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_SSU.fasta
+SSUtax	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_SSU.tax
+ITSdbFA	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.fa
+ITStax	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.tax
+PR2dbFA	/g/bork3/home/hildebra/DB/MarkerG/PR2//gb203_pr2_all_10_28_99p.fasta
+PR2tax	/g/bork3/home/hildebra/DB/MarkerG/PR2//PR2_taxonomy.txt
 
 #only if euk metagenomes to be processed
 augustus	/g/bork3/home/hildebra/bin/augustus-3.2.1/bin/augustus

@@ -6,6 +6,7 @@ use strict;
 use warnings;
 use threads;
 use Mods::GenoMetaAss qw(reverse_complement_IUPAC readFasta);
+use Mods::IO_Tamoc_progs qw(getProgPaths );
 
 
 
@@ -17,13 +18,13 @@ sub fastq2fna; sub flashed;
 sub rework_tmpLines;
 
 #binaries
-my $flashBin = "/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash";
-my $lambdaIdxBin = "/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
-my $lambdaBin = "/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
+my $flashBin = getProgPaths("flash");#"/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash";
+my $lambdaIdxBin = getProgPaths("lambdaIdx");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
+my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
 
 
 #some more pars for LCA	
-my @idThr = (97,95,93,91,88,78);
+my @idThr = (97,95,93,91,88,85);
 my $lengthTolerance = 0.85;
 my $maxHitOnly = 0;
 my $DoPar = 0;
@@ -46,10 +47,10 @@ if (@ARGV > 4){
 my $DBdir = $ARGV[3];
 
 #datbases
-my $LSUdbFA = "$DBdir/SLV_123_LSU.fasta";
-my $LSUtax = "$DBdir/SLV_123_LSU.tax";
-my $SSUdbFA= "$DBdir/SLV_123_SSU.fasta";
-my $SSUtax = "$DBdir/SLV_123_SSU.tax";
+my $LSUdbFA = "$DBdir/SLV_128_LSU.fasta";
+my $LSUtax = "$DBdir/SLV_128_LSU.tax";
+my $SSUdbFA= "$DBdir/SLV_128_SSU.fasta";
+my $SSUtax = "$DBdir/SLV_128_SSU.tax";
 #my $ITSdbFA = "$DBdir/sh_refs_qiime_ver7_99_02.03.2015.fasta";my $ITStax = "$DBdir/sh_taxonomy_qiime_ver7_99_02.03.2015.txt";
 my $ITSdbFA = "$DBdir/ITS_comb.fa";my $ITStax = "$DBdir/ITS_comb.tax";
 my $PR2dbFA = "$DBdir/gb203_pr2_all_10_28_99p.fasta";
