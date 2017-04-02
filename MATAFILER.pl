@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+#The Metagenomic Assembly, Genomic Recovery and Assembly Independent Mapping Tool
 #main MATAFILER routine
 #ex
 #./MATAFILER.pl map2tar /g/scb/bork/hildebra/SNP/test/refCtg.fasta,/g/scb/bork/hildebra/SNP/test/refCtg.fasta test1,test2
@@ -8,7 +9,6 @@
 #./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa frz11; ./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna Tara; ./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna IGC
 #./MATAFILER.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa,/g/bork3/home/hildebra/results/TEC2/v5/T6/TEC6.ctgs.rn.fna T2d,T6d
 
-#The Metagenomic Assembly, Genomic Recovery and Assembly Independent Mapping Tool
 
 
 use warnings;
@@ -80,7 +80,9 @@ my $nodeTmpDirBase = "/tmp/MATAFILER/";
 $sharedTmpDirP = getProgPaths("globalTmpDir",0);
 $nodeTmpDirBase = getProgPaths("nodeTmpDir",0);
 
-
+my $baseDir = ""; my $baseOut = "";
+my $mapF = ""; my $baseID = "";
+#my $krkFiltBin = "/g/scb/bork/hildebra/DB/kraken/./kraken-filter";
 
 #programs --------------------------
 my $smtBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
@@ -109,11 +111,6 @@ my $rareBin = getProgPaths("rare");#"/g/bork3/home/hildebra/dev/C++/rare/rare";
 my $readCov_Bin =getProgPaths("readCov");
 my $jgiDepthBin = getProgPaths("jgiDepth");#"/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths";
 
-my $baseDir = ""; my $baseOut = "";
-my $mapF = ""; my $baseID = "empty_ass_metag";
-#my $krkFiltBin = "/g/scb/bork/hildebra/DB/kraken/./kraken-filter";
-
-
 #local MATAFILER scripts --------------------------
 my $cLSUSSUscript = getProgPaths("cLSUSSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/catchLSUSSU.pl";
 my $lotusLCA_cLSU = getProgPaths("lotusLCA_cLSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/lotus_LCA_blast2.pl";
@@ -137,7 +134,7 @@ my $mergeMiTagScript = getProgPaths("mrgMiTag_scr");#"/g/bork3/home/hildebra/dev
 
 
 
-#databases --------------------------
+#databases empty structs --------------------------
 my $globalKraTaxkDB = "";
 my %globalRiboDependence =(DBcp => "");
 my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",KGE=>"",ACL=>"",KGM=>"" );
@@ -179,14 +176,18 @@ my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??
 my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
 my $MappingMem = "3G";
 
-
-
+#----------- map all reads to a specific reference - options ---------
+my $prevDeps= "";my $mapModeActive=0; my $mapModeCovDo=1;#get the coverage per gene etc
+my $mapModeDecoyDo=1;my %make2ndMapDecoy;my $rewrite2ndMap = 0;
+my @bwt2outD =(); my @DBbtRefX = (); my @DBbtRefGFF=(); #my $bwt2Name=""; 
+my $refDBall; my $bwt2NameAll ;
 
 #control broad flow
-my $from=0; my $to=1000;
+my $from=0; my $to=100000;
 
 my $doSubmit=1; 
-my $rewrite=0;my $rewrite2ndMap = 0;
+my $rewrite=0;
+
 
 
 GetOptions(
@@ -198,6 +199,9 @@ GetOptions(
 	"globalTmpDir=s" => \$sharedTmpDirP,
 	"nodeTmpDir=s" => \$nodeTmpDirBase,
 	"submSystem=s" => \$submSytem,  #qsub,SGE,bsub,LSF
+	"submit=i" => \$doSubmit,
+	"from=i" => \$from,
+	"to=i" => \$to,
 	#input FQ related
 	"inputFQregex1=s" => \$rawFileSrchStr1,
 	"inputFQregex2=s" => \$rawFileSrchStr2,
@@ -234,8 +238,10 @@ GetOptions(
 	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
 	#D2s distance
 	"calcInterMGdistance=i" => \$DoCalcD2s,
-	"from=i" => \$from,
-	"to=i" => \$to,
+	#map2tar / map2DB
+	"decoyMapping=i" => \$mapModeDecoyDo,
+	"ref=s" => \$refDBall,
+	"mapnms=s" => \$bwt2NameAll, #name for this final files
 
   );
  
@@ -249,190 +255,6 @@ $Spades_Kmers = "-k $Spades_Kmers" unless ($Spades_Kmers =~ m/^-k/);
 #say hello to user 
 annoucnce_MATAFILER();
 
-
-
-
-if ( 0 ){ #real data 
-	if ( 0 ){ #MM samples
-		$importMocat=0;	
-		die "Sure you want to rewrite?\n" if ($rewrite);
-		#$jmp{$_} = 1 for qw(11 );
-	#$baseID = "GNMass_mocat";
-		if (1){ # compound assembly
-			$Spades_Cores=70;$Spades_Memory = 170;$Spades_HDspace=100;
-			$baseID = "GNMass3";
-			#MH samples: my $from=137; my $to=150;
-			#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_at_v3_T2subset.txt";
-			$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_at_v5_T2subset.txt";
-			#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/T2_MetaHit.txt"; #no read access...
-			#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/T2_HMP.txt";
-			#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_at_v3.txt";
-			#testing assembly options
-			my $SpadesTest=0;
-			if ($SpadesTest==1){
-				$baseID.="bHmm__meta";$spadesBayHam = 1; $useSDM = 0;
-			} elsif($SpadesTest==2){
-				$baseID.="_meta";$spadesBayHam = 0; $useSDM = 1;
-			} elsif($SpadesTest==3){
-				$baseID.="_bHmm";$spadesBayHam = 1; $useSDM = 0;
-			} elsif($SpadesTest==4){
-				$baseID.="_meta_bHmSdm";$spadesBayHam = 1; $useSDM = 1;
-			}
-		} elsif (0){ #run for Ana
-			$Spades_Cores=16;$Spades_Memory = 80;
-			$baseID = "Ana";$importMocat = 1;
-			$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_ana.txt";
-		} else {
-			$Spades_Cores=18;$Spades_Memory = 140;# single assembly
-			$baseID = "GNMass2_singl"; #GNMass2_singl GNMass3_singl
-			$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_at_singl.txt";
-			#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MM_at_v3_T2subset.txt";
-			
-		}
-		#
-#		$Spades_Kmers = "-k 27,33,55,71,99";
-		$Spades_Kmers = "-k 25,43,67,87,127";
-	} elsif (0) { #ColPark 
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/PD_cologne.txt";
-		$importMocat=1; $useSDM =0; $DoBinning=0; $globalKraTaxkDB = "virusDB";
-		$DoDiamond = 0; $redoDiamondParse=0; $rewriteDiamond=0;
-		$DoRibofind =1; $doRiboAssembl = 0; $RedoRiboFind = 0;  $RedoRiboAssign=0;		$DoAssembly=0;  $humanFilter =0;
-		$DoMetaPhlan = 0; $DoKraken = 1; $globalKraTaxkDB = "virusDB";#"soilOrgs";#"minikraken_2015/";
-		$RedoKraken=0;
-	} elsif (0) { #Louis dog samples
-		$baseID = "Dogs";
-		$baseOut = "/g/scb/bork/hildebra/Tamoc/$baseID/";
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/Dogs.txt";
-		$baseDir = "/g/bork5/mocat/DOGS/";
-	} elsif (0) { #HMP samples
-		#$jmp{$_} = 1 for qw(201 188 209 248);
-		$baseID = "HMPtrial";$Spades_Memory = 100;
-		$baseOut = "/g/scb/bork/hildebra/Tamoc/$baseID/";
-		$Spades_Kmers = "-k 21,33,67,77,89";
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/HMP_ana.txt";
-		$baseDir = "/g/bork5/mocat/HMP_stool//";
-	} elsif (0) { #FruitBodies Moh
-		$baseID = "FruitBodies";
-		$baseOut = "/g/scb/bork/hildebra/Tamoc/$baseID/";
-		$mapF = "/g/scb/bork/hildebra/data2/FruitBodies/Fruits.txt";
-		$baseDir = "/g/scb/bork/hildebra/data2/FruitBodies/";		
-		$DoNP=0;$DoRibofind = 1;$DoDiamond = 1; 
-		$rawFileSrchStr1 = '.*R1_00\d\.f[^\.]*q\.gz$';
-		$rawFileSrchStr2 = '.*R2_00\d\.f[^\.]*q\.gz$';
-	} elsif (0) { #DeepSeq 40
-		$baseID = "DeSe40";
-		$baseOut = "/g/scb/bork/hildebra/Tamoc/$baseID/";$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/DeepSeq40/map.txt";
-		$baseDir = "/g/scb/bork/hildebra/data2/Soil_finland/DeepSeq40/";$DoNP=0;$DoRibofind = 0;$DoDiamond = 0; $DoAssembly=1;
-		$rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';$rawFileSrchStr2 = '.*2\.f[^\.]*q\.gz$';
-	} elsif (0){ #TARA
-		#$from=0;$to = 300;#
-		#$to = 60; #restrict myself to first 60 samples for now..
-		$mapF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/Tara_bac.map";
-		#$mocatFiltPath = "reads.screened.screened.adapter.on.hg19.solexaqa/";
-		$importMocat = 1; $DoBinning=0;
-		#$jmp{$_} = 1 for qw(102 118);
-		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		#$rawFileSrchStr1 = '.*_1\.f[^\.]*q\.gz$'; $rawFileSrchStr2 = '.*_2\.f[^\.]*q\.gz$';
-		$DoDiamond = 1; $redoDiamondParse=0; $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0;  $RedoRiboAssign=0;
-		$DoAssembly=0;  $humanFilter =0;
-		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "soilOrgs";#"minikraken_2015/";
-		$RedoKraken=0;
-	} elsif ( 0 ) { #Anna single cell seq
-		$rawFileSrchStr1 = '.*1_sequence\.txt\.gz$';$rawFileSrchStr2 = '.*2_sequence\.txt\.gz$';
-		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 0;  $redoDiamondParse = 0;  $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;
-		$DoAssembly=1; $DoBinning=1; $Spades_Kmers = "-k 27,33,55,71,101,127";
-		$mapF = "/g/bork3/home/hildebra/data/AnnaPry/singleCell.map";
-		#$mapF = "/g/bork3/home/hildebra/data/AnnaPry/singleCell_comb.map";
-	} elsif ( 0 ) { #Yongkyu fungi samples
-		$rawFileSrchStr1 = '.*1_sequence\.f[^\.]*q\.gz$';
-		$rawFileSrchStr2 = '.*2_sequence\.f[^\.]*q\.gz$';
-		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
-		$DoAssembly=1;$DoRibofind = 1; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0; $DoBinning=0;
-		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "minikraken_2015";#= "minikraken_2015/";
-		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		$mapF = "/g/bork3/home/hildebra/data/Kieran/Yongkyu/kefir1.txt"; 
-	} elsif (0) { #IHMS samples
-		#$from=305;
-		$rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';$rawFileSrchStr2 = '.*2\.f[^\.]*q\.gz$'; $importMocat=1;
-		$DoNP=0;$humanFilter=0;$DoAssembly=1; $DoBinning=1; $Spades_Cores=48;$Spades_Memory = 480; $dia_Cores = 14;$DoBinning=0; $redoAssembly=0;
-		$Spades_Kmers = "-k 21,33,67,111,127";
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/IHMS.txt"; 
-	} elsif (0) { #MetaHit samples
-		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;$DoAssembly=0; $DoBinning=0;
-		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "virusDB";#= "minikraken_2015/";
-		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/MetaHit.txt"; 
-	} elsif ( 0 ) { #NIH & HMP skin samples
-		$from = 0;
-		$DoNP=0;$humanFilter=1; $DoCalcD2s=0; $DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;$DoAssembly=0; $DoBinning=0;
-		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "virusDB";#= "minikraken_2015/";
-		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		$mapF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/HMPNIH_skin.map";
-	} else { #soil samples
-		#$jmp{$_} = 1 for qw(201 188 209 248);
-		#$baseID = "FinSoil";
-		#die "TODO: restart NOG dia from 191\n"; 
-		#$from=11; 
-		#$to=12;
-		
-		$DO_EUK_GENE_PRED=0;
-		$doRmDup=0;
-		$removeInputAgain=0; $doReadMerge=1; $remove_reads_tmpDir=0;
-		$MappingMem = "5G"; #for mapping to refgenomes
-		$DoNP=0;$humanFilter=0; $DoCalcD2s=0; 
-		$DoDiamond = 1;  $redoDiamondParse = 0;  $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0; $RedoRiboFind = 0; $RedoRiboAssign=0;
-		$defaultReadLength = 250;
-		$DoMetaPhlan = 0; $DoKraken = 0; $globalKraTaxkDB = "virusDB";#= "minikraken_2015/";
-		$DoAssembly=1; $Spades_Cores=48;$Spades_Memory = 800; $dia_Cores = 14;$DoBinning=0; $redoAssembly=0;
-		$Spades_Kmers = "-k 21,33,67,111,127";
-		$rawFileSrchStr1 = '.*R1_00\d\.f[^\.]*q\.gz$|.*_1\.f[^\.]*q\.gz$';
-		$rawFileSrchStr2 = '.*R2_00\d\.f[^\.]*q\.gz$|.*_2\.f[^\.]*q\.gz$';
-		$DoBinning=0;
-		my @dvals = ("1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15");$diaEVal=join(",",@dvals);
-		$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt"; 
-		#$mapF = "/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map";$DoAssembly=0;$pseudoAssembly =1;$rawFileSrchStrSingl='.*\.fq\.gz$'; $readsRpairs=0;$sdm_opt{maxSeqLength}=10000000;$sdm_opt{minSeqLength}=90; $splitFastaInput = 1000;
-		#$mapF = "/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map";$Spades_Kmers = "-k 21,33,67,77";$doReadMerge=0; $from=0;$to=10;$DoDiamond=1;$defaultReadLength=100;
-
-		#$mapF = "/g/scb/bork/hildebra/data2/Soil_finland/soil_map_d.txt"; $doDateFileCheck = 1; $reqDiaDB = "CZy"; $DoRibofind = 0;$DoMetaPhlan = 0; $DoKraken = 0;
-	}
-} elsif (0) {
-	$from=1; $to=300;$rewrite =0;
-	$doBam2Cram =0; $DoAssembly=1;
-	$Spades_Cores=12;$Spades_Memory = 34;
-	$Spades_HDspace=100;
-	$bwt_Cores = 5;$humanFilter=0;
-	$doReadMerge=0;
-	if (0){
-		$baseID = "SimuA";  $DoRibofind=0; $RedoRiboFind = 0;$RedoRiboAssign=0; $DO_EUK_GENE_PRED=1;
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simus2.txt";#_singl
-		$RedoKraken=0; $DoKraken = 0; $globalKraTaxkDB = "soilOrgs";#$globalKraTaxkDB = "minikraken_2015/";
-	} elsif (1){ #Luis
-		$DoRibofind=0; $RedoRiboFind = 0;$RedoRiboAssign=0; $DO_EUK_GENE_PRED=0;
-		$mapF = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/LuisSimu.map";#_singl
-		$RedoKraken=0; $DoKraken = 0; $globalKraTaxkDB = "soilOrgs";#$globalKraTaxkDB = "minikraken_2015/";
-		$rawFileSrchStr1 = '.*1\.fq\.gz$';$rawFileSrchStr2 = '.*2\.fq\.gz$';
-	} else { #fungi & 2 bacs, 8 times repeated
-		$DO_EUK_GENE_PRED = 1;
-		
-		#$reqDiaDB = "KGE,KGB";
-		$DoBinning=0;$DoAssembly = 1; $DoMetaPhlan=0;
-		$DoDiamond = 0; $redoDiamondParse = 0; $rewriteDiamond=0;
-		$DoRibofind = 0; $doRiboAssembl = 0;$RedoRiboFind = 0;$RedoRiboAssign=0;
-		$DoKraken = 0;
-		my @dvals = ("1e-7","1e-8","1e-9","1e-10","1e-11","1e-12","1e-13","1e-14","1e-15","1e-16","1e-17","1e-18","1e-19","1e-20");
-		#my @dvals = ("0.0000001","0.000001","0.00001","0.0001","0.001","0.00000001","0.000000001");
-		$diaEVal=join(",",@dvals);
-		$globalKraTaxkDB = "minikraken_2015/";
-		$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simu3.txt";#200, 250 bp
-		#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simu4.txt";#200, 100 bp
-		#$mapF = "/g/bork5/hildebra/data/metaGgutEMBL/simus_Fungi2.txt";#_singl
-	}
-}
 
 #die $mapF;
 
@@ -478,13 +300,10 @@ if (0 && $Spades_HDspace > 100){
 
 
 
-#do I need to redo d2s?
-if ($DoCalcD2s) {$DoCalcD2s = !-e "$baseOut/d2StarComp/d2meta.stone";}
 
-#die();
-#----------- map all reads to a specific reference ---------
-my $prevDeps= "";my $mapModeActive=0; my $mapModeCovDo=1;
-my @bwt2outD =(); my @DBbtRefX = (); my @DBbtRefGFF=(); #my $bwt2Name=""; 
+#----------- here are scaffolding external contigs parameters
+my $scaffTarExternal = "";my $scaffTarExternalName = ""; my @scaffTarExternalOLib1; my @scaffTarExternalOLib2;
+my $scaffTarExtLibTar = ""; my $bwt2ndMapDep = ""; my @bwt2ndMapNmds;
 
 #here the map and some base parameters (base ID, in path, out path) can be (re)set
 my ($hr,$hr2) = readMap($mapF);
@@ -493,6 +312,10 @@ my %map = %{$hr};
 #$baseDir = $map{inDir} if (exists($map{inDir} ));
 $baseOut = $map{outDir} if (exists($map{outDir} ));
 $baseID = $map{baseID} if (exists($map{baseID} ));
+
+die "provide an outdir in the mapping file\n" if ($baseOut eq "");
+die "provide a baseID in the mapping file\n" if ($baseID eq "");
+
 my $runTmpDirGlobal = "$sharedTmpDirP/$baseID/";
 my $runTmpDBDirGlobal = "$runTmpDirGlobal/DB/";
 system "mkdir -p $runTmpDBDirGlobal" unless (-d $runTmpDBDirGlobal);
@@ -502,15 +325,11 @@ my $globaldDiaDBdir = $runTmpDBDirGlobal."DiamDB/";
 system "mkdir -p $globaldDiaDBdir" unless (-d $globaldDiaDBdir);
 
 
-#here are scaffolding external contigs parameters
-my $scaffTarExternal = "";my $scaffTarExternalName = ""; my @scaffTarExternalOLib1; my @scaffTarExternalOLib2;
-my $scaffTarExtLibTar = ""; my $bwt2ndMapDep = ""; my @bwt2ndMapNmds;
-my %make2ndMapDecoy;
+#----------- map all reads to a specific reference ---------
 if (@ARGV > 2 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB") ){
 #in this case primary focus is on mapping and not on assemblies
-	if ($ARGV[0] eq "map2DB"){$mapModeCovDo=0;}
-	my $refDBall = $ARGV[1];
-	my $bwt2NameAll = $ARGV[2];
+	if ($ARGV[0] eq "map2DB"){$mapModeCovDo=0;$mapModeDecoyDo=0;}
+	
 	my @refDB = split(/,/,$refDBall);
 	my @bwt2Name = split(/,/,$bwt2NameAll);
 	$MapperProg=1;  $MappingMem = "6G";$bwt_Cores=12;
@@ -554,7 +373,7 @@ if (@ARGV > 2 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB") ){
 		
 		#$DBbtRefX = $DBbtRef;
 		push(@DBbtRefX,$DBbtRef);
-		if($mapModeCovDo){
+		if($mapModeCovDo){ #get the coverage per gene etc
 			my $gDir = $bwt2outDl."";
 			my $nativeGFF = $refDB[$i];$nativeGFF =~ s/\.[^\.]+/\.gff/;
 			my $gffF = "genes.$bwt2Name[$i].gff";
@@ -597,28 +416,26 @@ if (@ARGV > 2 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB") ){
 #die "@{$make2ndMapDecoy{regions}}\n";
 #die "$bwt2ndMapDep\n";
 #my $baseOut = "/g/bork1/hildebra/SNP/GNMass/";
-my $dir2rd=""; 
+
+#some base stats kept in vars
 my $sequencer = "hiSeq";#plattform the algos have to deal with
 my $DBpath=""; my $assDir=""; 
 my $continue_JNUM = 0; #debug, set to 0 for full run
 my $prevAssembly = ""; my $shortAssembly = "";#files with full length and short length assemblies
-my $AssJob = "";#job name for assembly, restriction for mapping to this assembly
-my $curDir = "";my $curOutDir = ""; 
 my $mmpuOutTab = "";
 
+#fixed dirs for specific set of samples
 my $dir_MP2 = $baseOut."pseudoGC/Phylo/MP2/"; #metaphlan 2 dir
 my $dir_RibFind = $baseOut."pseudoGC/Phylo/RiboFind/"; #ribofinder dir
 my $dir_KrakFind = $baseOut."pseudoGC/Phylo/KrakenTax/$globalKraTaxkDB/"; #kraken dir
-
-
-system("mkdir -p $baseOut");
+system("mkdir -p $baseOut") unless (-d $baseOut);
 my $globalLogDir = $baseOut."LOGandSUB/";
-system("mkdir -p $globalLogDir/sdm");
+system("mkdir -p $globalLogDir/sdm") unless (-d "$globalLogDir/sdm");
 open $QSBopt{LOG},">",$globalLogDir."qsub.log";# unless ($doSubmit == 0);
 print $globalLogDir."qsub.log\n";
 my $collectFinished = $baseOut."runFinished.log\n";
 my $globalNPD = $baseOut."NonPareil/";
-system "mkdir -p $globalNPD";
+system "mkdir -p $globalNPD" unless (-d "$globalNPD");
 system "cp $mapF $globalLogDir/inmap.txt";
 
 my $present = 0; my $totalChecked=0;
@@ -653,6 +470,8 @@ if ($humanFilter || ($DoKraken) || $DO_EUK_GENE_PRED){
 	$krakDeps = prepKraken();
 }
 
+#redo d2s intersample distance?
+if ($DoCalcD2s) {$DoCalcD2s = !-e "$baseOut/d2StarComp/d2meta.stone";}
 
 
 
@@ -670,6 +489,8 @@ if ($humanFilter || ($DoKraken) || $DO_EUK_GENE_PRED){
 for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die $samples[$JNUM]."\n";
 	next if (exists($jmp{$JNUM}));
+	#locally used paths for a specific sample
+	my $dir2rd=""; my $curDir = "";my $curOutDir = ""; 
 	$dir2rd = $map{$samples[$JNUM]}{dir};
 	#print "$samples[$JNUM]  $map{$samples[$JNUM]}{dir}  $map{$samples[$JNUM]}{rddir}  $map{$samples[$JNUM]}{wrdir}\n";	next;
 	my $SmplName = $map{$samples[$JNUM]}{SmplID};
@@ -688,7 +509,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die "$curDir\n$curOutDir\n$baseOut\n";
 	
 	my $samplReadLength = $defaultReadLength; #some default value
-	if (exists $map{$samples[$JNUM]}{readLength}){
+	if (exists $map{$samples[$JNUM]}{readLength} && $map{$samples[$JNUM]}{readLength} != 0){
 		$samplReadLength = $map{$samples[$JNUM]}{readLength};
 	}
 	my $curSDMopt = $baseSDMopt;
@@ -712,7 +533,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	$curSDMopt = $sampleSDMs{$samplReadLength};
 	$totalChecked++;
 	
-	#die $SmplName."\n";
+	#die $SmplName."  $samplReadLength\n";
 	print "\n======= $dir2rd - $JNUM - $SmplName =======\n";
 	#my $dir2rd = "alien2-11-0-0";
 	my $curTmpDir = "$runTmpDirGlobal$dir2rd/";
@@ -990,7 +811,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		#print "@scaffTarExternalOLib1\n";
 		#die;
 	}
-		$mmpuOutTab .= $dir2rd."\t".$mmpuNum."\n";
+	$mmpuOutTab .= $dir2rd."\t".$mmpuNum."\n";
 	$waitTime = $WT;
 	push (@unzipjobs,$jdepUZ) unless ($jdepUZ eq "");
 	$AsGrps{$cMapGrp}{SeqUnZDeps} .= $jdep.";";
@@ -1024,7 +845,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		#still punsh the whole thing through sdm..
 		if ($useSDM!=0) {
 			#$ifastp
-			($arp1,$arp2,$singAr,$matAr,$sdmjN) = sdmClean($cfp1ar,$cfp2ar,$cfpsar,\@libInfo,$nodeSpTmpD."sdm/",$GlbTmpPath."mateCln/",
+			($arp1,$arp2,$singAr,$matAr,$sdmjN) = sdmClean($curOutDir,$cfp1ar,$cfp2ar,$cfpsar,\@libInfo,$nodeSpTmpD."sdm/",$GlbTmpPath."mateCln/",
 					,$GlbTmpPath."seqClean/",$curSDMopt,$jdep.";$sdmjN",$dowstreamAnalysisFlag) ;
 			
 		}
@@ -1131,7 +952,6 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	} else {
 		print "No Assembly routines required\n";
 		$metaGassembly = $finAssLoc;
-		$AssJob = $jdep;
 		$AsGrps{$cAssGrp}{AssemblJobName} = $jdep;
 	}
 	
@@ -1259,11 +1079,18 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 
 		if ($map2Ctgs_2 ne ""){
 			$AsGrps{$cAssGrp}{PostAssemblCmd} .= $delaySubmCmd;
-			push(@{$AsGrps{$cAssGrp}{MapCopies}},$mapOut."/*",$curOutDir."/mapping");
 			$AsGrps{$cAssGrp}{MapDeps} .= $map2Ctgs_2.";";
 		}
-	}
-
+		if (!-d "$curOutDir/mapping" && -e "$mapOut/$SmplName-smd.bam.coverage.gz"){
+			push(@{$AsGrps{$cAssGrp}{MapCopies}},$mapOut."/*","$curOutDir/mapping");
+		}
+		#die "$curOutDir/mapping\n" . "$mapOut/$SmplName-smd.bam.coverage.gz"
+	#
+	} elsif (!-d "$curOutDir/mapping" && -e "$curOutDir/mapping/$SmplName-smd.bam.coverage.gz"){
+		#ok, mapping already run, but double check that files were moved
+		push(@{$AsGrps{$cAssGrp}{MapCopies}},$mapOut."/*","$curOutDir/mapping");
+	} 
+	#die "@{$AsGrps{$cAssGrp}{MapCopies}}\n";
 	#cleaning of filtered reads & copying of assembly / mapping files
 	$AsGrps{$cAssGrp}{ClSeqsRm} .= $curOutDir."seqClean/".";";
 	
@@ -1350,11 +1177,13 @@ d2metaDist(\@allSmplNames,\@allFilter1,\@allFilter2,$sdmjNamesAll,$baseOut."/d2S
 close $QSBopt{LOG};
 
 #print input files, sorted by samples
-open O,">$baseOut/Input_raw.txt";
-for (my $i=0;$i<@allSmplNames;$i++){
-	print O "$allSmplNames[$i]\t$inputRawFQs[$i]\n"
+if (@inputRawFQs == @allSmplNames){
+	open O,">$baseOut/Input_raw.txt";
+	for (my $i=0;$i<@allSmplNames; $i++){
+		print O "$allSmplNames[$i]\t$inputRawFQs[$i]\n";
+	}
+	close O;
 }
-close O;
 
 print "\n$sharedTmpDirP\n".$baseOut."\nFINISHED MATAFILER\n";
 if ($statStr ne ""){
@@ -1383,8 +1212,10 @@ if ($DoRibofind ){ if( $riboFindFailCnts){print "$riboFindFailCnts samples with 
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/ITS.miTag $dir_RibFind/ITS/*.hiera.txt \n";
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/SSU.miTag $dir_RibFind/SSU/*.hiera.txt \n";
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/LSU.miTag $dir_RibFind/LSU/*.hiera.txt \n";
-		die $mrgCmd."\n";
-		system $mrgCmd."\n";
+		#die $mrgCmd."\n";
+		my $of_exist = 1;
+		foreach my $lvl (@lvls){ $of_exist=0 unless (-e "$dir_RibFind/ITS.miTag.$lvl.txt" && -e "$dir_RibFind/LSU.miTag.$lvl.txt" && -e "$dir_RibFind/SSU.miTag.$lvl.txt"); }
+		system $mrgCmd."\n" if ($of_exist == 0);
 		#system "$mrgCmd";
 }}
 if ($DoKraken ){if( $KrakTaxFailCnts){print "$KrakTaxFailCnts samples with incomplete KrakenTax\n";} 
@@ -1398,7 +1229,8 @@ if ($DoKraken ){if( $KrakTaxFailCnts){print "$KrakTaxFailCnts samples with incom
 		#die $mrgCmd."\n$dir_KrakFind\n";
 		system "$mrgCmd";
 }}
-if (0&&$DoMetaPhlan){if ($metaPhl2FailCnts){print "$metaPhl2FailCnts samples with incomplete Metaphlan assignments\n";}
+if ($DoMetaPhlan){
+	if ($metaPhl2FailCnts){print "$metaPhl2FailCnts samples with incomplete Metaphlan assignments\n";}
 	else { print "All samples have metaphlan assignments.\n";
 		mergeMP2Table($dir_MP2);
 
@@ -1471,29 +1303,51 @@ sub DiaPostProcess(){
 sub mergeMP2Table($){
 	my ($dir_MP2) = @_;
 	my @slvl = ("k__","p__","c__","o__","f__","g__"); my @llvl = ("kingdom","phylum","class","order","family","genus");
-	my $mrgCmd = "$mergeTblScript $dir_MP2/*MP2.txt > $dir_MP2/tmp.All.MP2.mat\n";
+	my $mrgCmd = ""; my $redoMP2Tables = 0;
+	my $premrgCmd = "$mergeTblScript $dir_MP2/*MP2.txt > $dir_MP2/tmp.All.MP2.mat\n" ;
 	for (my $i=0;$i<@slvl;$i++){
-		$mrgCmd .= "cat  $dir_MP2/tmp.All.MP2.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" > $dir_MP2/All.$llvl[$i].MP2.mat\n";
+		my $outF = "$dir_MP2/MP2.all.$llvl[$i].mat";
+		if (!-e "$outF" || $redoMP2Tables){
+			unless ($premrgCmd eq ""){$mrgCmd.=$premrgCmd;$premrgCmd="";	}
+			$mrgCmd .= "head -n1  $dir_MP2/tmp.All.MP2.mat > $outF\n";
+			$mrgCmd .= "cat  $dir_MP2/tmp.All.MP2.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" | sed 's/|/;/g' >> $outF\n" ;
+		}
 	}
-	$mrgCmd .= "rm -f $dir_MP2/All.MP2.mat\n\n";
-	$mrgCmd .= "$mergeTblScript $dir_MP2/*MP2.noV.noB.txt > $dir_MP2/All.MP2.noV.noB.mat\n";
+	#die "$mrgCmd\n";
+
+	$premrgCmd = "$mergeTblScript $dir_MP2/*MP2.noV.noB.txt > $dir_MP2/All.MP2.noV.noB.mat\n";
 	for (my $i=0;$i<@slvl;$i++){
-		$mrgCmd .= "cat $dir_MP2/All.MP2.noV.noB.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" > $dir_MP2/All.$llvl[$i].MP2.noV.noB.mat\n";
+		my $outF = "$dir_MP2/MP2.noV.noB.$llvl[$i].mat";
+		if (!-e "$outF" || $redoMP2Tables){
+			unless ($premrgCmd eq ""){$mrgCmd.=$premrgCmd;$premrgCmd="";	}
+			$mrgCmd .= "head -n1  $dir_MP2/tmp.All.MP2.mat > $outF\n";
+			$mrgCmd .= "cat $dir_MP2/All.MP2.noV.noB.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" | sed 's/|/;/g' >> $outF\n"  unless (-e "$outF"&& !$redoMP2Tables);
+		}
 	}
 	$mrgCmd .= "rm -f $dir_MP2/All.MP2.noV.noB.mat\n\n";
-	$mrgCmd .= "$mergeTblScript $dir_MP2/*MP2.noV.txt > $dir_MP2/All.MP2.noV.mat\n";
+	$premrgCmd = "$mergeTblScript $dir_MP2/*MP2.noV.txt > $dir_MP2/All.MP2.noV.mat\n";
 	for (my $i=0;$i<@slvl;$i++){
-		$mrgCmd .= "cat $dir_MP2/All.MP2.noV.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" > $dir_MP2/All.$llvl[$i].MP2.noV.mat\n";
+		my $outF = "$dir_MP2/MP2.noV.$llvl[$i].mat";
+		if (!-e "$outF" || $redoMP2Tables){
+			unless ($premrgCmd eq ""){$mrgCmd.=$premrgCmd;$premrgCmd="";	}
+			$mrgCmd .= "head -n1  $dir_MP2/tmp.All.MP2.mat > $outF\n";
+			$mrgCmd .= "cat $dir_MP2/All.MP2.noV.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" | sed 's/|/;/g'  >> $outF\n"  unless (-e "$outF"&& !$redoMP2Tables);
+		}
 	}
 	$mrgCmd .= "rm -f $dir_MP2/All.MP2.noV.mat\n\n";
 	#viruses
-	$mrgCmd .= "$mergeTblScript $dir_MP2/*MP2.VirusOnly.txt > $dir_MP2/All.MP2.VirusOnly.mat\n";
+	$premrgCmd = "$mergeTblScript $dir_MP2/*MP2.VirusOnly.txt > $dir_MP2/All.MP2.VirusOnly.mat\n";
 	for (my $i=0;$i<@slvl;$i++){
-		$mrgCmd .= "cat $dir_MP2/All.MP2.VirusOnly.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" > $dir_MP2/All.$llvl[$i].MP2.VirusOnly.mat\n";
+		my $outF = "$dir_MP2/MP2.VirusOnly.$llvl[$i].mat";
+		if (!-e "$outF" || $redoMP2Tables){
+			unless ($premrgCmd eq ""){$mrgCmd.=$premrgCmd;$premrgCmd="";	}
+			$mrgCmd .= "head -n1  $dir_MP2/tmp.All.MP2.mat > $outF\n";
+			$mrgCmd .= "cat $dir_MP2/All.MP2.VirusOnly.mat | grep \"".$slvl[$i]."[^\\|]*\\s\" | sed 's/|/;/g'  >> $outF\n"  unless (-e "$outF"&& !$redoMP2Tables);
+		}
 	}
-	$mrgCmd .= "rm -f $dir_MP2/All.MP2.noV.mat\n\n";
+	$mrgCmd .= "rm -f $dir_MP2/tmp.All.MP2.mat $dir_MP2/All.MP2.VirusOnly.mat\n\n";
 	
-	
+
 	system "$mrgCmd";
 	#die $mrgCmd."\n";
 }
@@ -2241,7 +2095,7 @@ sub mergeReads(){
 }
  
 sub sdmClean(){
-	my ($ar1,$ar2,$ars,$libInfoAr,$tmpD,$mateD,$finD,$sdmO,$jobd,$runThis) = @_;
+	my ($curOutDir,$ar1,$ar2,$ars,$libInfoAr,$tmpD,$mateD,$finD,$sdmO,$jobd,$runThis) = @_;
 	#create ifasta path
 	#die "cllll\n";
 	if (@{$ar1} == 0 && @{$ars}==0){die "Empty array to sdmClean given\n";}
@@ -2983,7 +2837,7 @@ sub bamDepth{
 	#takes too much space, calc on the fly!
 	#$cmd .= "$smtBin depth $mappDir/$baseN-s.bam > $mappDir/$baseN.depth.bam.txt\n";#depth file (different estimator)
 	my $covCmd = "";
-	if (!-e "$nxtBAM.coverage"){
+	if (!-e "$nxtBAM.coverage.gz"){
 		$covCmd = "/g/bork5/hildebra/bin/bedtools2-2.21.0/bin/genomeCoverageBed -ibam $nxtBAM -bg > $nxtBAM.coverage\n";
 		$covCmd .= "rm -f $nxtBAM.coverage.gz\ngzip $nxtBAM.coverage\n";
 	}
@@ -3010,7 +2864,7 @@ sub bamDepth{
 	}
 	my $nodeCln = "\nrm -rf $nodeTmp\n";
 	#die "($doCram && !-e $cramSTO) || ( !-s $nxtBAM.coverage) || $bamFresh\n";
-	if ( ($doCram && !-e $cramSTO) || ( !-s "$nxtBAM.coverage") || $bamFresh){
+	if ( ($doCram && !-e $cramSTO) || ( !-s "$nxtBAM.coverage.gz") || $bamFresh){
 		($jobN2,$retCmds) = qsubSystem($logDir.$bashN."bwtMap2.sh",
 				$cmd."\n".$covCmd."\n".$CRAMcmd."\n$nodeCln\n"#.$covCmd2
 				,$numCore,int(110/$numCore)."G",$newJobN,$jDep,"",$immediateSubm,\@General_Hosts,\%QSBopt);

@@ -33,5 +33,5 @@ if ( !-e "$oDess/alle100.fna"){
 	getE100($oDess,$inFAA,$inFNA);
 	systemW("cat $oDess/*.fna >$oDess/alle100.fna") unless (-e "$oDess/alle100.fna");
 }
-my $cmd = "$growthBin -f $oDess/alle100.fna -g $inFNA -c 0 -T 37 -s -S -tmp $tmpDir";
+my $cmd = "$growthBin -f $oDess/alle100.fna -g $inFNA -c 0 -T 37 -s -S --tmp $tmpDir";
 die "$cmd\n";

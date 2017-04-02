@@ -46,6 +46,7 @@ system "mkdir -p $outD";
 system "mkdir -p $outDab";
 
 #figure out mapping names
+die "Mapping is not done yet (or not copied)\n" if (!-e "$inD/mapping/done.sto");
 my $SmplNm = `cat $inD/mapping/done.sto`;
 $SmplNm =~ s/-smd.bam\n?//;
 #my $inBAM = $inD."mapping/$SmplNm-smd.bam";
@@ -242,7 +243,7 @@ sub readGFF($){
 		$gff{$chr}{$curChrCnt}{stop} = $spl[4];
 	}
 	close I;
-	print "Read gff\n";
+	print "\nFinished reading gff\n";
 	return \%gff;
 }
 

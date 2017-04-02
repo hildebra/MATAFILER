@@ -325,6 +325,11 @@ sub main(){
 	@tmp = @{$blRes[0]} if (@blRes > 0);
 	my $qold=$tmp[0];
 	my $COGfail=0; my $CATfail=0; my $totalCOG=0; my $CATexist=0;  my $ii=0;
+	
+	my $eggNOGmap =0;
+	if ($minBLE =~ m/^ENM$/){
+		$eggNOGmap = 1; #in this mode just print the "best hit" to a file, that egm can work on later..
+	}
 	#this routine simply counts up number of hits to COGXX
 	
 	#while (1){ #don't need this, should only go once over this..

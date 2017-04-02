@@ -67,7 +67,7 @@ sub sortgzblast{ #function that checks if the diamond output was already sorted 
 		if (-e $trial && -e $input && (-s $trial > -s $input)){$input = $trial; $trialuse=1; }#print "trial\n";
 		if (-e $input && !$trialuse){return $input; }
 		if (-e $trial && !-e $input){$input = $trial;}
-		die "something went wrong in gzip sort\n" unless (-e $input);
+		die "something went wrong in gzip sort\n$input\n" unless (-e $input);
 	}
 	my $tmpd=""; 
 	my $cmd = "";
