@@ -1079,9 +1079,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 
 		if ($map2Ctgs_2 ne ""){
 			$AsGrps{$cAssGrp}{PostAssemblCmd} .= $delaySubmCmd;
+			push(@{$AsGrps{$cAssGrp}{MapCopies}},$mapOut."/*","$curOutDir/mapping");
 			$AsGrps{$cAssGrp}{MapDeps} .= $map2Ctgs_2.";";
-		}
-		if (!-d "$curOutDir/mapping" && -e "$mapOut/$SmplName-smd.bam.coverage.gz"){
+		}elsif (!-d "$curOutDir/mapping" && -e "$mapOut/$SmplName-smd.bam.coverage.gz"){ #this part is checking only if files were not copied..
 			push(@{$AsGrps{$cAssGrp}{MapCopies}},$mapOut."/*","$curOutDir/mapping");
 		}
 		#die "$curOutDir/mapping\n" . "$mapOut/$SmplName-smd.bam.coverage.gz"
