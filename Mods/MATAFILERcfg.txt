@@ -15,6 +15,7 @@ prodigal	[MFLRDir]/bin/prodigal
 sambamba	[MFLRDir]/bin/sambamba_v0.6.4
 pigz	[MFLRDir]/bin/pigz
 jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths
+bedCov	[MFLRDir]/bin/./genomeCoverageBed
 FMGdir	[MFLRDir]/bin/fetchMG/
 hmmsearch	[MFLRDir]/bin/hmmsearch
 essentialHMM	[MFLRDir]/DB/essential.hmm
@@ -70,7 +71,8 @@ growthP	/g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
 #no longer used
 #usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
 #novosrt	/g/bork5/hildebra/bin/novocraft/novosort
-#blat	/g/bork3/home/hildebra/bin/blat/./blat
+blat	/g/bork3/home/hildebra/bin/blat/./blat
+nucmer	/g/bork3/home/hildebra/bin/MUMmer3.23/./nucmer
 
 #taxonomic profiling, if requrested
 metPhl2	/g/bork3/home/hildebra/bin/metaphlan2/metaphlan2.py
@@ -79,6 +81,7 @@ kraken	/g/scb/bork/hildebra/DB/kraken/./kraken
 
 #functional profiling
 diamond	[MFLRDir]/bin/./diamond
+emapper	python /g/bork3/home/hildebra/bin/eggnog-mapper/emapper.py
 
 #if read merge is attempted in any step (typically for miTag, profiling)
 flash	[MFLRDir]/bin/flash
@@ -87,7 +90,7 @@ flash	[MFLRDir]/bin/flash
 mreps	[MFLRDir]/bin/mreps
 
 #binning
-kmerFreqs [MFLRDir]/bin/./calc.kmerfreq.pl
+kmerFreqs	perl [MFLRDir]/bin/calc.kmerfreq.pl
 maxBinFrmt	perl [MFLRDir]/secScripts/maxBin_rewrk.pl
 maxBin	perl [MFLRDir]/bin/MaxBin-1.4.2/run_MaxBin.pl
 

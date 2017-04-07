@@ -15,12 +15,12 @@ open O,">$tmpOut";
 open O2,">$transOut"; my $ohd = ""; my $ntag = ""; my $seq = "";
 my $cnt = 0; 
 my $line = <I>;
+chomp $line; $ohd = $line;
 $ntag = newHD($line,$seq);
 $cnt++;
 while ($line = <I>){
 	chomp $line;
 	if ($line =~ m/>/){
-		chomp $line; $ohd = $line;
 		#next if (length($seq) ==0);
 		$ntag = newHD($line,$seq);
 		$seq =~ s/(.{1,80})/$1\n/gs;
@@ -28,6 +28,7 @@ while ($line = <I>){
 		print O2 "$ntag\t$ohd\n";
 		$cnt++;
 		$seq = "";
+		chomp $line; $ohd = $line;
 	} else {
 		$seq .= $line;
 	}
@@ -44,10 +45,10 @@ system("rm $inF; mv $tmpOut $inF");
 sub newHD($ $){
 	my ($line, $seq) = @_;
 	my $LendTag = "="; #;
-	if ($line =~ m/^>.*_length_(\d+).*/){
-		$ntag = ">$tag"."__C$cnt"."_L=$1$LendTag";
-	} else {
+	#if ($line =~ m/^>.*_length_(\d+).*/){
+	#	$ntag = ">$tag"."__C$cnt"."_L=$1$LendTag";
+	#} else {
 		$ntag = ">$tag"."__C$cnt"."_L=".length($seq).$LendTag;
-	}
+	#}
 
 }

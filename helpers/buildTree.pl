@@ -9,7 +9,7 @@ use threads ('yield',
                  'exit' => 'threads_only',
                  'stringify');
 use Mods::IO_Tamoc_progs qw(getProgPaths);
-use Mods::GenoMetaAss qw( readFasta);
+use Mods::GenoMetaAss qw( systemW readFasta);
 
 
 sub convertMultAli2NT;
@@ -36,7 +36,7 @@ my $pigzBin  = getProgPaths("pigz");
  my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
  if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
 
-my $ntCnt =999999999999999999;
+my $ntCnt =0;
 if (@ARGV < 2){die "Not enough input args!!!\n";}
 my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt) = @ARGV;
 if ($filt <1){$ntFrac=$filt; print "Using filter with $ntFrac fraction of nts\n";}
@@ -61,7 +61,7 @@ if (!$Ete){
 	my @MSAs; my @MSAsSyn;#full MSAs and MSAs with syn pos only
 	my @MSrm;
 	#my @xx = keys %FAA; die "$xx[0] $xx[1]\n$FAA{HM29_COG0185}\n";
-	if ($cogCats ne ""){
+	if (1 && $cogCats ne ""){
 		my $hr = readFasta($aaFna); my %FAA = %{$hr};
 		$hr = readFasta($fnFna); my %FNA = %{$hr};
 		open I,"<$cogCats" or die "Can't open cogcats $cogCats\n";
@@ -75,9 +75,9 @@ if (!$Ete){
 			$usedGeneNms{$spl2[1]} = 1;
 			my $tmpInMSA = "$tmpD/inMSA$cnt.faa";
 			my $tmpInMSAnt = "$tmpD/inMSA$cnt.fna";
-			my $tmpOutMSA2 = "$outD/MSA/$spl2[1].faa";
-			my $tmpOutMSA = "$outD/MSA/$spl2[1].fna";
-			my $tmpOutMSAsyn = "$tmpD/outMSA$cnt.syn.fna";
+			my $tmpOutMSA2 = "$outD/MSA/$spl2[1].$cnt.faa";
+			my $tmpOutMSA = "$outD/MSA/$spl2[1].$cnt.fna";
+			my $tmpOutMSAsyn = "$tmpD/MSA/$spl2[1].$cnt.syn.fna";
 			open O,">$tmpInMSA" or die "Can;t open tmp faa file for MSA: $tmpInMSA\n";
 			open O2,">$tmpInMSAnt" or die "Can;t open tmp fna file for MSA: $tmpInMSAnt\n";
 			foreach my $seq (@spl){
@@ -113,8 +113,9 @@ if (!$Ete){
 		#merge cogcats - can go to tree from here
 		mergeMSAs(\@MSAs,\%samples,$multAli,0);
 		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1);
+		#die();
 		system "rm ".join(" ",@MSrm);#." ".join(" ",@MSAsSyn); pigzBin
-	} else {#no marker way, single gene
+	} elsif (1) {#no marker way, single gene
 		my $tmpInMSA = $aaFna;
 		my $tmpInMSAnt = $fnFna;
 		my $tmpOutMSA2 = "$tmpD/outMSA.faa";
@@ -146,7 +147,7 @@ if (!$Ete){
 	#convert fasta again
 	my $nwkFile = "$treeD/tree_phyml_all.nwk";
 	my $nwkFile2 = "$treeD/tree_phyml_syn.nwk";
-
+	
 	my $raTmpF = "RXMtmp"; my $raxFile = "RXMall";
 	my $raxFile2 = "RXMsyn";
 	my @thrs;
@@ -156,17 +157,38 @@ if (!$Ete){
 
 	my $raxDef = " --silent -m GTRGAMMA";
 	#raxml - on all sites
-	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAli.ph $raxDef -n $raTmpF -w $raxD > $raxLogD/ini.log\n";
-	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
-	$tcmd .= "$raxmlBin -T$ncore -f x -p 31416 -s $multAli.ph $raxDef -n all -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
-#die $tcmd."\n";	
-	push(@thrs, threads->create(sub{system $tcmd;}));
-
+	$tcmd="";
+	if (1){
+		$tcmd =  "$raxmlBin -T$ncore -f d -p 31416 -s $multAli.ph $raxDef -n $raTmpF -w $raxD > $raxLogD/ini.log\n";
+		if (system $tcmd){#failed.. prob optimization problem, use other tree instead
+			$raxDef = " --silent -m GTRGAMMAI";
+			system "rm $raxD/*$raTmpF";
+			systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
+			#system "mv $raxD/RAxML_bestTree.$raTmpF $raxD/RAxML_fastTreeSH_Support.$raxFile";
+		}
+		systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
+		systemW  "$raxmlBin -T$ncore -f x -p 31416 -s $multAli.ph $raxDef -n all -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
+		#push(@thrs, threads->create(sub{system $tcmd;}));
+	}
+	#reset to GTRGAMMA model
+	$raxDef = " --silent -m GTRGAMMA";
+	
+	
 	#raxml - on syn sites only
 	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph $raxDef -n $raTmpF.s -w $raxD  > $raxLogD/ini_syn.log\n";
-	$tcmd .= "$raxmlBin -T$ncore -f J -p 31416 -s $multAliSyn.ph $raxDef -n $raxFile2 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
-	$tcmd .= "$raxmlBin -T$ncore -f x -p 31416 -s $multAliSyn.ph $raxDef -n syn -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
-	push(@thrs, threads->create(sub{system $tcmd;}));
+	if (system $tcmd){#failed.. prob optimization problem, use other tree instead
+		$raxDef = " --silent -m GTRGAMMAI";
+		system "rm $raxD/*$raTmpF.s";
+		$tcmd= "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph $raxDef -n $raTmpF.s -w $raxD  > $raxLogD/ini_syn.log\n";
+		print $tcmd."\n\n\n";
+		systemW $tcmd;
+		#system "mv $raxD/RAxML_bestTree.$raTmpF.s $raxD/RAxML_fastTreeSH_Support.$raxFile2";
+		#print "Fallback to original optimized tree\n";
+	}
+	systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAliSyn.ph $raxDef -n $raxFile2 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
+	systemW "$raxmlBin -T$ncore -f x -p 31416 -s $multAliSyn.ph $raxDef -n syn -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
+#die $tcmd."\n";	
+	#push(@thrs, threads->create(sub{system $tcmd;}));
 	
 
 	#phyml
@@ -178,11 +200,11 @@ if (!$Ete){
 	}
 	for (my $t=0;$t<@thrs;$t++){
 		my $state = $thrs[$t]->join();
-		if ($state){print "Thread $t exited with state $state\n";}
+		if ($state){die "Thread $t exited with state $state\nSomething went wrong with RaxML\n";}
 	}
 	system "rm  $multAli.ph $multAliSyn.ph $raxD/*_info* $raxD/*_log* $raxD/*_parsimony* $raxD/*_result*";
-	system "mv $raxD/RAxML_fastTreeSH_Support.RXMsyn $raxD/RXML_sym.nwk";
-	system "mv $raxD/RAxML_fastTreeSH_Support.RXMall $raxD/RXML_allsites.nwk";
+	system "mv $raxD/RAxML_fastTreeSH_Support.$raxFile2 $raxD/RXML_sym.nwk";
+	system "mv $raxD/RAxML_fastTreeSH_Support.$raxFile $raxD/RXML_allsites.nwk";
 	
 	#die "$distTree_scr -d -a --dist-output $raxD/distance.syn.txt $raxD/RXML_sym.nwk\n";
 
@@ -247,15 +269,18 @@ sub mergeMSAs($ $ $ $){
 	my %ntCnts; my $maxNtCnt=1;
 	foreach my $kk (@ksMSAFAA){
 		my $strCpy = $bigMSAFAA{$kk};
-		my $num1 = $strCpy =~ tr/-//;
+		my $num1 = $strCpy =~ tr/[\-N]//;
 		#$num1++ while ($bigMSAFAA{$kk} !~ m/-/g);
+		#now get actual num of bps
+		$num1 = length($strCpy) - $num1;
 		if ($num1 > $maxNtCnt){$maxNtCnt = $num1;}
 		$ntCnts{$kk} = $num1;
 	}
 	foreach my $kk (@ksMSAFAA){
 		my $num1 = $ntCnts{$kk};
-		if (($num1 / $maxNtCnt ) > $ntFrac || $num1 > $ntCnt){
-			delete $bigMSAFAA{$kk}; $remSeqNum++; #print "SK ".($num1 / $maxNtCnt )." ";
+		if ( ( ($num1 / $maxNtCnt ) < $ntFrac) || ($num1 < $ntCnt ) ){
+			delete $bigMSAFAA{$kk}; $remSeqNum++; 
+			print "$kk $num1  ".($num1 / $maxNtCnt )." $ntFrac ";
 		}
 		#print "$num1  $kk \n";#$bigMSAFAA{$kk}\n\n"; last;
 	}
@@ -379,10 +404,10 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 		for (;$j<@aSeq;$j++){
 			my $newCodon = substr $FNA{$aSeq[$j]},$i,3;
 			my $newAA = "-";
-			if ($newCodon !~ m/-/ && $newCodon !~ m/N/){
+			if ($newCodon !~ m/-/ && $newCodon =~ m/[ACTG]{3}/i){
 				die "Unkown AA $newCodon\n" unless (exists $convertor{$newCodon} );
 				$newAA = $convertor{$newCodon} ; # substr $FAA{$aSeq[$j]},$i,1;
-			} elsif ($newCodon =~ m/---/ || $newCodon =~ m/N/){
+			} elsif ($newCodon =~ m/---/ || $newCodon =~ m/[NWYRSKMDVHB]/){
 			} else {
 				die "newCodon wrong $newCodon\n" ;
 			}

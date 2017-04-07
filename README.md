@@ -1,9 +1,34 @@
 # MATAFILER
-## Overview
-- Pipeline created to assemble metagenomes, profile miTags, profile functions, profile taxonomy using a variety of approaches (MATAFILER.pl)
+Authors:  
+Falk Hildebrand <Falk.Hildebrand@gmail.com>
+
+MATAFILER is a pipeline developed to 
+- Assemble metagenomes, profile miTags, profile functions, profile taxonomy using a variety of approaches (MATAFILER.pl)
 - Build a gene catalog based on these assemblies and predicted genes, build abundance matrices from these and annotate the genes functionally (geneCat.pl)
-  
+
+### License
+
+ Copyright (c) 2017 Falk Hildebrand
+
+ MATAFILER is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ MATAFILER is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the file LICENSE for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with the source code.  If not, see <http://www.gnu.org/licenses/>.
+
+
 ##INSTALLATION
+MATAFILER can be downloaded directly from Github, using:
+```
+git clone https://github.com/hildebra/MATAFILER.git
+```
 Most importantly set up the config.txt (symlink to Mods/MATAFILERcfg.txt). A bunch of programs needs to be present on your system, and in this file you either need to link to the dir or the executable. Follow the examples set up on my system, to see what kind of file is needed. There are comments that define for which part of the pipeline you need what programs.  
 In general, LCA and sdm can be obtained from the LotuS pipeline.  
 programs under the header "ESSENTIAL" are essential to have to run the pipeline.

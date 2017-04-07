@@ -13,6 +13,8 @@ sub geneAbundance; sub runMaxBin;
 sub findMicrSat;
 use Mods::GenoMetaAss qw(systemW is_integer reverse_complement_IUPAC);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
+use Mods::TamocFunc qw( getE100);
+
 
 die "Not enough input args\n" if (@ARGV < 2);
 my $inD = $ARGV[0];
@@ -28,11 +30,14 @@ my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
 my $FMGrwkScr = getProgPaths("FMGrwk_scr");
 my $compoundBinningScr = getProgPaths("cmpBinScr");#"/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/compoundBinning.pl";
 my $mrepsB = getProgPaths("mreps");#"/g/bork3/home/hildebra/bin/mreps/./mreps";
+my $KCPbin = getProgPaths("kmerFreqs");#"perl /g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/calc.kmerfreq.pl";
+my $GCP = getProgPaths("calcGC_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/calcGC.pl";
 
 
 my $inScaffs = "$assD/scaffolds.fasta.filt";
 my $proteins = "$assD/genePred/proteins.shrtHD.faa";
 my $genesNT = "$assD/genePred/genes.shrtHD.fna";
+my $genesGFF = "$assD/genePred/genes.gff";
 my $genesAA = "$assD/genePred/proteins.shrtHD.faa";
 my $rawINPUTf = $inD."input.txt";
 my $outDab = $inD."/assemblies/metag/ContigStats/";
@@ -64,11 +69,10 @@ my $coverage = $inD."mapping/$SmplNm-smd.bam.coverage";
 geneAbundance($coverage) if ($subparts =~ m/a/);
 
 ###############################   GC content  ###############################
-my $GCP = getProgPaths("calcGC_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/calcGC.pl";
-if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC") && $subparts =~ m/g/){
+if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC"|| !-s "$outD/scaff.pergene.GC3") && $subparts =~ m/g/){
 	print "Analyzing GC content\n";
 	systemW "$GCP $inScaffs $outD/scaff.GC";
-	systemW "$GCP $genesNT $outD/scaff.pergene.GC";
+	systemW "$GCP $genesNT $outD/scaff.pergene.GC $genesGFF"; 
 	#systemW $cmd."\n";
 } else {
 	print "GC content already calculated\n";
@@ -76,7 +80,7 @@ if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC") && $subparts =~ m/g/)
 
 ###############################   essential proteins  ###############################
 my $oDess = "$outD/ess100genes/";my $outDFMG = "$outD/FMG/";
-if ($subparts =~ m/e/){
+if ($subparts =~ m/e/ && !-e "$outDFMG/FMGids.txt"){
 	print "Searching for core proteins in predicted genes..    ";
 	###############################   fetchMG  ###############################
 	system("mkdir -p $outDFMG");
@@ -97,7 +101,7 @@ if ($subparts =~ m/e/){
 	#die ($protIDs[0]."\n");
 
 	print "Done\n";
-} else {
+} elsif (!-e "$outDFMG/FMGids.txt") {
 	print "No essential proteins requested\n";
 }
 
@@ -111,8 +115,7 @@ if ($subparts =~ m/g/){
 #print $cmd."\n";
 if (!-s "$outD/scaff.4kmer.gz" && $subparts =~ m/k/){
 	print "Analyzing kmer content\n";
-	my $KCP = getProgPaths("kmerFreqs");#"perl /g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/calc.kmerfreq.pl";
-	systemW "$KCP -i $inScaffs -m 100 -o $outD/scaff.4kmer";
+	systemW "$KCPbin -i $inScaffs -m 100 -o $outD/scaff.4kmer";
 	systemW "gzip  $outD/scaff.4kmer";
 	#system "gzip $outD/scaff.4kmer";
 	#systemW $cmd."\n";
@@ -145,8 +148,8 @@ sub findMicrSat{
 sub runMaxBin {
 	print "Running MaxBin..\n";
 	my $maxBin = getProgPaths("maxBin");#"perl /g/bork5/hildebra/bin/MaxBin-1.4.2/run_MaxBin.pl";
-	my $rwkMB = getProgPaths("maxBinFrmt_scr");# "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/maxBin_rewrk.pl";
-	my $covCtgs = "$outDab/Coverage.percontig";
+	my $rwkMB = getProgPaths("maxBinFrmt");# "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/maxBin_rewrk.pl";
+	my $covCtgs = "$outDab/Coverage.median.percontig";
 	my $essHMM = "$outD/ess100genes/assembly.hmm.orfs.txt";
 	my $outF = "MB";
 	my $outD2 = $inD."Binning/MaxBin/";
@@ -154,7 +157,7 @@ sub runMaxBin {
 	print "Binning contigs with MaxBin\n";
 	system ("mkdir -p $outD2");
 
-	my $cmd  = "$maxBin -contig $inScaffs -out $outD2/$outF -abund $covCtgs -thread 10 -HMM $essHMM -AA $genesAA\n";
+	my $cmd  = "$maxBin -contig $inScaffs -out $outD2/$outF -abund $covCtgs -thread 10 -HMM $essHMM -AA $genesAA -min_contig_length 400\n";
 	$cmd .= "$rwkMB $outD2 $outF";
 	system $cmd;
 }
@@ -187,12 +190,14 @@ sub geneAbundance{
 	#my $hr = readGFF($inD."assemblies/metag/genePred/genes.gff");
 	my $outF = $inF . ".pergene"; 	my $outF2 = $inF . ".percontig";	
 	my $outF3 = $inF . ".window";	my $outF4 = $inF . ".geneStats";
-	my $outF5 = $inF . ".count_pergene";
+	my $outF5 = $inF . ".count_pergene"; my $outF6 = $inF . ".median.pergene";
+	my $outF7 = $inF . ".median.percontig";
 	my $fileEnd2 = "";
 	my $outFfin = $outDab . "Coverage.pergene$fileEnd2"; 	my $outF2fin = $outDab . "Coverage.percontig$fileEnd2";	
 	my $outF3fin = $outDab . "Coverage.window$fileEnd2";	my $outF4fin = $outDab . "GeneStats.txt";	
-	my $outF5fin = $outDab . "Coverage.count_pergene$fileEnd2";	
-	if (-s $outFfin && -s $outF2fin&& -s $outF3fin&& -s $outF4fin && -s $outF5fin){print "Gene abundance was already calculated\n";return;}
+	my $outF5fin = $outDab . "Coverage.count_pergene$fileEnd2";	my $outF6fin = $outDab . "Coverage.median.pergene$fileEnd2";
+	my $outF7fin = $outDab . "Coverage.median.percontig$fileEnd2";	
+	if (-s $outFfin && -s $outF2fin&& -s $outF3fin&& -s $outF4fin && -s $outF5fin && -s $outF6fin){print "Gene abundance was already calculated\n";return;}
 	my $clnCmd = "";
 	my $inFG = $inF.".gz";
 	if (-e $inFG && !-s $inF){system "rm $inF";}
@@ -210,10 +215,11 @@ sub geneAbundance{
 	#print "Gene abundances calculated in $duration s\n";
 	#die ("$clnCmd");
 	
-	print "$rdCovBin $inF $assD/genePred/genes.gff $readLength";
+	#print "$rdCovBin $inF $assD/genePred/genes.gff $readLength";
 	systemW "$rdCovBin $inF $assD/genePred/genes.gff $readLength";
 	#$cmd .= "gzip -f $outF $outF2 $outF3\nmv $outF.gz $outFfin\n mv $outF2.gz $outF2fin\nmv $outF3.gz $outF3fin\n";
 	systemW "mv $outF$fileEnd2 $outFfin\nmv $outF2$fileEnd2 $outF2fin\nmv $outF3$fileEnd2 $outF3fin\nmv $outF4$fileEnd2 $outF4fin\nmv $outF5$fileEnd2 $outF5fin\n";
+	systemW "mv $outF6$fileEnd2 $outF6fin\nmv $outF7$fileEnd2 $outF7fin\n";
 	
 	#die $cmd."\n";
 	#systemW $cmd;

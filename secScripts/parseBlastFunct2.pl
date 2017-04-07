@@ -4,8 +4,9 @@
 use warnings;
 use strict;
 use FileHandle;
-use Mods::TamocFunc qw(sortgzblast uniq);
+use Mods::TamocFunc qw(sortgzblast getProgPaths uniq);
 use Mods::GenoMetaAss qw(gzipwrite gzipopen);
+
 
 sub main;
 sub readGene2COG; sub readNogKingdom;
@@ -34,6 +35,8 @@ my $noHardCatCheck = 0; #select for the hit with KO assignment rather than the r
 my $minBLE= 1e-7;my $minScore=0;
 my $minAlLen = 20; #my $minPidGlobal = 40;
 
+my $emBin = getProgPaths("emapper");
+
 
 if (@ARGV > 2){
 	$minBLE = $ARGV[2];
@@ -46,7 +49,6 @@ if (@ARGV >= 6){$tmpD = $ARGV[6];}
 #die "$tmpD\n";
 #work out if sorted etc
 $blInf = sortgzblast($blInf,$tmpD) unless ($mode == 2 || $mode == 4);
-
 my %DBlen;
 if (@ARGV > 4 ){#read the length of DB proteins
 	my $lengthF = $ARGV[4];
@@ -66,7 +68,7 @@ if (@ARGV > 4 ){#read the length of DB proteins
 
 #die "$blInf";
 
-die "Too few args\n" if (@ARGV<5 && $mode > 1);
+die "Too few args\n" if ( ($mode != 4 || $mode != 2) && @ARGV<5 );
 my $DButil ;
 my $bl2dbF ;
 my $cogDefF ;
@@ -151,7 +153,8 @@ if ($mode == 2 || $mode == 4){ #scan for all reads finished
 
 #read DB file
 my $readLim = 1000000; my $lcnt=0;my $lastQ=""; my $stopInMiddle=0; my $reportGeneCat=0;
-my %COGhits; my %CAThits; my %GENEhits; my $O2;
+my %COGhits; my %CAThits; my %GENEhits; my $O2; my $OEM;
+my $emFile = "$blInf.emap.table";
 for (my $i=0; $i<@aminBLE ; $i++){$COGhits{$i} = {}; $CAThits{$i} = {}; $GENEhits{$i} = {};}
 if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	#die "$blInf\n";
@@ -165,9 +168,11 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 		system $cmd."\n";
 	}
 	
-	my ($I,$OK) = gzipopen($blInf,"diamond output file",1); 
+	my ($I,$OK) = gzipopen($blInf,"diamond output file [in]",1); 
 	my $OK2;
-	($O2,$OK2) = gzipwrite($blInf,"diamond output file",1); 
+	($O2,$OK2) = gzipwrite($blInf."geneAss","gene cat file [out]",1) if ($reportGeneCat);
+	$OEM = open $OEM,">$emFile";
+	
 	my @splSave;
 	
 	while (1){
@@ -213,6 +218,7 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	}
 	close $I;
 	close $O2 if ($reportGeneCat);
+	close $OEM;
 	print"writing Tables\n";
 	
 	
@@ -222,15 +228,27 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 		writeAllTable($DBmode."parse",$outPath,$aminBLE[$i],$aminPID[$i],$i);#$st1{$i}, $CAThits{$i},$st3{$i});
 	}
 	system "touch $blInf.stone";
+	
 	print "all done\n";
+	
+	#and do eggnog mapping
+	
+	my $cmd = "$emBin -d none --no_search --no_refine. --annotate_hits_table $emFile --report_orthologs -o test\n" if ($DBmode eq "NOG");
+	die "$cmd\n";
+	
+	system "rm $emFile";
+	
 	exit(0);
 
-} elsif ($mode==2) {
+	
+	
+	
+} elsif ($mode==2) { #only checks for presence of run
 	for (my $i=0; $i<@aminBLE ; $i++){
 		my $pathXtra = "/CNT_".$aminBLE[$i]."/";
 		unless(check_files($DBmode."parse",$inP.$pathXtra,$aminBLE[$i])){exit(3);}
 	}
-} elsif ($mode==4) {
+} elsif ($mode==4) { #removes run
 
 	for (my $i=0; $i<@aminBLE ; $i++){
 		my $pathXtra = "/CNT_".$aminBLE[$i]."/";
@@ -319,7 +337,7 @@ sub main(){
 	
 	my $bestSbj="";my $bestID=0; my $bestAlLen=0;my $bestQuery = "";
 	my $COGexists=0;
-	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; 
+	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; my $bestBitScpre=0;
 	
 	my @tmp = ("");
 	@tmp = @{$blRes[0]} if (@blRes > 0);
@@ -353,6 +371,7 @@ sub main(){
 				$fndCat =1;
 				$bestScore = $id * $AlLen;$bestSbj =$Subject; 
 				$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
+				$bestBitScpre=$bitSc;
 			}
 			my @tmp;
 			#if($ii+1 < @blRes){
@@ -427,6 +446,7 @@ sub main(){
 					}
 					
 					print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat);
+					print $OEM "$bestQuery\t$bestSbj\t$bestE\t$bestBitScpre\n" if ($reportEggMapp);
 					#print $O "$Query\t$Subject\t$bestID\t$bestE\t$bestAlLen\t$curCOG\t$curCat\t$curDef\n";
 				
 				} elsif ($tabCats == 2){ #KEGG
@@ -450,7 +470,7 @@ sub main(){
 					$funHit{$normMethod}{$curKgd}{$bestSbj}+= $score;
 				}
 			}
-			$bestSbj="";$bestE=1000; $bestScore=0;$CBMmode=0;
+			$bestSbj="";$bestE=1000; $bestScore=0;$CBMmode=0;$bestBitScpre=0;
 			#$COGexists=0; 
 		}
 		$bestSbj="";$bestE=10; $bestScore=0;$CBMmode=0;

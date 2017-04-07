@@ -43,7 +43,7 @@ if ($singleSample){
 
 	my $scaffs = $metaGD."/scaffolds.fasta.filt";
 	
-	system runMetaBat($befZ,$aftZ,$inD."mapping/$SmplNm-smd.bam.jgi",$outD,$SmplNm,$scaffs);
+	die runMetaBat($befZ,$aftZ,$inD."mapping/$SmplNm-smd.bam.jgi",$outD,$SmplNm,$scaffs);
 	my $ess100 = $metaGD."/ContigStats/ess100genes/ess100.id.txt";
 
 	#die $befZ.$aftZ;
