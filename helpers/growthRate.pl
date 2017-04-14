@@ -14,6 +14,8 @@ use Mods::GenoMetaAss qw( systemW readFasta writeFasta);
 use Mods::TamocFunc qw( getE100);
 
 my $growthBin = getProgPaths("growthP");
+my $tmpDir = "/tmp/MATAFILER/GrPr/";
+system "mkdir -p $tmpDir" unless (-d $tmpDir);
 
 die "needs two arguments [fna] [faa]\n" unless (@ARGV == 2);
 my ($inFNA,$inFAA) = @ARGV;

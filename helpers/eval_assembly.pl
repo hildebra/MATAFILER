@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+#usage: ./eval_assembly.pl [assembly.fa] [ref.fa] [num cores] [id_of_cmp]
 use warnings;
 use strict;
 use Mods::GenoMetaAss qw(readFasta);
@@ -6,7 +7,7 @@ use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 my $blatBin = getProgPaths("blat");
 my $pigzBin = getProgPaths("pigz");
-my $nucmBin = getProgPaths("nucmer");
+my $nucmBin = "";#getProgPaths("nucmer");
 
 if (@ARGV < 3){die "not enough args to function \n";}
 my ($assemblFa) = $ARGV[0];

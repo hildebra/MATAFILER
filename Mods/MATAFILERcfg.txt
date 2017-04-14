@@ -45,8 +45,8 @@ gapfiller	perl /g/bork5/hildebra/bin/GapFiller/GapFiller_n.pl
 cdhit	[MFLRDir]/bin/cd-hit
 
 #		miTag related
-lambda	/g/bork3/home/hildebra/bin/lambda/lambda-1.0.0-Linux-x86_64/bin/lambda
-lambdaIdx	/g/bork3/home/hildebra/bin/lambda/lambda-1.0.0-Linux-x86_64/bin/lambda_indexer
+lambda	[MFLRDir]/bin/lambda
+lambdaIdx	[MFLRDir]/bin/lambda_indexer
 #requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
 srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/
 LSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128//SLV_128_LSU.fasta
@@ -66,7 +66,7 @@ d2meta	/g/bork3/home/hildebra/bin/d2Meta/d2Meta/d2Meta.out
 nonpareil	/g/bork5/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage sequenced in your samples
 hmmer3	/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
 mmseqs2	/g/bork3/home/hildebra/bin/mmseqs2/bin/mmseqs   #experimental clustering of genes
-growthP	/g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
+growthP	python /g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
 
 #no longer used
 #usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
@@ -126,6 +126,7 @@ mrgDia_scr	[MFLRDir]/helpers/./combine_DIA.pl
 mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
 cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
 FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
+growth_scr	perl [MFLRDir]/helpers/growthRate.pl
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt

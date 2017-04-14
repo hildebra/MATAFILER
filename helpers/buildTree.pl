@@ -114,7 +114,7 @@ if (!$Ete){
 		mergeMSAs(\@MSAs,\%samples,$multAli,0);
 		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1);
 		#die();
-		system "rm ".join(" ",@MSrm);#." ".join(" ",@MSAsSyn); pigzBin
+		system "rm ".join(" ",@MSrm)." ".join(" ",@MSAsSyn); 
 	} elsif (1) {#no marker way, single gene
 		my $tmpInMSA = $aaFna;
 		my $tmpInMSAnt = $fnFna;

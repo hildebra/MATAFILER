@@ -3,6 +3,7 @@ use warnings;
 use Cwd 'abs_path';
 use strict;
 use List::MoreUtils 'first_index'; 
+use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
@@ -401,9 +402,10 @@ sub readMapS($){
 	my @spl = split /,/,$inF;
 	my %ret; my %agbp;
 	my @outDirs;
+	my $folderStrClassical = 1; #old style, folder names are input dirs
 	my $hr1 = \%ret;my $hr2 = \%agbp;  my $cnt = -1;
 	foreach my $map (@spl){
-		($hr1,$hr2) = readMap($map,$cnt,$hr1,$hr2);
+		($hr1,$hr2) = readMap($map,$cnt,$hr1,$hr2,$folderStrClassical);
 		%ret = %{$hr1};
 		$cnt = $ret{totSmpls};
 		push(@outDirs,$ret{outDir});
@@ -419,9 +421,10 @@ sub readMap{
 	my $Scnt = defined $_[1] ? $_[1] : 0;
 	my %ret = defined $_[2] ? %{$_[2]} : (); 
 	my %agBP = defined $_[3] ? %{$_[3]} : ();
+	my $folderStrClassical = defined $_[4] ? %{$_[4]} : ();
 
 	my @order = exists $ret{smpl_order} ? @{$ret{smpl_order}} : ();
-	my $dirCol = 1; my $smplCol = 0; my $rLenCol = -1; my $SeqTech = -1; 
+	my $dirCol = -1; my $smplCol = 0; my $rLenCol = -1; my $SeqTech = -1; my $SmplPrefixCol = -1;
 	my $AssGroupCol = -1; my $EstCovCol = -1; my $MapGroupCol = -1; my $SupRdsCol = -1;my $ExcludeAssemble = -1;
 	#some global params
 	my $dir2dirs = ""; #dir on file system, where all dirs specified in map can be found (enables different indirs with different mapping files)
@@ -448,9 +451,10 @@ sub readMap{
 		}
 		my @spl = split(/\t/);
 		if ($cnt == 0){
-			$dirCol = first_index { /Path/ } @spl;
+			$dirCol = first_index { /Path/i } @spl;
 			$smplCol = first_index { /#SmplID/ } @spl;
 			$SeqTech = first_index { /SeqTech/ } @spl;
+			$SmplPrefixCol = first_index { /SmplPrefix/i } @spl;
 			$rLenCol = first_index { /ReadLength/ } @spl;
 			$AssGroupCol = first_index { /AssmblGrps/ } @spl;
 			$EstCovCol = first_index { /EstCoverage/ } @spl;
@@ -458,7 +462,7 @@ sub readMap{
 			$SupRdsCol = first_index { /SupportReads/ } @spl;
 			$ExcludeAssemble = first_index { /ExcludeAssembly/ } @spl;
 			
-			
+			die "Only \"Path\" or \"SmplPrefix\" can be defined in mapping file. Both is not supported.\n" if ($dirCol != -1 && $SmplPrefixCol != -1);
 			next;} #maybe later check for col labels etc
 		$Scnt++;
 		#die $spl[0]." ".$spl[1]."\n";
@@ -467,11 +471,20 @@ sub readMap{
 		my $altCurSmp = "";
 		#print $curSmp." ";
 		die "Double sample ID $curSmp\n" if (exists $ret{$curSmp});
-		my $cdir = $spl[$dirCol]; 
+		my $cdir = ""; 
+		$cdir = $spl[$dirCol] if ($dirCol >= 0); 
+		my $cdir2= $cdir;
 		$ret{$curSmp}{dir} = $cdir;#this one should stay without a tag
-		$cdir.="/" unless ($cdir =~ m/\/$/);
 		$ret{$curSmp}{rddir} = $dir2dirs.$cdir;
-		$ret{$curSmp}{wrdir} = $dir2out.$cdir;
+		$ret{$curSmp}{rddir} .="/" unless ($ret{$curSmp}{rddir} =~ m/\/$/);
+		#die "$ret{$curSmp}{rddir} $dirCol $cdir\n";
+		if ($SmplPrefixCol>=0){$cdir2 = $spl[$SmplPrefixCol];; $ret{$curSmp}{prefix} = $cdir2;} else {$ret{$curSmp}{prefix} = "";}
+		$cdir2.="/" unless ($cdir2 =~ m/\/$/);
+		if ($folderStrClassical){
+			$ret{$curSmp}{wrdir} = $dir2out.$cdir2;
+		} else {
+			$ret{$curSmp}{wrdir} = $dir2out.$curSmp."/";
+		}
 		#die "$ret{$curSmp}{wrdir}\n";
 		$ret{$curSmp}{SmplID} = $curSmp;
 		$ret{$curSmp}{mapFinSmpl} = $curSmp;
@@ -572,15 +585,19 @@ sub emptyQsubOpt{
 	if (@_ > 2){$qmode = $_[2];}
 	else {$qmode = findQsubSys("");}
 	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
+	my $MFdir = getProgPaths("MFLRDir");
 	my %ret = (
 		rTag => randStr(3),
 		doSubmit => $doSubm,
 		LocationCheckStrg => $locChkStr,
 		doSync => 0,
+		perl5lib => "$MFdir:\$PERL5LIB",
+		cpplib => "/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64",
 		tmpSpace => "30G",
 		qmode => $qmode,
 		#LOG => undef,
 	);
+	#die "$MFdir\n";
 	return \%ret;
 }
 sub qsubSystem($ $ $ $ $ $ $ $ $ $){
@@ -620,10 +637,9 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	#if (`hostname` !~ m/submaster/){
 	if ($qmode eq "sge"){
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
-		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe smp $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n#\$ -v LD_LIBRARY_PATH=/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64\n#\$ -v TMPDIR=/dev/shm\n";
-		print O "#\$ -v PERL5LIB=/g/bork5/hildebra/bin/ensembl-tools-release-81/scripts/variant_effect_predictor/:/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/:/g/bork3/home/hildebra/bin/vcftools/vcft/lib/perl5/site_perl/5.16.0/:\$PERL5LIB\n";
-
-		#print O "source /g/bork3/home/zeller/py-virtualenvs/py2.7_bio1/bin/activate\nexport LD_LIBRARY_PATH=\${LD_LIBRARY_PATH}:/g/software/linux/pack/python-2.7/lib/\n\n";
+		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe smp $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n";
+		print O "#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
+		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
 	} else {$LSF = 1;$qbin="bsub";
 		print O "#!/bin/bash\n";
 		print O "export LD_LIBRARY_PATH=/g/bork3/home/hildebra/env/env/miniconda/lib/:/g/bork3/home/hildebra/env/zlib-1.2.8/:/g/bork8/costea/boost_1_53_0/:/shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/lib:/g/bork3/x86_64/lib64:/g/bork3/x86_64/lib:\${LD_LIBRARY_PATH}\n\n";

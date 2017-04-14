@@ -13,7 +13,7 @@ sub writeMat;
 #MOHparse.MOH.gene.cnts.gz
 #NOGparse.NOG.cat.cnts.gz
 #NOGparse.NOG.gene.cnts.gz
-my @DBs = ("NOG","KGM"); # ("KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
+my @DBs = ("CZy","NOG","KGM"); # ("KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
 my @modDBs = ("KGM");
 #@DBs = ("NOG","KGB","KGE"); # ("KGB","KGE","CZy","NOG","ABR","MOH");#("NOG","CZy","MOH");
 #@DBs = ("NOG");#("NOG","CZy","MOH");

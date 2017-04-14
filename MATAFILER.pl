@@ -20,6 +20,7 @@ use Getopt::Long qw( GetOptions );
 
 use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt findQsubSys readFastHD prefix_find);
 use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades createGapFillopt  buildMapperIdx);
+use Mods::TamocFunc qw (getSpecificDBpaths);
 
 #use Mods::TamocFunc qw(runDiamond);
 
@@ -328,7 +329,7 @@ system "mkdir -p $globaldDiaDBdir" unless (-d $globaldDiaDBdir);
 
 #----------- map all reads to a specific reference ---------
 #die "@ARGV   $ARGV[0]\n";
-if (@ARGV>0 && $ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB"){
+if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 #in this case primary focus is on mapping and not on assemblies
 	if ($ARGV[0] eq "map2DB"){$mapModeCovDo=0;$mapModeDecoyDo=0;}
 	my @refDB = split(/,/,$refDBall);
@@ -495,34 +496,35 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	next if (exists($jmp{$JNUM}));
 	#locally used paths for a specific sample
 	my $dir2rd=""; my $curDir = "";my $curOutDir = ""; 
-	$dir2rd = $map{$samples[$JNUM]}{dir};
-	#print "$samples[$JNUM]  $map{$samples[$JNUM]}{dir}  $map{$samples[$JNUM]}{rddir}  $map{$samples[$JNUM]}{wrdir}\n";	next;
-	my $SmplName = $map{$samples[$JNUM]}{SmplID};
+	my $curSmpl = $samples[$JNUM];
+	$dir2rd = $map{$curSmpl}{dir};
+	#print "$curSmpl  $map{$curSmpl}{dir}  $map{$curSmpl}{rddir}  $map{$curSmpl}{wrdir}\n";	next;
+	my $SmplName = $map{$curSmpl}{SmplID};
 	push (@allSmplNames,$SmplName);
 	if ($dir2rd eq "" ){#very specific read dir..
-		if ($map{$samples[$JNUM]}{SupportReads} ne ""){
+		if ($map{$curSmpl}{SupportReads} ne ""){
 			$curDir = "";	$curOutDir = "$baseOut$SmplName/";	
 		} else {
 			die "Can;t find valid path for $SmplName\n";
 		}
 		$dir2rd = $SmplName;
 	} else {
-		$curDir = $map{$samples[$JNUM]}{rddir};	$curOutDir = $map{$samples[$JNUM]}{wrdir};	
+		$curDir = $map{$curSmpl}{rddir};	$curOutDir = $map{$curSmpl}{wrdir};	
 	}
 
 	#die "$curDir\n$curOutDir\n$baseOut\n";
 	
 	my $samplReadLength = $defaultReadLength; #some default value
-	if (exists $map{$samples[$JNUM]}{readLength} && $map{$samples[$JNUM]}{readLength} != 0){
-		$samplReadLength = $map{$samples[$JNUM]}{readLength};
+	if (exists $map{$curSmpl}{readLength} && $map{$curSmpl}{readLength} != 0){
+		$samplReadLength = $map{$curSmpl}{readLength};
 	}
 	my $curSDMopt = $baseSDMopt;
 	#my $iqualOff = 33; #62 for 1st illu
 
-	if (exists($map{$samples[$JNUM]}{SeqTech})){
-		if ($map{$samples[$JNUM]}{SeqTech} eq "GAII_solexa" || $map{$samples[$JNUM]}{SeqTech} eq "GAII"){
+	if (exists($map{$curSmpl}{SeqTech})){
+		if ($map{$curSmpl}{SeqTech} eq "GAII_solexa" || $map{$curSmpl}{SeqTech} eq "GAII"){
 			#$iqualOff = 59; #really that old??
-		} elsif ($map{$samples[$JNUM]}{SeqTech} eq "miSeq"){ 
+		} elsif ($map{$curSmpl}{SeqTech} eq "miSeq"){ 
 			$baseSDMopt = $baseSDMoptMiSeq; 
 		}
 	} 
@@ -530,9 +532,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		$sampleSDMs{$samplReadLength} = adaptSDMopt($baseSDMopt,$globalLogDir,$samplReadLength);
 	}
 	my $cAssGrp = $JNUM;
-	#print $map{$samples[$JNUM]}{AssGroup}."\n";
-	if ($map{$samples[$JNUM]}{AssGroup} ne "-1"){ $cAssGrp = $map{$samples[$JNUM]}{AssGroup};}
-	my $cMapGrp = $map{$samples[$JNUM]}{MapGroup};
+	#print $map{$curSmpl}{AssGroup}."\n";
+	if ($map{$curSmpl}{AssGroup} ne "-1"){ $cAssGrp = $map{$curSmpl}{AssGroup};}
+	my $cMapGrp = $map{$curSmpl}{MapGroup};
 	
 	$curSDMopt = $sampleSDMs{$samplReadLength};
 	$totalChecked++;
@@ -618,9 +620,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		my ($statsHD,$curStats,$statsHD5,$curStats5) = smplStats($curOutDir,$assDir);
 		$statsDone=1;
 		if ($statStr eq ""){
-			$statStr.="SMPLID\tDIR\t".$statsHD."\n".$samples[$JNUM]."\t$dir2rd\t".$curStats."\n";
-			$statStr5.="SMPLID\tDIR\t".$statsHD5."\n".$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";
-		} else {$statStr.=$samples[$JNUM]."\t$dir2rd\t".$curStats."\n"; $statStr5.=$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";}
+			$statStr.="SMPLID\tDIR\t".$statsHD."\n".$curSmpl."\t$dir2rd\t".$curStats."\n";
+			$statStr5.="SMPLID\tDIR\t".$statsHD5."\n".$curSmpl."\t$dir2rd\t".$curStats5."\n";
+		} else {$statStr.=$curSmpl."\t$dir2rd\t".$curStats."\n"; $statStr5.=$curSmpl."\t$dir2rd\t".$curStats5."\n";}
 	}
 
 	my $boolGenePredOK=0;
@@ -731,9 +733,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			my ($statsHD,$curStats,$statsHD5,$curStats5) = smplStats($curOutDir,$assDir);
 			$statsDone=1;
 			if ($statStr eq ""){
-				$statStr.="SMPLID\tDIR\t".$statsHD."\n".$samples[$JNUM]."\t$dir2rd\t".$curStats."\n";
-				$statStr5.="SMPLID\tDIR\t".$statsHD5."\n".$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";
-			} else {$statStr.=$samples[$JNUM]."\t$dir2rd\t".$curStats."\n"; $statStr5.=$samples[$JNUM]."\t$dir2rd\t".$curStats5."\n";}
+				$statStr.="SMPLID\tDIR\t".$statsHD."\n".$curSmpl."\t$dir2rd\t".$curStats."\n";
+				$statStr5.="SMPLID\tDIR\t".$statsHD5."\n".$curSmpl."\t$dir2rd\t".$curStats5."\n";
+			} else {$statStr.=$curSmpl."\t$dir2rd\t".$curStats."\n"; $statStr5.=$curSmpl."\t$dir2rd\t".$curStats5."\n";}
 		}
 		#die "$boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
 		if ($boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
@@ -782,10 +784,10 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 #	#-----------------------  FLAGS  ------------------------  
 #	#and some more flags for subprocesses
 	my $nonPareilFlag = !-s "$NPD/$SmplName.npo" && $DoNP ;
-	my $scaffoldFlag = 0; $scaffoldFlag = 1 if (( !-e $finScaffStone) && $map{$samples[$JNUM]}{"SupportReads"} =~ /mate/i );
+	my $scaffoldFlag = 0; $scaffoldFlag = 1 if (( !-e $finScaffStone) && $map{$curSmpl}{"SupportReads"} =~ /mate/i );
 	my $assemblyFlag = 0; $assemblyFlag = 1 if (!-s $finAssLoc && $DoAssembly);
 	my $mapAssFlag = 0; $mapAssFlag = 1 if (!-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && $assemblyFlag );
-	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$samples[$JNUM]}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
+	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$curSmpl}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
 	my $dowstreamAnalysisFlag = 0; $dowstreamAnalysisFlag=1 if ( ($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
 	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && $dowstreamAnalysisFlag );
 				;
@@ -799,17 +801,17 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 
 
 	#die "$pseudAssFlag\n$boolGenePredOK\n$pseudoAssFileFinal\n";
-	if ($scaffTarExternal ne "" &&  $map{$samples[$JNUM]}{"SupportReads"} !~ /mate/i && $scaffTarExtLibTar ne $samples[$JNUM] ){print"scNxt\n";next;}
+	if ($scaffTarExternal ne "" &&  $map{$curSmpl}{"SupportReads"} !~ /mate/i && $scaffTarExtLibTar ne $curSmpl ){print"scNxt\n";next;}
 	#has this sample extra reads (e.g. long reads?)
 	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken\n";
 	#die "$curDir\n";
 	my ($jdep,$cfp1ar,$cfp2ar,$cfpsar,$WT,$rawFiles, $mmpuNum, $libInfoRef, $jdepUZ) = 
-		seedUnzip2tmp($curDir,$map{$samples[$JNUM]}{SupportReads},$curUnzipDep,$nodeSpTmpD,
+		seedUnzip2tmp($curDir,$map{$curSmpl}{prefix},$map{$curSmpl}{SupportReads},$curUnzipDep,$nodeSpTmpD,
 		$GlbTmpPath,$waitTime,$importMocat,$AsGrps{$cMapGrp}{CntMap},$calcUnzip);
 	push(@inputRawFQs,$rawFiles);
-	if($scaffTarExtLibTar eq $samples[$JNUM]){
+	if($scaffTarExtLibTar eq $curSmpl){
 		@scaffTarExternalOLib1 = @{$cfp1ar}; @scaffTarExternalOLib2 = @{$cfp2ar};
-		next unless ($map{$samples[$JNUM]}{"SupportReads"} =~ /mate/i );
+		next unless ($map{$curSmpl}{"SupportReads"} =~ /mate/i );
 		#print "@scaffTarExternalOLib1\n";
 		#die;
 	}
@@ -1520,7 +1522,7 @@ sub IsDiaRunFinished($){
 		#print $term."   $cD, $pD\n";
 		if ($redoDiamondParse ){#&& ( -e "$curOutDir/diamond/dia.$term.blast.gz.stone" || -e "$curOutDir/diamond/dia.$term.blast.srt.gz.stone") ){ 
 			system "rm -f $curOutDir/diamond/dia.$term.blast.*.stone" ;
-			system "$secCogBin $curOutDir/diamond/XX $term $diaEVal 4";
+			system "$secCogBin -i $curOutDir/diamond/XX -DB $term -eval $diaEVal -mode 4";
 			system "rm -fr $curOutDir/diamond/ABR/" if ($term eq "ABR");
 		}
 		system "rm -f $curOutDir/diamond/dia.$term.blast*" if ($rewriteDiamond );
@@ -1533,34 +1535,9 @@ sub IsDiaRunFinished($){
 	return ($cD,$pD);
 }
 
-sub getSpecificDBpaths($){
-	my ($curDB) = @_;
-	my $DBpath = "";	my $refDB = ""; my $shrtDB = "";
-	#if ($curDB eq "NOG"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/";	$refDB = "eggnog4.proteins.all.fa"; $shrtDB = $curDB;}
-	#elsif ($curDB eq "MOH"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/MohFuncts/"; $refDB = "Extra_functions.fna";$shrtDB = $curDB;}
-	#elsif ($curDB eq "CZy"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/CAZy/"; $refDB = "Cazys_2015.fasta";$shrtDB = $curDB;}
-	#elsif ($curDB eq "ABR"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/ABR_FORS/"; $refDB = "ardb_and_reforghits.fa";$shrtDB = $curDB;}
-	#elsif ($curDB eq "ABRc"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/ABR_Card/"; $refDB = "f11_and_card.faa";$shrtDB = $curDB; }
-	#elsif ($curDB eq "KGE"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/KEGG/"; $refDB = "genus_eukaryotes.pep";$shrtDB = $curDB; }
-	#elsif ($curDB eq "KGB"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/KEGG/"; $refDB = "species_prokaryotes.pep";$shrtDB = $curDB; }
-	#elsif ($curDB eq "ACL"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/Aclame/"; $refDB = "aclame_proteins_all_0.4.fasta";$shrtDB = $curDB; }
-	#elsif ($curDB eq "KGM"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/KEGG/"; $refDB = "euk_pro.pep";$shrtDB = $curDB; }
-	if ($curDB eq "NOG"){$DBpath = getProgPaths("eggNOG40_path_DB");	$refDB = "eggnog4.proteins.all.fa"; $shrtDB = $curDB;}
-	elsif ($curDB eq "MOH"){$DBpath = getProgPaths("Moh_path_DB"); $refDB = "Extra_functions.fna";$shrtDB = $curDB;}
-	elsif ($curDB eq "CZy"){$DBpath = getProgPaths("CAZy_path_DB"); $refDB = "Cazys_2015.fasta";$shrtDB = $curDB;}
-	elsif ($curDB eq "ABR"){$DBpath = getProgPaths("ABRfors_path_DB"); $refDB = "ardb_and_reforghits.fa";$shrtDB = $curDB;}
-	elsif ($curDB eq "ABRc"){$DBpath = getProgPaths("ABRcard_path_DB"); $refDB = "f11_and_card.faa";$shrtDB = $curDB; }
-	elsif ($curDB eq "KGE"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "genus_eukaryotes.pep";$shrtDB = $curDB; }
-	elsif ($curDB eq "KGB"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "species_prokaryotes.pep";$shrtDB = $curDB; }
-	elsif ($curDB eq "ACL"){$DBpath = getProgPaths("ACL_path_DB");$refDB = "aclame_proteins_all_0.4.fasta";$shrtDB = $curDB; }
-	elsif ($curDB eq "KGM"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "euk_pro.pep";$shrtDB = $curDB; }
-	else {die"Unknown DB for Diamond: $curDB\n";}
-	return ($DBpath ,$refDB ,$shrtDB );
-}
-
 sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratch
 	my ($curDB,$CLrefDBD,$ncore) = @_;
-	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB);
+	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB,0);
 	system "mkdir -p $CLrefDBD" unless (-d $CLrefDBD);
 	my $clnCmd = "";
 	if ($globalDiamondDependence{$curDB} eq "" ){
@@ -1666,7 +1643,7 @@ sub runDiamond(){
 		my $outgz = "$out.srt.gz";
 		#die "$outgz\n";
 		#unzip, sort, zip
-		$cmd .= "zcat ".join( " ",@collect) ." | sort -T $tmpP | $pigzBin --stdout -p $ncore > $outgz \n";
+		$cmd .= "zcat ".join( " ",@collect) ." | sort -t'\t' -k1 -T $tmpP | $pigzBin --stdout -p $ncore > $outgz \n";
 		$cmd .= "rm -f ". join( " ",@collect) . "\n";
 		if (@collectSingl >= 1){
 			#append on gzip, can be done with gzip
@@ -1674,7 +1651,7 @@ sub runDiamond(){
 		}
 		$cmd.= "rm -r $tmpP\n";
 		#die $cmd."\n";
-		my $cmd2 = "$secCogBin $outgz $shrtDB $diaEVal 0 $CLrefDBD/$refDB.length $CLrefDBD $tmpP\n";
+		my $cmd2 = "$secCogBin -i $outgz -DB $shrtDB -eval $diaEVal -mode 0 -LF $CLrefDBD/$refDB.length -DButil $CLrefDBD -tmp $tmpP\n";
 		#die $cmd2;
 		if ($curDB eq "ABR"){
 			$cmd2 = "$KrisABR $outgz $outD/ABR/ABR.genes.txt $outD/ABR/ABR.cats.txt\n";
@@ -2236,7 +2213,7 @@ sub complexGunzCpMv($ $ $ $){
 }
 
 sub seedUnzip2tmp(){
-	my ($fastp,$xtrMapStr,$jDepe,$tmpPath,$finDest, $WT,$mocatImport,$libNum,$calcUnzp) = @_;
+	my ($fastp,$smplPrefix,$xtrMapStr,$jDepe,$tmpPath,$finDest, $WT,$mocatImport,$libNum,$calcUnzp) = @_;
 	my $doMateCln = 1; #nxtrim  mate pairs ?
 	my $rawReads=""; my $mmpu = "";
 	my $fastp2 = ""; my $xtraRdsTech = "";
@@ -2257,11 +2234,12 @@ sub seedUnzip2tmp(){
 	my @pa1; my @pa2; my @pas; my @paX1; my @paX2;
 	if ($fastp ne ""){
 		if ($mocatImport==0){
+			#print "$fastp\n";
 			opendir(DIR, $fastp) or die "Can't find: $fastp\n";	
-		
+			#die "$smplPrefix$rawFileSrchStr2\n";
 			if ($readsRpairs){
-				@pa2 = sort ( grep { /$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
-				@pa1 = sort ( grep { /$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
+				@pa2 = sort ( grep { /$smplPrefix$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
+				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 			}
 			@pas = sort ( grep { /$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 		} else {

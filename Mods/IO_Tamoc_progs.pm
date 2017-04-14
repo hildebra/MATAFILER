@@ -31,7 +31,8 @@ sub getProgPaths{
 		chomp;
 		next if (m/^#/);
 		if (!$Tset && m/^MFLRDir\t([^#]+)/){
-			$Tset=1;$TMCpath = $1;next;
+			$Tset=1;$TMCpath = $1;
+#			next;
 		}
 		if (@multVars > 0){
 			for (my $k=0;$k<@multVars;$k++){

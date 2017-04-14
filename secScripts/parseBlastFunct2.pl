@@ -1,11 +1,13 @@
 #!/usr/bin/env perl
 #parseBlastFunct.pl /g/bork5/hildebra/data/Ach_proteins/res/DiaAssignment.txt [DB] [mode]
-#mode == 0: just parse; ==2 check for all files present
+#mode == 0: just parse & report sum stat; 1=report per gene primary DB; 2=report per gene all levels ==2 check for all files present
 use warnings;
 use strict;
 use FileHandle;
-use Mods::TamocFunc qw(sortgzblast getProgPaths uniq);
+use Mods::TamocFunc qw(sortgzblast uniq);
 use Mods::GenoMetaAss qw(gzipwrite gzipopen);
+use Mods::IO_Tamoc_progs qw(getProgPaths );
+use Getopt::Long qw( GetOptions );
 
 
 sub main;
@@ -17,41 +19,57 @@ sub writeAllTable;
 sub readMohTax;
 sub combineBlasts;
 sub bestBlHit;
+sub help;
+sub eggMap_interpret;
+my $emBin = getProgPaths("emapper");
 
 
 
-die "no input args!\n" if (@ARGV == 0 );
-my $blInf = $ARGV[0];
-my $mode = 0;
-my $DBmode = "NOG";
-if (@ARGV > 1){
-	$DBmode = $ARGV[1]; #0=normal 2=file check 4=remove outputfile
-}
 
+my $blInf = "";#$ARGV[0];
+my $mode = 0;#ARGV[3]
+my $DBmode = "NOG";#$ARGV[1];
 my $quCovFrac = 0; #how much of the query needs to be covered?
 my $noHardCatCheck = 0; #select for the hit with KO assignment rather than the real best hit (w/o KO assignment)
 
 #$DBmode = uc $DBmode;
-my $minBLE= 1e-7;my $minScore=0;
+my $minBLE= 1e-7;#ARGV[2]
+my $minScore=0;#min required bit score
 my $minAlLen = 20; #my $minPidGlobal = 40;
+my $tmpD="";#$ARGV[6]
+my $DButil = "";#$ARGV[5];
+my $lengthF = "";#$ARGV[4];
+my $reportEggMapp=0; #do eggNOG mapper?
+my $ncore = 4;
+my $writeSumTbls = 1; #report all the higher level stats?
+my $percID = 30;
 
-my $emBin = getProgPaths("emapper");
+die "no input args!\n" if (@ARGV == 0 );
+GetOptions(
+	"help|?" => \&help,
+	"i=s"      => \$blInf,
+	"DB=s"      => \$DBmode,
+	"mode=i"      => \$mode,#0=normal, 1=normal and print per gene anno, 2=file check 4=remove outputfile
+	"eval=f"      => \$minBLE,
+	"minBitScore=f" => \$minScore,
+	"minAlignLen=i"      => \$minAlLen,
+	"minPercSbjCov=f"      => \$quCovFrac,
+	"tmp=s"      => \$tmpD,
+	"DButil=s"	=> \$DButil,
+	"LF=s"	=> \$lengthF,
+	"eggNOGmap=i"	=> \$reportEggMapp,
+	"summaryTbls=i" => \$writeSumTbls,
+	"CPU=i" => \$ncore,
+	"percID=i" => \$percID, #percent id similiarity, from 0 - 100
+) or die("Error in command line arguments\n");
+
+die "Database mode requires -tmp -minAlignLen -LF\n" if ( ($mode != 4 && $mode != 3) && ( $tmpD eq "" || $lengthF eq "" ) );
+#die "$tmpD XX\n";
+$reportEggMapp=0 if ($DBmode ne "NOG" );
 
 
-if (@ARGV > 2){
-	$minBLE = $ARGV[2];
-}
-if (@ARGV > 3){$mode = $ARGV[3];}
-#die $blInf;
-
-my $tmpD="";
-if (@ARGV >= 6){$tmpD = $ARGV[6];}
-#die "$tmpD\n";
-#work out if sorted etc
-$blInf = sortgzblast($blInf,$tmpD) unless ($mode == 2 || $mode == 4);
 my %DBlen;
-if (@ARGV > 4 ){#read the length of DB proteins
-	my $lengthF = $ARGV[4];
+if ($lengthF ne "" ){#read the length of DB proteins
 	my @spl = split /,/,$lengthF;
 	foreach my $lF2 (@spl){
 		open I,"<$lF2" or die "length file $lF2 no present!\n";
@@ -65,18 +83,17 @@ if (@ARGV > 4 ){#read the length of DB proteins
 	print "read length DB\n";
 }
 
+$blInf = sortgzblast($blInf,$tmpD) unless ($mode == 3 || $mode == 4);
+
 
 #die "$blInf";
 
-die "Too few args\n" if ( ($mode != 4 || $mode != 2) && @ARGV<5 );
-my $DButil ;
 my $bl2dbF ;
 my $cogDefF ;
 my $NOGtaxf ;
 my $KEGGlink ;
 my $KEGGtaxDb ;
-if (@ARGV >= 5){
-	$DButil = $ARGV[5];
+if ($DButil ne ""){
 	 $bl2dbF = "$DButil/NOG.members.tsv";
 	 $cogDefF = "$DButil/NOG.annotations.tsv";
 	 $NOGtaxf = "$DButil/all_species_data.txt";
@@ -101,12 +118,12 @@ my %czyTax;
 my @aminBLE = split /,/,$minBLE;
 #my @aminPID = (40,45,50,55,60,65,70,75,80,85,90,95);
 #@aminBLE = ("1e-9") x scalar(@aminPID);
-my @aminPID = ("30") x scalar(@aminBLE);
+my @aminPID = ($percID) x scalar(@aminBLE);
 
 my %NOGkingd ; my %KEGGtax;
 my %COGdef ;my %g2COG ; my %c2CAT ;
 my $tabCats = 0; my $cazyDB = 0; my $ACLdb = 0; my $KGMmode=0;
-if ($mode == 2 || $mode == 4){ #scan for all reads finished
+if ($mode == 3 || $mode == 4){ #scan for all reads finished
 } elsif ( $DBmode eq "KGB" || $DBmode eq "KGE" || $DBmode eq "KGM"){
 	print "Reading KEGG DBs..\n";
 	my ($hr1) = readGene2KO($KEGGlink);
@@ -153,12 +170,13 @@ if ($mode == 2 || $mode == 4){ #scan for all reads finished
 
 #read DB file
 my $readLim = 1000000; my $lcnt=0;my $lastQ=""; my $stopInMiddle=0; my $reportGeneCat=0;
-my %COGhits; my %CAThits; my %GENEhits; my $O2; my $OEM;
-my $emFile = "$blInf.emap.table";
+my $mergeDiaHit =0; 
+my %COGhits; my %CAThits; my %GENEhits; my $O2; my %OEM;
+my %emFiles ; my %emFilesFinal;
 for (my $i=0; $i<@aminBLE ; $i++){$COGhits{$i} = {}; $CAThits{$i} = {}; $GENEhits{$i} = {};}
-if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
+if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 2: write for each gene higher lvl cat
 	#die "$blInf\n";
-	$reportGeneCat = 1 if ($mode==1);
+	$reportGeneCat = $mode if ($mode >= 1);
 	#insert here KEGG BAC ? EUK fix
 	if ($KGMmode && !-e $blInf){
 		#zcat dia.KGB.blast.gz dia.KGE.blast.gz | sort | gzip > dia.KGM.blast.gz
@@ -171,7 +189,18 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	my ($I,$OK) = gzipopen($blInf,"diamond output file [in]",1); 
 	my $OK2;
 	($O2,$OK2) = gzipwrite($blInf."geneAss","gene cat file [out]",1) if ($reportGeneCat);
-	$OEM = open $OEM,">$emFile";
+	if ($reportEggMapp){
+		system "mkdir -p $tmpD" unless (-d $tmpD);
+		foreach (my $j=0;$j<@kgdOpts;$j++){
+			my $kk = $kgdOpts[$j];
+			next if ($kk eq "");
+			
+			$emFilesFinal{$kk} = "$blInf.emap.$kgdNameShrt[$j].table";
+			$emFiles{$kk} = "$tmpD/$DBmode.emap.$kgdNameShrt[$j].table";
+			print "$tmpD/$DBmode.emap.$kgdNameShrt[$j].table\n";
+			open $OEM{$kk},">$emFiles{$kk}" or die "Can't open $tmpD/$DBmode.emap.$kgdNameShrt[$j].table\n";
+	}}
+	#die;
 	
 	my @splSave;
 	
@@ -199,17 +228,13 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 		#1st combine scores
 		my $whX = combineBlasts(\%wordv1,\%wordv2);
 		#2nd: sort these, find best hit
-		#my $arBhit = bestBlHit($whX); #doesn't need this, this is done in the main routine
+		#my $arBhit = bestBlHit($whX); #doesn't need this, this is done in the major routine
 		@blRes = values %{$whX};
 
 		#die @blRes."\n";
 		#print "Read Assignments..\n";
-		#die "@aminBLE\n";
 		for (my $i=0; $i<@aminBLE ; $i++){
-			#my ($hr1,$hr2,$hr3) = 
-			main($aminBLE[$i],$aminPID[$i],$i);#$st1{$i}, $CAThits{$i},$GENEhits{$i});
-			#$st1{$i} = $hr1; $CAThits{$i} = $hr2; $st3{$i} = $hr3;
-			#print "..";
+			main($aminBLE[$i],$aminPID[$i],$i,$reportEggMapp);
 		}
 		undef @blRes;
 		push(@blRes,\@splSave);
@@ -218,32 +243,29 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	}
 	close $I;
 	close $O2 if ($reportGeneCat);
-	close $OEM;
+	if ($reportEggMapp){foreach my $kk (keys %OEM){	close $OEM{$kk}}}
 	print"writing Tables\n";
 	
 	
-	for (my $i=0; $i<@aminBLE ; $i++){
-		my $pathXtra = "/CNT_".$aminBLE[$i]."_".$aminPID[$i]."/";
-		my $outPath = $inP.$pathXtra;
-		writeAllTable($DBmode."parse",$outPath,$aminBLE[$i],$aminPID[$i],$i);#$st1{$i}, $CAThits{$i},$st3{$i});
+	if ($writeSumTbls){
+		for (my $i=0; $i<@aminBLE ; $i++){
+			my $pathXtra = "/CNT_".$aminBLE[$i]."_".$aminPID[$i]."/";
+			my $outPath = $inP.$pathXtra;
+			writeAllTable($DBmode."parse",$outPath,$aminBLE[$i],$aminPID[$i],$i);#$st1{$i}, $CAThits{$i},$st3{$i});
+			#and do eggnog mapping for specific filter parameters
+			eggMap_interpret($outPath);
+		}
 	}
 	system "touch $blInf.stone";
-	
-	print "all done\n";
-	
-	#and do eggnog mapping
-	
-	my $cmd = "$emBin -d none --no_search --no_refine. --annotate_hits_table $emFile --report_orthologs -o test\n" if ($DBmode eq "NOG");
-	die "$cmd\n";
-	
-	system "rm $emFile";
+	print "Merged $mergeDiaHit Diamond hits from DB\n";
+	print "all done\n" if ($mode <3);
 	
 	exit(0);
 
 	
 	
 	
-} elsif ($mode==2) { #only checks for presence of run
+} elsif ($mode==3) { #only checks for presence of run
 	for (my $i=0; $i<@aminBLE ; $i++){
 		my $pathXtra = "/CNT_".$aminBLE[$i]."/";
 		unless(check_files($DBmode."parse",$inP.$pathXtra,$aminBLE[$i])){exit(3);}
@@ -256,12 +278,108 @@ if ($mode == 0 || $mode==1){ #mode1 = write gene assignment
 	}
 } else {die"unkown run mode!!!\n";}
 
-if ($mode ==2){
+if ($mode ==3){
 }
 
-print "all done\n";
+#print "all done\n";
 exit(0);
 
+sub splitandadd($ $ $){
+	my ($hr,$terms,$shareEffect) = @_;
+	return if ($terms eq "" || length($terms)==0);
+	my @spl = split /,/,$terms;
+	my $val = 1;
+	$val = 1/scalar(@spl) if ($shareEffect);
+	foreach my $term (@spl){
+		${$hr}{$term} += $val;
+	}
+}
+
+sub writeHashTbl($ $){
+	my ($outF,$hr);
+	my %hs = %{$hr};
+	open OH,">$outF" or die "Can't open hash out file $outF\n";
+	foreach my $k (keys %hs){
+		print OH "$k\t$hs{$k}\n";
+	}
+	close OH;
+}
+
+sub eggMap_interpret($){ #higher level annotations with egg nog mapper
+	if (!$reportEggMapp){return;}
+	my ($outD) = @_;
+	die "too many evals chosen" if (@aminBLE > 1 ); #fix that only one eval will be printed...
+	my @keys1 = keys %emFiles;
+	my $tmpEM = "$tmpD/EMcomb$DBmode.table";
+	system "rm -f $tmpEM";
+	#run only once on combined file..
+	my @emFilesDel;
+	foreach my $kk (@keys1){
+		push (@emFilesDel,$emFiles{$kk});
+		system "cat $emFiles{$kk} >> $tmpEM;";
+		system "echo 'split_falk_EM_123\t634498.mru_0149\t0\t1000\n' >> $tmpEM";
+		die "$kk entry in emFilesFinal doesn't exist\n" unless (exists($emFilesFinal{$kk}));
+		#last;
+	}
+	my $oFil = "$tmpD/combEM$DBmode.res"; $oFil =~ s/table//;
+	my $cmd = "rm $oFil.1* \n";
+	$cmd .= "$emBin -d none --cpu $ncore --no_search --temp_dir $tmpD --no_file_comments --override --no_refine --annotate_hits_table $tmpEM -o $oFil.1\n" ;
+	system "$cmd\n";
+	print $cmd."\n";
+	
+	#objects to count on higher level
+	my %GOs; my %Kmaps; my %COGcats;
+	my $ofCnt = 0;
+	#die "@keys1  ".@keys1."\n";
+	open O,">$emFilesFinal{$keys1[$ofCnt]}";
+	print O "#QueryID\tNOG\tNOGcat\tNOGdescr\tKEGGmap\tGOterms\n";
+	open I,"<$oFil.1.emapper.annotations" or die "can't open $oFil.1.emapper.annotations\n";
+	while (my $lin = <I>){
+		if ($lin =~ m/^#/){next;
+		} elsif ($lin =~ m/^split_falk_EM_123\t/){ #split signal to go to next tax lvl
+			close O; 
+			
+			#write out countups in higher levels
+			writeHashTbl($outD."eggNogM_GO.txt",\%GOs);
+			writeHashTbl($outD."eggNogM_KEGG_map.txt",\%Kmaps);
+			writeHashTbl($outD."eggNogM_COG_cats.txt",\%COGcats);
+			print "$ofCnt $keys1[$ofCnt] $emFilesFinal{$keys1[$ofCnt]}\n";
+			open O,">$emFilesFinal{$keys1[$ofCnt]}" or die "Can't open $emFilesFinal{$keys1[$ofCnt]}\n";
+			$ofCnt++;
+			next;
+		}
+		chomp $lin;
+		my @spl = split /\t/,$lin;
+		my $oStr = "$spl[0]\t";
+		my  $Ccat = $spl[10];$Ccat = "" if (!defined $Ccat);
+		my $Cdef = $spl[11];$Cdef = "" if (!defined $Cdef);
+		my $Kmap = $spl[6]; $Kmap = "" if (!defined $Kmap);
+		my $GOterm = $spl[5];$GOterm = "" if (!defined $GOterm);
+		if ($spl[8] =~ m/,([^,]+)\@NOG/){
+			$oStr .= "\t$1";
+			#print $1."\n";
+			if ($tabCats==1){
+				$Cdef = $COGdef{$1} if (exists($COGdef{$1}));
+				$Ccat = $c2CAT{$1} if (exists($c2CAT{$1}));
+			} elsif ($tabCats==2){#KEGG
+			}
+		} else {
+			$oStr .= "\t";
+		}
+		#print "$GOterm , $Kmap , $Ccat\n";
+		splitandadd(\%GOs,$GOterm,0);
+		splitandadd(\%Kmaps,$Kmap,1);
+		splitandadd(\%COGcats,$Ccat,1);
+		$oStr.= "\t$Cdef\t$Ccat\t$Kmap\t$GOterm\n";
+		print O "$oStr\n";
+	}
+	close O; close I;
+	
+	#write hashes out
+	#TODO
+	if ($ofCnt < @keys1){die "Not enough taxsplits found in eggNogFile ($ofCnt)\n$oFil.1.annotations\n";}
+	#system "rm ".join(" ",@emFilesDel)." $oFil.1*";
+}
 
 sub remove_file{
 	my ($outF,$outD,$minBLE) = @_;
@@ -285,8 +403,9 @@ sub writeAllTable(){
 	system "rm -f $out*";
 	my %COGabundance=%{$COGhits{$pos}}; my %CATabundance=%{$CAThits{$pos}}; my %funHit=%{$GENEhits{$pos}};
 	#my %COGabundance=%{$hr1}; my %CATabundance=%{$hr2}; my %funHit=%{$hr3};
-		foreach my $normMethod (@normMethods){
-
+	my $cnt = -1;
+	foreach my $normMethod (@normMethods){
+		$cnt ++;
 		foreach my $y (@kgdOpts){
 			my @kk; my $O = FileHandle->new;
 			if ($tabCats==0){ #MOG CZy etc
@@ -305,7 +424,7 @@ sub writeAllTable(){
 				my $cogCnts=0;
 				foreach my $k (@kk){print $O $k."\t".$COGabundance{$normMethod}{$y}{$k}."\n";$cogCnts++;}
 				close $O;
-				print "Total of $cogCnts categories in $kgdName[$y].\n";
+				print "Total of $cogCnts categories in $kgdName[$y].\n"if ($cnt==0);
 			}
 			if ($tabCats){ #NOG || KEGG
 				#print CATs
@@ -325,8 +444,10 @@ sub writeAllTable(){
 
 }
 
+#routine accepts a single read/gene hit to several valid targets
+#and selects one hit as "best", annotates this hit & summarizes at higher level
 sub main(){
-	my ($minBLE,$minPid,$pos)=@_;#$hr1,$hr2,$hr3) = @_;
+	my ($minBLE,$minPid,$pos,$reportEggMappNow)=@_;
 	my %COGabundance=%{$COGhits{$pos}}; my %CATabundance=%{$CAThits{$pos}}; my %funHit=%{$GENEhits{$pos}};
 
 #	my %COGabundance=%{$hr1}; my %CATabundance=%{$hr2}; my %funHit=%{$hr3};
@@ -335,13 +456,12 @@ sub main(){
 	my $NOGtreat = 0; $NOGtreat = 1 if ($DBmode eq "NOG");
 	#my %kgd = %{$kgdHR};
 	
-	my $bestSbj="";my $bestID=0; my $bestAlLen=0;my $bestQuery = "";
-	my $COGexists=0;
-	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; my $bestBitScpre=0;
 	
 	my @tmp = ("");
 	@tmp = @{$blRes[0]} if (@blRes > 0);
 	my $qold=$tmp[0];
+	die "Subject length not in length DB : $tmp[1]\n" unless (exists ($DBlen{$tmp[1]}));
+	my $SbjLen = $DBlen{$tmp[1]};
 	my $COGfail=0; my $CATfail=0; my $totalCOG=0; my $CATexist=0;  my $ii=0;
 	
 	my $eggNOGmap =0;
@@ -351,131 +471,149 @@ sub main(){
 	#this routine simply counts up number of hits to COGXX
 	
 	#while (1){ #don't need this, should only go once over this..
-	if (1){
-		#if ( $ii+1 >= @blRes){last;}#print "OUT   ";
-		my $fndCat=0;
-		
-		for( ;$ii<@blRes;$ii++){
-			#print "@{$blRes[$ii]}[0]\n";
-			my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
-			#print $eval."\n";
-			#sort by eval #changed from bestE -> bestScore
-			if ( ( ($emode && $bestE > $eval) || ($scomode && $bestScore< ($id * $AlLen)) ) 
-						&& ($eval <= $minBLE && $bitSc >= $minScore)
-						&& ($AlLen >= $minAlLen)
-						&& ($id >= $minPid)
-						&& ($quCovFrac == 0 || $AlLen > $DBlen{$Subject}*$quCovFrac) 
-						&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject}) 
-						) {
-						#print "Y";
-				$fndCat =1;
-				$bestScore = $id * $AlLen;$bestSbj =$Subject; 
-				$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
-				$bestBitScpre=$bitSc;
-			}
-			my @tmp;
-			#if($ii+1 < @blRes){
-			#	@tmp = @{$blRes[$ii+1]};
-			#	if ($tmp[0] ne $qold){$qold=$tmp[0];last;}
-			#} else {$qold="";last;}
-		}
-		#print @blRes ."  $bestSbj $bestQuery\n";
-		#print "$ii ". ($ii+1 >= @blRes)." XX\n";
-		if ($bestSbj ne ""){#finalize assignment to read
-			my $curCOG="-";my $curCat = ""; my $curDef = "";
-			my $curKgd = 3; #default always 3.. historic
-			my @splC;
-			if ($ACLdb || $KGMmode){
-				@splC = split /:/,$bestSbj ; $splC[0] = $splC[1] if ($ACLdb);
-			} elsif ($cazyDB || $tabCats==0) {
-				@splC = split /\|/,$bestSbj;
-			} 
+	my $fndCat=0;
+	
+	#my $arBhit = bestBlHit($whX); 
 
-			if ($cazyDB){
-				if ($bestSbj =~ m/bacteria/){$curKgd =0;
-				}elsif ($bestSbj =~ m/archaea/) {$curKgd =1;
-				}elsif ($bestSbj =~ m/eukaryota/){ $curKgd =2 ;
-					if (exists($czyTax{$splC[$#splC]})){$curKgd = $czyTax{$splC[$#splC]} ;}
-				}else{ #take Mohs long list
-					$curKgd = $czyTax{$splC[$#splC]} if (exists($czyTax{$splC[$#splC]}));
-				}
-				#else {print $bestSbj." ";}
-				if ($bestSbj =~ m/\|CBM\d+/) {$CBMmode = 1; $curKgd = 4;}
-			} elsif ( 0 && $ACLdb){ #cats are too primitive, doesn't need to be split up any further
-				#67936 >protein:plasmid  25941 >protein:proph  28277 >protein:vir
-				if ($bestSbj =~ m/plasmid/){$curKgd =0;
-				}elsif ($bestSbj =~ m/proph/){$curKgd =1;
-				}elsif ($bestSbj =~ m/vir/){$curKgd =2;
-				}
-			} elsif ($KGMmode){
-				if (exists($KEGGtax{$splC[0]})){
-					$curKgd = $KEGGtax{$splC[0]};
-				}  #else {print "X";}
-			}
-			#print "XX$bestSbj"."XX\n";
-			foreach my $normMethod (@normMethods){
-				$totalCOG++; 
-				my $score = 1;
-				die "can't find length entry for $bestSbj\n" unless (exists $DBlen{$bestSbj});
-				#print $DBlen{$bestSbj}." $normMethod ";
-				$score = $bestAlLen / $DBlen{$bestSbj} if ($normMethod eq "GLN"); #score for this hit, normed by prot length
-				if ($tabCats == 1){ #NOG
-					$bestSbj =~ m/^(\d+)\./; my $taxid = $1;
-					if (!exists $NOGkingd{$taxid}){print "Can't find $taxid in ref tax\n";}
-					$curKgd = $NOGkingd{$taxid} if (!$CBMmode);
-					#die "$bestSbj  $taxid $NOGkingd{$taxid}\n"; 
-					unless (exists( $g2COG{$bestSbj} )){
-						#print "can't find $bestSbj in NOG ref\n" unless ($COGfail>10);
-						#print $O "$Query\t$Subject\t$bestID\t$bestE\t$bestAlLen\t\t\t\n";
-						$COGfail++;
-						#print "Too many COG(t/f)ails..\n" if  ($COGfail==11);
-						next;
-					}
-					$curCOG = $g2COG{$bestSbj};
-					$curDef = $COGdef{$curCOG} if (exists $COGdef{$curCOG});
-					#hash{$_} = $valA for qw(a b c);
-					#if (!exists($COGabundance{$normMethod}{$curCOG})){$COGabundance{$normMethod}{$curCOG}{$_}=0 foreach (@kgdOpts);}
-					$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
-					if (exists($c2CAT{$curCOG})){
-						$curCat = $c2CAT{$curCOG};$CATexist++;
-						#if (!exists($CATabundance{$normMethod}{$curCat})){$CATabundance{$normMethod}{$curCat}{$_}=0 foreach (@kgdOpts);}
-						$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
-					} else {
-						$CATfail++;
-						#print "Cat unknw for: $curCOG\n" ;
-					}
+	my $bestSbj="";my $bestID=0; my $bestAlLen=0;my $bestQuery = ""; my $bestIDever=0;
+	my $COGexists=0; 
+	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; my $bestBitScpre=0;
+	
+	for( ;$ii<@blRes;$ii++){
+		#print "@{$blRes[$ii]}[0]\n";
+		my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
+		#print $eval."\n";
+		#sort by eval #changed from bestE -> bestScore
+
+		if ( ($eval <= $minBLE && $bitSc >= $minScore)
+					&& ($AlLen >= $minAlLen)
+					&& ($id >= $minPid)
+					&& ($quCovFrac == 0 || $AlLen > $SbjLen*$quCovFrac) 
+					&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject}) 
+					) {
+					#now decide if the hit itself is actually better
 					
-					print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat);
-					print $OEM "$bestQuery\t$bestSbj\t$bestE\t$bestBitScpre\n" if ($reportEggMapp);
-					#print $O "$Query\t$Subject\t$bestID\t$bestE\t$bestAlLen\t$curCOG\t$curCat\t$curDef\n";
-				
-				} elsif ($tabCats == 2){ #KEGG
-					if (exists $c2CAT{$bestSbj} ){
-						$curCat = $c2CAT{$bestSbj}; $CATexist++;
-						#if (!exists($CATabundance{$normMethod}{$curCat})){  $CATabundance{$normMethod}{$curCat}{$_}=0 foreach (@kgdOpts);  }
-						$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
-					} else {$CATfail++; }#print " can't find kegg cat $bestSbj\n" unless ($CATfail>2);}
-					print $O2 "$bestQuery\t$curCat\n" if ($reportGeneCat);
-				} else { #Moh / CAZY / ACL
-					$curCOG = $splC[0];
-					#die $curCOG."\n";
-					#$curCat = $curCOG;
-					#if (!exists($COGabundance{$normMethod}{$curCOG})){$COGabundance{$normMethod}{$curCOG}{$_}=0 foreach (@kgdOpts);}
-					$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
-					#print $COGabundance{$normMethod}{$curKgd}{$curCOG}."\n";
-					print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat);
-				}
-				#if (!exists($funHit{$normMethod}{$bestSbj})){$funHit{$normMethod}{$bestSbj}{$_}=0 foreach (@kgdOpts); } 
-				if ($tabCats == 0){ #don't need this for KEGG and NOG
-					$funHit{$normMethod}{$curKgd}{$bestSbj}+= $score;
-				}
+			if (($bestID -5)< $id && $bestE*10 > $eval &&
+					( $id >= ($bestID *0.97) && $id >= $bestIDever*0.9   && ( $AlLen >= $bestAlLen * 1.15 ) )  ||  #length is just better (15%+)
+					(   ($id >= $bestID *1.03) && ( $AlLen >= $bestAlLen * 0.9) ) ||#id is just better, while length is not too much off
+					$bitSc > $bestBitScpre*0.8){   #convincing score
+
+						$fndCat =1; 
+						$bestSbj =$Subject; 
+						$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
+						$bestBitScpre=$bitSc;
+						$bestID = $id;  
+						if ($bestID > $bestIDever){$bestIDever=$bestID;}
 			}
-			$bestSbj="";$bestE=1000; $bestScore=0;$CBMmode=0;$bestBitScpre=0;
-			#$COGexists=0; 
 		}
-		$bestSbj="";$bestE=10; $bestScore=0;$CBMmode=0;
+		my @tmp;
 	}
-	$totalCOG /= 2;$COGfail /= 2; $CATfail /= 2;
+	#print @blRes ."  $bestSbj $bestQuery\n";
+	#print "$ii ". ($ii+1 >= @blRes)." XX\n";
+	if ($bestSbj eq ""){return;}
+	
+	
+	#finalize assignment to read
+	my $curCOG="-";my $curCat = ""; my $curDef = "";
+	my $curKgd = 3; #default always 3.. historic
+	my @splC;
+	if ($ACLdb || $KGMmode){
+		@splC = split /:/,$bestSbj ; $splC[0] = $splC[1] if ($ACLdb);
+	} elsif ($cazyDB || $tabCats==0) {
+		@splC = split /\|/,$bestSbj;
+	} 
+
+	if ($cazyDB){
+		if ($bestSbj =~ m/bacteria/){$curKgd =0;
+		}elsif ($bestSbj =~ m/archaea/) {$curKgd =1;
+		}elsif ($bestSbj =~ m/eukaryota/){ $curKgd =2 ;
+			if (exists($czyTax{$splC[$#splC]})){$curKgd = $czyTax{$splC[$#splC]} ;}
+		}else{ #take Mohs long list
+			$curKgd = $czyTax{$splC[$#splC]} if (exists($czyTax{$splC[$#splC]}));
+		}
+		#else {print $bestSbj." ";}
+		if ($bestSbj =~ m/\|CBM\d+/) {$CBMmode = 1; $curKgd = 4;}
+	} elsif ( 0 && $ACLdb){ #cats are too primitive, doesn't need to be split up any further
+		#67936 >protein:plasmid  25941 >protein:proph  28277 >protein:vir
+		if ($bestSbj =~ m/plasmid/){$curKgd =0;
+		}elsif ($bestSbj =~ m/proph/){$curKgd =1;
+		}elsif ($bestSbj =~ m/vir/){$curKgd =2;
+		}
+	} elsif ($KGMmode){
+		if (exists($KEGGtax{$splC[0]})){
+			$curKgd = $KEGGtax{$splC[0]};
+		}  #else {print "X";}
+	}
+	#print "XX$bestSbj"."XX\n";
+	if ($tabCats == 1){ #NOG
+		$bestSbj =~ m/^(\d+)\./; my $taxid = $1;
+		if (!exists $NOGkingd{$taxid}){print "Can't find $taxid in ref tax\n";}
+		$curKgd = $NOGkingd{$taxid} if (!$CBMmode);
+		unless (exists( $g2COG{$bestSbj} )){
+			$COGfail++;	next;
+		}
+		$curCOG = $g2COG{$bestSbj};
+		$curDef = $COGdef{$curCOG} if (exists $COGdef{$curCOG});
+	}
+	if ($reportEggMappNow){
+		print  {$OEM{$curKgd}} "$bestQuery\t$bestSbj\t$bestE\t$bestBitScpre\n" ;
+	}
+	my $lpCnt=0;
+	my $score = 1;
+	if ($bestQuery =~ m/\/12$/){
+		$mergeDiaHit ++ ; $score = 2 ;
+	}
+	foreach my $normMethod (@normMethods){
+		$totalCOG++; $lpCnt++;
+		#die "can't find length entry for $bestSbj\n" unless (exists $DBlen{$bestSbj});
+		#print $DBlen{$bestSbj}." $normMethod ";
+		$score = $bestAlLen / $SbjLen if ($normMethod eq "GLN"); #score for this hit, normed by prot length
+		if ($tabCats == 1){ #NOG
+			#hash{$_} = $valA for qw(a b c);
+			#if (!exists($COGabundance{$normMethod}{$curCOG})){$COGabundance{$normMethod}{$curCOG}{$_}=0 foreach (@kgdOpts);}
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			if (exists($c2CAT{$curCOG})){
+				$curCat = $c2CAT{$curCOG};$CATexist++;
+				#if (!exists($CATabundance{$normMethod}{$curCat})){$CATabundance{$normMethod}{$curCat}{$_}=0 foreach (@kgdOpts);}
+				$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
+			} else {
+				$CATfail++;
+				#print "Cat unknw for: $curCOG\n" ;
+			}
+			#print $O "$Query\t$Subject\t$bestID\t$bestE\t$bestAlLen\t$curCOG\t$curCat\t$curDef\n";
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
+				print $O2 "$bestQuery\t$curCOG\t$curCat\t$curDef\n" if ($reportGeneCat ==2);
+			}
+		
+		} elsif ($tabCats == 2){ #KEGG
+			if (exists $c2CAT{$bestSbj} ){
+				$curCat = $c2CAT{$bestSbj}; $CATexist++;
+				#if (!exists($CATabundance{$normMethod}{$curCat})){  $CATabundance{$normMethod}{$curCat}{$_}=0 foreach (@kgdOpts);  }
+				$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
+			} else {$CATfail++; }#print " can't find kegg cat $bestSbj\n" unless ($CATfail>2);}
+			if ($lpCnt==1 && $curCat ne "" ){
+				print $O2 "$bestQuery\t$curCat\n" if ($reportGeneCat  );
+			}
+		} else { #Moh / CAZY / ACL
+			$curCOG = $splC[0];
+			#die $curCOG."\n";
+			#$curCat = $curCOG;
+			#if (!exists($COGabundance{$normMethod}{$curCOG})){$COGabundance{$normMethod}{$curCOG}{$_}=0 foreach (@kgdOpts);}
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			#print $COGabundance{$normMethod}{$curKgd}{$curCOG}."\n";
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat );
+			}
+		}
+		#if (!exists($funHit{$normMethod}{$bestSbj})){$funHit{$normMethod}{$bestSbj}{$_}=0 foreach (@kgdOpts); } 
+		if ($tabCats == 0){ #don't need this for KEGG and NOG
+			$funHit{$normMethod}{$curKgd}{$bestSbj}+= $score;
+		}
+	}
+#		$bestSbj="";$bestE=1000; $bestScore=0;$CBMmode=0;$bestBitScpre=0;
+#		$bestSbj="";$bestE=10; $bestScore=0;$CBMmode=0;
+	$totalCOG /= 2; $CATfail /= 2;#$COGfail /= 2;
 	#if (0&& $DBmode eq "NOG"){
 	#	print "Total entries:$totalCOG\nCOG not found: $COGfail, CAT not found: $CATfail\n";
 	#} 
@@ -597,6 +735,7 @@ sub combineBlasts($ $){
 			next;
 		}
 		#pair
+		#print "pair";
 		$k =~ s/\/\d$/\/12/;
 		$ret{$k} = $bl1{$k};
 		my @hit1 = @{$bl1{$k}};
@@ -665,3 +804,13 @@ sub bestBlHit($){
 	if ($bestk eq ""){die "something went wrong with ABR blast:\n$k:$blasts{$k}\n";}
 	return $blasts{$bestk};
 }
+
+sub help(){
+print "Routine to interpret diamond output files to specific datbases (CAZy, KEGG, eggNOG)\n";
+print "-i [diamond output]\n";
+}
+
+
+
+
+
