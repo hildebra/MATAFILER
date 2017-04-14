@@ -498,6 +498,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $dir2rd=""; my $curDir = "";my $curOutDir = ""; 
 	my $curSmpl = $samples[$JNUM];
 	$dir2rd = $map{$curSmpl}{dir};
+	$dir2rd = $map{$curSmpl}{prefix} if ($dir2rd eq "");
 	#print "$curSmpl  $map{$curSmpl}{dir}  $map{$curSmpl}{rddir}  $map{$curSmpl}{wrdir}\n";	next;
 	my $SmplName = $map{$curSmpl}{SmplID};
 	push (@allSmplNames,$SmplName);
@@ -2235,8 +2236,8 @@ sub seedUnzip2tmp(){
 	if ($fastp ne ""){
 		if ($mocatImport==0){
 			#print "$fastp\n";
-			opendir(DIR, $fastp) or die "Can't find: $fastp\n";	
 			#die "$smplPrefix$rawFileSrchStr2\n";
+			opendir(DIR, $fastp) or die "Can't find: $fastp\n";	
 			if ($readsRpairs){
 				@pa2 = sort ( grep { /$smplPrefix$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
 				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);

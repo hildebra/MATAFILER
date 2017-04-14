@@ -1,1 +1,156 @@
-Mods/MATAFILERcfg.txt
+#base path to pipeline  ESSENTIAL
+MFLRDir	/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/
+globalTmpDir	/scratch/bork/hildebra/MATAFILER/
+#globalTmpDir	/tmp/bork/hildebra/MATAFILER/
+nodeTmpDir	/tmp/MATAFILER/
+qsubPEenv	smp
+
+## external programs
+
+#	programs / DBs	ESSENTIAL
+samtools	[MFLRDir]/bin/samtools
+spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.10.1-Linux/bin/spades.py
+bwt2	[MFLRDir]/bin/bowtie2
+bwa	/g/bork3/home/hildebra/bin/bwa/./bwa
+prodigal	[MFLRDir]/bin/prodigal
+sambamba	[MFLRDir]/bin/sambamba_v0.6.4
+pigz	[MFLRDir]/bin/pigz
+jgiDepth	[MFLRDir]/bin/jgi_summarize_bam_contig_depths #/g/bork3/home/hildebra/bin/metabat/./jgi_summarize_bam_contig_depths
+bedCov	[MFLRDir]/bin/./genomeCoverageBed
+FMGdir	[MFLRDir]/bin/fetchMG/
+hmmsearch	[MFLRDir]/bin/hmmsearch
+essentialHMM	[MFLRDir]/DB/essential.hmm
+essentialEUK	[MFLRDir]/DB/eukCore.hmm
+
+
+#		SNPs / tree building - not public currently
+pal2nal	perl /g/bork3/home/hildebra/bin/pal2nal.v14/pal2nal.pl
+phyml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/phyml
+raxml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/raxmlHPC-PTHREADS-SSE3
+msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
+clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
+fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
+trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
+#     experimental
+sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
+br2dCnt	/g/bork3/home/hildebra/bin/bam-readcount/bin/./bam-readcount
+
+
+
+#		scaffolding operations (imrpoving assemblies with mate pairs)
+nxtrim	/g/bork3/home/hildebra/bin/NxTrim/./nxtrim
+BESST	/g/bork3/home/hildebra/bin/BESST/./runBESST
+gapfiller	perl /g/bork5/hildebra/bin/GapFiller/GapFiller_n.pl
+
+#		gene catalogue
+cdhit	[MFLRDir]/bin/cd-hit
+
+#		miTag related
+lambda	[MFLRDir]/bin/lambda
+lambdaIdx	[MFLRDir]/bin/lambda_indexer
+#requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
+srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/
+LSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128//SLV_128_LSU.fasta
+LSUtax	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_LSU.tax
+SSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_SSU.fasta
+SSUtax	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_SSU.tax
+ITSdbFA	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.fa
+ITStax	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi/ITS_comb.tax
+PR2dbFA	/g/bork3/home/hildebra/DB/MarkerG/PR2//gb203_pr2_all_10_28_99p.fasta
+PR2tax	/g/bork3/home/hildebra/DB/MarkerG/PR2//PR2_taxonomy.txt
+
+#only if euk metagenomes to be processed
+augustus	/g/bork3/home/hildebra/bin/augustus-3.2.1/bin/augustus
+
+#very specific usage, mostly not required
+d2meta	/g/bork3/home/hildebra/bin/d2Meta/d2Meta/d2Meta.out
+nonpareil	/g/bork5/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage sequenced in your samples
+hmmer3	/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
+mmseqs2	/g/bork3/home/hildebra/bin/mmseqs2/bin/mmseqs   #experimental clustering of genes
+growthP	python /g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
+
+#no longer used
+#usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
+#novosrt	/g/bork5/hildebra/bin/novocraft/novosort
+blat	/g/bork3/home/hildebra/bin/blat/./blat
+nucmer	/g/bork3/home/hildebra/bin/MUMmer3.23/./nucmer
+
+#taxonomic profiling, if requrested
+metPhl2	/g/bork3/home/hildebra/bin/metaphlan2/metaphlan2.py
+metPhl2Merge	/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py
+kraken	/g/scb/bork/hildebra/DB/kraken/./kraken
+
+#functional profiling
+diamond	[MFLRDir]/bin/./diamond
+emapper	python /g/bork3/home/hildebra/bin/eggnog-mapper/emapper.py
+
+#if read merge is attempted in any step (typically for miTag, profiling)
+flash	[MFLRDir]/bin/flash
+
+#microsats
+mreps	[MFLRDir]/bin/mreps
+
+#binning
+kmerFreqs	perl [MFLRDir]/bin/calc.kmerfreq.pl
+maxBinFrmt	perl [MFLRDir]/secScripts/maxBin_rewrk.pl
+maxBin	perl [MFLRDir]/bin/MaxBin-1.4.2/run_MaxBin.pl
+
+
+#my own C++ progs 	ESSENTIAL
+rare	[MFLRDir]/bin/rtk
+sdm	[MFLRDir]/bin/sdm
+LCA	[MFLRDir]/bin/./LCA
+readCov	[MFLRDir]/bin/./rdCover
+
+#local scripts 	ESSENTIAL
+cLSUSSU_scr	perl [MFLRDir]/miTag/catchLSUSSU.pl
+lotusLCA_cLSU_scr	[MFLRDir]/miTag/lotus_LCA_blast2.pl
+krakCnts_scr	[MFLRDir]/secScripts/krak_count_tax.pl
+genelength_scr	[MFLRDir]/secScripts/geneLengthFasta.pl
+secCogBin_scr	[MFLRDir]/secScripts/parseBlastFunct2.pl
+KrisABR_scr	perl [MFLRDir]/secScripts/ABRblastFilter2.pl
+sepCts_scr	perl [MFLRDir]/secScripts/separateContigs.pl
+assStat_scr	perl [MFLRDir]/secScripts/assemblathon_stats.pl
+renameCtg_scr	[MFLRDir]/secScripts/renameCtgs.pl
+sizFilt_scr	perl [MFLRDir]/secScripts/sizeFilterFas.pl
+buildTree_scr	[MFLRDir]/helpers/buildTree.pl
+sizSplit_scr	[MFLRDir]/secScripts/splitFNAbyLength.pl
+contigKgdSplit_scr	[MFLRDir]/secScripts/sortCtgKingdom.pl
+calcGC_scr	[MFLRDir]/secScripts/calcGC.pl
+sortSepReLen_scr	[MFLRDir]/secScripts/sepReadLength.pl
+secCogBin_scr	[MFLRDir]/secScripts/parseBlastFunct.pl
+extre100_scr	[MFLRDir]/helpers/extrAllE100GC.pl
+decoyDB_scr	[MFLRDir]/secScripts/./deployMapDB.pl
+bamHdFilt_scr	[MFLRDir]/secScripts/./correctBamHD.pl
+hmmBestHit_scr	[MFLRDir]/secScripts/bmn-HMMerBestHit.py
+mrgDia_scr	[MFLRDir]/helpers/./combine_DIA.pl
+mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
+cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
+FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
+growth_scr	perl [MFLRDir]/helpers/growthRate.pl
+
+#options for filters etc	ESSENTIAL
+baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt
+baseSDMopt	[MFLRDir]/data/sdm_opt_inifilter.txt
+baseSDMoptMiSeq	[MFLRDir]/data/sdm_opt_miSeq.txt
+baseSDMoptMiSeq_rel	[MFLRDir]/data/sdm_opt_miSeq_relaxed.txt
+
+
+
+
+
+#Databases note that these will be mostly copied to scratch dir, but since indexes are created calc to have at least twice the HD space available for these
+#most databases are only required for direct mapping and/or gene catalog assignments
+FOAMhmm_DB	/g/bork3/home/hildebra/DB/FUNCT/FOAM/FOAM-hmm_rel1.hmm
+eggNOG_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/eggnog4.proteins.all.fa
+ABresHMM_DB	/g/bork/forslund/morehmms/Resfams.hmm
+#eggNOG40_path_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/
+eggNOG40_path_DB	/g/bork3/home/hildebra/DB/FUNCT/eggNOGmapper/
+Moh_path_DB	/g/bork3/home/hildebra/DB/FUNCT/MohFuncts/
+CAZy_path_DB	/g/bork3/home/hildebra/DB/FUNCT/CAZy/
+ABRfors_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_FORS/
+ABRcard_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_Card/
+KEGG_path_DB	/g/bork3/home/hildebra/DB/FUNCT/KEGG/
+ACL_path_DB	/g/bork3/home/hildebra/DB/FUNCT/Aclame/
+
+ITS_DB_path	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi

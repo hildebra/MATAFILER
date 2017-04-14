@@ -582,6 +582,7 @@ sub emptyQsubOpt{
 	my ($doSubm) = $_[0];
 	my $locChkStr = $_[1];
 	my $qmode;
+	
 	if (@_ > 2){$qmode = $_[2];}
 	else {$qmode = findQsubSys("");}
 	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
@@ -591,6 +592,7 @@ sub emptyQsubOpt{
 		doSubmit => $doSubm,
 		LocationCheckStrg => $locChkStr,
 		doSync => 0,
+		qsubPEenv => getProgPaths("qsubPEenv"),
 		perl5lib => "$MFdir:\$PERL5LIB",
 		cpplib => "/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64",
 		tmpSpace => "30G",
@@ -637,7 +639,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	#if (`hostname` !~ m/submaster/){
 	if ($qmode eq "sge"){
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
-		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe smp $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n";
+		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe ".$optHR->{qsubPEenv}." $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n";
 		print O "#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
 		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
 	} else {$LSF = 1;$qbin="bsub";
