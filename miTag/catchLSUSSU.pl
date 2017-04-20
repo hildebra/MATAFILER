@@ -154,7 +154,7 @@ if ($doRiboAssembl && (!-d $outP."/Ass_ITS" || !-e $outP."/Ass_ITS/scaffolds.fas
 
 sub smrnaRunCmd( $ $ $ $){
 	my ($outFile,$refDB,$interLeave,$finD) = @_;
-	my $cmd = "$smrnaBin --best 1 --reads $interLeave ";
+	my $cmd = "set -e\n$smrnaBin --best 1 --reads $interLeave ";
 	my $pairOpt = ""; if (!$singlMode){$pairOpt = "--paired_in ";}
 	$cmd .= "--blast 1 -a $threads -e 0.1 --log $pairOpt  --fastx --aligned '$outFile' "; #-m 9000 
 	$cmd .= "--ref '$refDB'\n";

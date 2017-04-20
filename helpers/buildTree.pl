@@ -52,7 +52,7 @@ if (!$Ete){
 	my $treeD = "$outD/TMCtree/";
 	my $raxD = "$treeD";
 	my $raxLogD = "$raxD/Logs/";
-	system "rm -r $treeD" if (-d $treeD);
+	system "rm -fr $treeD" if (-d $treeD);
 	system "mkdir -p  $raxLogD" unless (-d $raxLogD);
 	system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
 	my $multAli = "$outD/MSA/MSAli.fna";
@@ -101,7 +101,7 @@ if (!$Ete){
 			
 			#die("XX\n") if ($spl2[1] eq "COG0081");
 			synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,0);
-			system "rm $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
+			system "rm -f $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
 			push (@MSAs,$tmpOutMSA);
 			push (@MSAsSyn,$tmpOutMSAsyn);
 			push (@MSrm,$tmpOutMSA2,$tmpOutMSA);
@@ -114,7 +114,7 @@ if (!$Ete){
 		mergeMSAs(\@MSAs,\%samples,$multAli,0);
 		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1);
 		#die();
-		system "rm ".join(" ",@MSrm)." ".join(" ",@MSAsSyn); 
+		system "rm -f ".join(" ",@MSrm)." ".join(" ",@MSAsSyn); 
 	} elsif (1) {#no marker way, single gene
 		my $tmpInMSA = $aaFna;
 		my $tmpInMSAnt = $fnFna;

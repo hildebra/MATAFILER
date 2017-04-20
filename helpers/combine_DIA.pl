@@ -5,6 +5,8 @@
 use warnings;
 use strict;
 use Mods::GenoMetaAss qw(gzipopen readMap);
+use Mods::IO_Tamoc_progs qw(getProgPaths);
+
 sub writeMat;
 
 #CZyparse.CZy.cat.cnts.gz
@@ -18,12 +20,15 @@ my @modDBs = ("KGM");
 #@DBs = ("NOG","KGB","KGE"); # ("KGB","KGE","CZy","NOG","ABR","MOH");#("NOG","CZy","MOH");
 #@DBs = ("NOG");#("NOG","CZy","MOH");
 #my $rareBin = "/g/bork3/home/hildebra/dev/C++/rare/./rare_fix"; #TODO temp
-my $rareBin = "/g/bork3/home/hildebra/dev/C++/Rarefaction/rtk/rtk";
+my $rareBin = getProgPaths("rare");#"/g/bork3/home/hildebra/dev/C++/Rarefaction/rtk/rtk";
 
 my $modD = "/g/bork3/home/hildebra/DB/FUNCT/myModules/Feb16/";
 my @modDBfs = ("module_new.list","module_c.list","modg.list","module_s.list");
 #my @modDBfs = ("modg.list");
 my @modDBodir = ("modules","metaCyc","BSB","SEED");
+my @modDescr = ("mod.descr","modc.descr","modg.descr","mods.descr");
+my @modHiera = ("mod_hiera.txt","modc_hiera.txt","modg_hiera.txt","mods_hiera.txt");
+
 my $dieOnMissing = 0;
 
 my $calcModules=0;
@@ -200,10 +205,10 @@ foreach my $DB (@modDBs){
 				system "mkdir -p $outD" unless (-d $outD);
 				my $outMat = $outD."KEGG$eval.$etag.GLN.mod";
 				my $inMat = "$inD/$DB.CAT.mat.$etag.GLN.$eval.txt";
-				my $cmdMod = "$rareBin module -i $inMat -o $outMat -refMods $keggDB -redundancy 5 -moduleCompl $ModCompl -enzymeCompl $EnzCompl -collapseDblModules\n";
+				my $cmdMod = "$rareBin module -i $inMat -o $outMat -description $modD/$modDescr[$k] -hiera  $modD/$modHiera[$k] -refMods $keggDB -redundancy 5 -moduleCompl $ModCompl -enzymeCompl $EnzCompl -collapseDblModules\n";
 				$outMat = $outD."KEGG$eval.$etag.cnt.mod";
 				$inMat = "$inD/$DB.CAT.mat.$etag.cnt.$eval.txt";
-				$cmdMod .= "$rareBin module -i $inMat -o $outMat -refMods $keggDB -redundancy 5 -moduleCompl $ModCompl -enzymeCompl $EnzCompl -collapseDblModules\n";
+				$cmdMod .= "$rareBin module -i $inMat -o $outMat -refMods $keggDB -description $modD/$modDescr[$k] -hiera  $modD/$modHiera[$k] -redundancy 5 -moduleCompl $ModCompl -enzymeCompl $EnzCompl -collapseDblModules\n";
 				#print "$cmdMod\n";
 				system $cmdMod."\n";
 				#die $cmdMod."\n";

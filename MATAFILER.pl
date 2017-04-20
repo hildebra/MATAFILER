@@ -56,7 +56,7 @@ sub metphlanMapping;sub mergeMP2Table;
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
-my $MATFILER_ver = 0.11;
+my $MATFILER_ver = 0.12;
 
 #----------------- defaults ----------------- 
 my $rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';
@@ -158,7 +158,7 @@ my $RedoRiboAssign = 0;
 my $DoBinning = 1;
 my $doReadMerge = 0;
 my $DoAssembly = 1;  my $SpadesAlwaysHDDnode = 1;my $spadesBayHam = 0; my $useSDM = 2;my $spadesMisMatCor = 0; my $redoAssembly =0 ;
-my $doBam2Cram= 1;
+my $doBam2Cram= 1; my $redoAssMapping=0;
 my $DoNP=0; #non-pareil
 my $doDateFileCheck = 0; #very specific option for Moh's reads that were of different dates..
 my $DoDiamond = 0; my $rewriteDiamond =0; my $redoDiamondParse = 0; #redoes matching of reads; redoes interpretation
@@ -219,9 +219,10 @@ GetOptions(
 	"assembleMG=i" => \$DoAssembly,
 	#gene prediction on assembly
 	"predictEukGenes=i" => \$DO_EUK_GENE_PRED,#severely limits total predicted gene amount (~25% of total genes)
-	#mapping related
+	#mapping related (asselmbly)
 	"mappingMem=i" => \$MappingMem, #mem for bwa/bwt2 in GB
 	"rmDuplicates=i" => \$doRmDup,
+	"remap2assembly=i" => \$redoAssMapping,
 	#functional profiling (diamond)
 	"profileFunct=i"=> \$DoDiamond,
 	"reParseFunct=i" => \$redoDiamondParse,
@@ -604,12 +605,13 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		system("rm -f -r $curOutDir $GlbTmpPath $collectFinished ");
 		system ("rm -r -f $assDir $finalCommAssDir");
 	} 
-	my $delMapping= 0;
+	#delete assembly
 	if ($redoAssembly){
 		system "rm -fr $finalCommAssDir";
-		$delMapping=1;
+		$redoAssMapping=1;
 	}
-	if ($delMapping){
+	#delete mapping to assembly
+	if ($redoAssMapping){
 		system "rm -fr $finalMapDir $mapOut";
 	}
 	system "rm -r $KrakenOD" if ($RedoKraken && -d $KrakenOD);
@@ -645,6 +647,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && 
 			(-s "$finalMapDir/$SmplName-smd.bam" || -s "$finalMapDir/$SmplName-smd.cram"));
 	#die "$boolAssemblyOK $AssemblyGo ass $finalCommAssDir\n";
+	
+	
 	my $boolScndMappingOK = 0; my $iix =0;
 	foreach my $bwt2outDTT (@bwt2outD){
 		my $expectedMapCovGZ = "$bwt2outDTT/$bwt2ndMapNmds[$iix]"."_".$SmplName."-0-smd.bam.coverage.gz";
@@ -1404,6 +1408,7 @@ sub detectRibo(){
 	my ($ar1,$ar2,$sar,$tmpP,$outP,$jobd,$SMPN,$glbTmpDDB) = @_;
 	my $numCore = 12;
 	my $numCore2 = 12;
+
 	
 	my @re1 = @{$ar1}; my @re2 = @{$ar2}; my @singl = @{$sar};
 	#print "ri"; 
@@ -1419,12 +1424,23 @@ sub detectRibo(){
 		my $DBcmd = "";
 		my $DBcores = 1;
 		$globalRiboDependence{DBcp}="alreadyCopied";
-		if ( !-d $DBrna || !-e "$DBrna/ITS_comb.idx.kmer_0.dat" ||  !-e "$DBrna/silva-euk-18s-id95.fasta"  || !-e "$DBrna/silva-euk-28s-id98.idx.kmer_0.dat"){
+		my $srtMRNA_path = getProgPaths("srtMRNA_path");
+		my $ITS_DB_path = getProgPaths("ITS_DB_path");
+		my @DBs = split(/,/,getProgPaths("srtMRNA_DBs"));
+		my @DBsIdx = @DBs; my $filesCopied = 1;
+		for (my $ii=0;$ii<@DBsIdx;$ii++){
+			$DBsIdx[$ii] =~ s/\.fasta$/\.idx/;
+			$filesCopied=0 if ( !-e "$DBrna/$DBs[$ii]"  ||  !-e "$DBrna/$DBsIdx[$ii]"  );
+			$DBcmd .= "$srtMRNA_path./indexdb_rna --ref $ITS_DB_path/ITS_comb.fasta,$ITS_DB_path/ITS_comb.idx";
+		}
+		die @DBs;
+		if ( !-d $DBrna || !$filesCopied){
 			$DBcmd .= "mkdir -p $DBrna\n";
-			my $srtMRNA_path = getProgPaths("srtMRNA_path");
 			$DBcmd .= "cp $srtMRNA_path/rRNA_databases/silva* $DBrna\n";
 			#$DBcmd .= "cp /g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.* $DBrna\n";
-			my $ITS_DB_path = getProgPaths("ITS_DB_path");
+			if (!-e "$ITS_DB_path/ITS_comb.idx.kmer_0.dat"){
+				$DBcmd .= "$srtMRNA_path./indexdb_rna --ref $ITS_DB_path/ITS_comb.fasta,$ITS_DB_path/ITS_comb.idx";
+			}
 			$DBcmd .= "cp $ITS_DB_path/ITS_comb* $DBrna\n";
 			#has to be noted that this doesn't need to happen again
 			#print "ribo DB already present\n";
@@ -1569,10 +1585,13 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 				$DBcmd .= "cp $DBpath/NOG.members.tsv $DBpath/NOG.annotations.tsv $DBpath/all_species_data.txt $CLrefDBD\n";
 			}
 			if ($curDB eq "CZy" && !-s "$CLrefDBD/MohCzy.tax"){
-				$DBcmd .= "cp $DBpath/MohCzy.tax $CLrefDBD\n";
+				$DBcmd .= "cp $DBpath/MohCzy.tax $DBpath/cazy_substrate_info.txt $CLrefDBD\n";
 			}
 			if (($curDB eq "KGB" || $curDB eq "KGM" || $curDB eq "KGE") && !-s "$CLrefDBD/genes_ko.list"){
 				$DBcmd .= "cp $DBpath/genes_ko.list $DBpath/kegg.tax.list $CLrefDBD\n";
+			}
+			if ($curDB eq "ABRc"){ 
+				$DBcmd .= "cp $DBpath/card*.txt $CLrefDBD\n";
 			}
 		}
 		my $jN = "_DIDB$shrtDB$JNUM"; my $tmpCmd;
@@ -2581,7 +2600,10 @@ sub mapReadsToRef{
 	my @pa1 = @{$par1}; my @pa2 = @{$par2};
 	my %params;
 	my $bamFresh = 0; #is the bam newly being created?
-	my $isSorted = 0;		$isSorted=1 if (@pa1==1 && $mapModeDecoyDo);
+	my $decoyModeActive=0;
+	$decoyModeActive=1 if ( exists($make2ndMapDecoy{Lib}) && -e $make2ndMapDecoy{Lib});
+	my $isSorted = 0;		$isSorted=1 if (@pa1==1 && $mapModeDecoyDo && $decoyModeActive);
+	#die "$isSorted\n";
 	$params{sortedbam}=$isSorted; $params{bamIsNew} = $bamFresh; $params{is2ndMap} = $is2ndMap;
 	$params{immediateSubm} =  $immediateSubm;;
 
@@ -2630,14 +2652,14 @@ sub mapReadsToRef{
 	
 	my @regs;#subset of DB seqs to filter for 
 	my @reg_lcs;
-	$REF =~ m/([^\/]+)$/; my $REFnm = $1; $REFnm =~ s/\.fna//; my $decoyModeActive=0;
-	if ( exists($make2ndMapDecoy{Lib}) && -e $make2ndMapDecoy{Lib}){ 
+	$REF =~ m/([^\/]+)$/; my $REFnm = $1; $REFnm =~ s/\.fna//; 
+	if ($decoyModeActive){
 		#first create a new ref DB, including the targets and the assemblies from this dir
 		$bwtIdx = "$nodeTmp/$REFnm.decoyDB.fna";
 		$algCmd.= "\n$decoyDBscr $REF $make2ndMapDecoy{Lib} $bwtIdx $Ncore $outName $finalD\n";
 		#die "$algCmd\n";
 		$bwtIdx .= ".bw2";
-		$decoyModeActive=1;
+		
 		$xtraSamSteps1 = "$smtBin sort -@ $Ncore -T $sortTMP - |";
 		@regs = @{$make2ndMapDecoy{regions}};
 		@reg_lcs =  @{$make2ndMapDecoy{region_lcs}};

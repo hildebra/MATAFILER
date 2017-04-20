@@ -4,7 +4,8 @@
 use warnings;
 use strict;
 use FileHandle;
-use Mods::TamocFunc qw(sortgzblast uniq);
+
+use Mods::TamocFunc qw(sortgzblast readTabbed uniq);
 use Mods::GenoMetaAss qw(gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
 use Getopt::Long qw( GetOptions );
@@ -20,6 +21,7 @@ sub readMohTax;
 sub combineBlasts;
 sub bestBlHit;
 sub help;
+sub readCzySubs;
 sub eggMap_interpret;
 my $emBin = getProgPaths("emapper");
 
@@ -43,6 +45,9 @@ my $reportEggMapp=0; #do eggNOG mapper?
 my $ncore = 4;
 my $writeSumTbls = 1; #report all the higher level stats?
 my $percID = 30;
+my $Card_leniet = 1; #take more CARD hits: eval^(1/$Card_leniet)
+my $calcGL = 1;
+my $noTax=0;
 
 die "no input args!\n" if (@ARGV == 0 );
 GetOptions(
@@ -57,8 +62,11 @@ GetOptions(
 	"tmp=s"      => \$tmpD,
 	"DButil=s"	=> \$DButil,
 	"LF=s"	=> \$lengthF,
+	"lenientCardAssignments=i" => \$Card_leniet,
 	"eggNOGmap=i"	=> \$reportEggMapp,
 	"summaryTbls=i" => \$writeSumTbls,
+	"calcGeneLengthNorm=i" => \$calcGL,
+	"singleSpecies=i" => \$noTax,
 	"CPU=i" => \$ncore,
 	"percID=i" => \$percID, #percent id similiarity, from 0 - 100
 ) or die("Error in command line arguments\n");
@@ -112,16 +120,18 @@ my @kgdName = ("Bacteria","Archaea","Eukaryota","Fungi");
 my @kgdNameShrt = ("BAC","ARC","EUK","FNG");
 #which best blast decide algo to use..
 my $scomode = 0; my $emode = 1;
-my @normMethods = ("cnt","GLN");
+my @normMethods = ("cnt");
+if ($calcGL){push (@normMethods,"GLN");}
 my $czyEuk =2; my $czyFungi=5;
-my %czyTax;
+my %czyTax;my %czySubs;
 my @aminBLE = split /,/,$minBLE;
 #my @aminPID = (40,45,50,55,60,65,70,75,80,85,90,95);
 #@aminBLE = ("1e-9") x scalar(@aminPID);
 my @aminPID = ($percID) x scalar(@aminBLE);
 
 my %NOGkingd ; my %KEGGtax;
-my %COGdef ;my %g2COG ; my %c2CAT ;
+my %COGdef ;my %g2COG ; my %c2CAT ; 
+my %cardE; my %cardFunc; my %cardName;
 my $tabCats = 0; my $cazyDB = 0; my $ACLdb = 0; my $KGMmode=0;
 if ($mode == 3 || $mode == 4){ #scan for all reads finished
 } elsif ( $DBmode eq "KGB" || $DBmode eq "KGE" || $DBmode eq "KGM"){
@@ -148,10 +158,13 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	@kgdOpts = qw (0 1 2 3 4 5);
 	my $hr = readMohTax($DButil."/MohCzy.tax");
 	%czyTax = %{$hr};
+	$hr = readCzySubs("$DButil/cazy_substrate_info.txt");
+	%czySubs = %{$hr};
 	$czyEuk =2; $czyFungi=5;
 	@kgdName = ("Bacteria","Archaea","Eukaryota","unclassified","CBM","Fungi");
 	@kgdNameShrt = ("BAC","ARC","EUK","UNC","CBM","FNG");
 	$cazyDB = 1;
+	$tabCats=3;
 	print "CAZy database\n";
 } elsif ($DBmode eq "ACL"){
 	@kgdOpts = qw (3);
@@ -160,11 +173,30 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	@kgdNameShrt = ("PLA","PRO","VIR","UNC");
 	$ACLdb = 1;
 	print "aclame database\n";
+} elsif ($DBmode eq "ABRc"){
+	@kgdOpts = qw (3);
+	@kgdName = ("","","","All");
+	@kgdNameShrt = ("","","","ALL");
+	print "ABR Card database\n";
+	my $hr = readTabbed($DButil."cardEval.txt");
+	%cardE = %{$hr};
+	$hr = readTabbed($DButil."cardClass.txt");
+	%cardFunc = %{$hr};
+	$hr = readTabbed($DButil."cardName.txt");
+	%cardName = %{$hr};
+	$tabCats=5;
 } else{
 	@kgdOpts = qw (3);
 	@kgdName = ("","","","All");
 	@kgdNameShrt = ("","","","ALL");
 	print "Non - NOG DB\n";
+}
+
+if ($noTax){
+	@kgdOpts = qw (3);
+	@kgdName = ("","","","All");
+	@kgdNameShrt = ("","","","ALL");
+	print "no Tax info being used\n";
 }
 
 
@@ -296,10 +328,11 @@ sub splitandadd($ $ $){
 }
 
 sub writeHashTbl($ $){
-	my ($outF,$hr);
+	my ($outF,$hr) = @_;
 	my %hs = %{$hr};
 	open OH,">$outF" or die "Can't open hash out file $outF\n";
-	foreach my $k (keys %hs){
+	my @kk = sort { $hs{$b} <=> $hs{$a} } keys(%hs);
+	foreach my $k (@kk){
 		print OH "$k\t$hs{$k}\n";
 	}
 	close OH;
@@ -319,6 +352,7 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 		system "cat $emFiles{$kk} >> $tmpEM;";
 		system "echo 'split_falk_EM_123\t634498.mru_0149\t0\t1000\n' >> $tmpEM";
 		die "$kk entry in emFilesFinal doesn't exist\n" unless (exists($emFilesFinal{$kk}));
+		system "rm -f $emFiles{$kk}";
 		#last;
 	}
 	my $oFil = "$tmpD/combEM$DBmode.res"; $oFil =~ s/table//;
@@ -340,9 +374,9 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 			close O; 
 			
 			#write out countups in higher levels
-			writeHashTbl($outD."eggNogM_GO.txt",\%GOs);
-			writeHashTbl($outD."eggNogM_KEGG_map.txt",\%Kmaps);
-			writeHashTbl($outD."eggNogM_COG_cats.txt",\%COGcats);
+			writeHashTbl($outD."eggNogM_GO.txt",\%GOs) if (keys(%GOs)>=1);
+			writeHashTbl($outD."eggNogM_KEGG_map.txt",\%Kmaps) if (keys(%Kmaps)>=1);
+			writeHashTbl($outD."eggNogM_COG_cats.txt",\%COGcats) if (keys(%COGcats)>=1);
 			print "$ofCnt $keys1[$ofCnt] $emFilesFinal{$keys1[$ofCnt]}\n";
 			open O,">$emFilesFinal{$keys1[$ofCnt]}" or die "Can't open $emFilesFinal{$keys1[$ofCnt]}\n";
 			$ofCnt++;
@@ -374,7 +408,8 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 		print O "$oStr\n";
 	}
 	close O; close I;
-	
+	system "rm -f $tmpEM $oFil.1.emapper.annotations";
+
 	#write hashes out
 	#TODO
 	if ($ofCnt < @keys1){die "Not enough taxsplits found in eggNogFile ($ofCnt)\n$oFil.1.annotations\n";}
@@ -407,6 +442,7 @@ sub writeAllTable(){
 	foreach my $normMethod (@normMethods){
 		$cnt ++;
 		foreach my $y (@kgdOpts){
+		next if ($kgdName[$y] eq "");
 			my @kk; my $O = FileHandle->new;
 			if ($tabCats==0){ #MOG CZy etc
 				#don't write this for NOGs any longer..
@@ -416,8 +452,8 @@ sub writeAllTable(){
 				foreach my $k (@kk){print $O $k."\t".$funHit{$normMethod}{$y}{$k}."\n";}
 				close $O;
 			}
-				#print COGs
-			if ($tabCats != 2){
+				
+			if ($tabCats != 2 ){#all but KO & CZy
 				@kk = sort { $COGabundance{$normMethod}{$y}{$b} <=> $COGabundance{$normMethod}{$y}{$a} } keys(%{$COGabundance{$normMethod}{$y}});
 				$O = gzipwrite("$out.$DBmode.$kgdNameShrt[$y].$normMethod.cat.cnts","Dia cat $y Counts");
 				#open O,">$out.$DBmode.cat.cnts"; 
@@ -426,8 +462,8 @@ sub writeAllTable(){
 				close $O;
 				print "Total of $cogCnts categories in $kgdName[$y].\n"if ($cnt==0);
 			}
-			if ($tabCats){ #NOG || KEGG
-				#print CATs
+			if ($tabCats){ #NOG || KEGG || CZy || ABRc
+				#print CATs 
 				@kk = sort { $CATabundance{$normMethod}{$y}{$b} <=> $CATabundance{$normMethod}{$y}{$a} } keys(%{$CATabundance{$normMethod}{$y}});
 				#print @kk."\n";
 				$O = gzipwrite("$out.$kgdNameShrt[$y].$normMethod.CATcnts","Dia NOG cat $y Counts");
@@ -448,6 +484,7 @@ sub writeAllTable(){
 #and selects one hit as "best", annotates this hit & summarizes at higher level
 sub main(){
 	my ($minBLE,$minPid,$pos,$reportEggMappNow)=@_;
+	if (@blRes == 0){return;}
 	my %COGabundance=%{$COGhits{$pos}}; my %CATabundance=%{$CAThits{$pos}}; my %funHit=%{$GENEhits{$pos}};
 
 #	my %COGabundance=%{$hr1}; my %CATabundance=%{$hr2}; my %funHit=%{$hr3};
@@ -456,9 +493,8 @@ sub main(){
 	my $NOGtreat = 0; $NOGtreat = 1 if ($DBmode eq "NOG");
 	#my %kgd = %{$kgdHR};
 	
-	
 	my @tmp = ("");
-	@tmp = @{$blRes[0]} if (@blRes > 0);
+	@tmp = @{$blRes[0]};
 	my $qold=$tmp[0];
 	die "Subject length not in length DB : $tmp[1]\n" unless (exists ($DBlen{$tmp[1]}));
 	my $SbjLen = $DBlen{$tmp[1]};
@@ -484,12 +520,13 @@ sub main(){
 		my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
 		#print $eval."\n";
 		#sort by eval #changed from bestE -> bestScore
-
+#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
 		if ( ($eval <= $minBLE && $bitSc >= $minScore)
 					&& ($AlLen >= $minAlLen)
 					&& ($id >= $minPid)
 					&& ($quCovFrac == 0 || $AlLen > $SbjLen*$quCovFrac) 
-					&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject}) 
+					&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject})
+					&& ($tabCats!=5 || $eval <= ($cardE{$Subject}**(1/$Card_leniet)) ) #Card
 					) {
 					#now decide if the hit itself is actually better
 					
@@ -497,7 +534,7 @@ sub main(){
 					( $id >= ($bestID *0.97) && $id >= $bestIDever*0.9   && ( $AlLen >= $bestAlLen * 1.15 ) )  ||  #length is just better (15%+)
 					(   ($id >= $bestID *1.03) && ( $AlLen >= $bestAlLen * 0.9) ) ||#id is just better, while length is not too much off
 					$bitSc > $bestBitScpre*0.8){   #convincing score
-
+						
 						$fndCat =1; 
 						$bestSbj =$Subject; 
 						$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
@@ -519,11 +556,12 @@ sub main(){
 	my @splC;
 	if ($ACLdb || $KGMmode){
 		@splC = split /:/,$bestSbj ; $splC[0] = $splC[1] if ($ACLdb);
-	} elsif ($cazyDB || $tabCats==0) {
+	} elsif ($cazyDB || $tabCats==0 ) {
 		@splC = split /\|/,$bestSbj;
 	} 
-
-	if ($cazyDB){
+	if ($noTax){
+		;
+	} elsif ($cazyDB){
 		if ($bestSbj =~ m/bacteria/){$curKgd =0;
 		}elsif ($bestSbj =~ m/archaea/) {$curKgd =1;
 		}elsif ($bestSbj =~ m/eukaryota/){ $curKgd =2 ;
@@ -532,7 +570,8 @@ sub main(){
 			$curKgd = $czyTax{$splC[$#splC]} if (exists($czyTax{$splC[$#splC]}));
 		}
 		#else {print $bestSbj." ";}
-		if ($bestSbj =~ m/\|CBM\d+/) {$CBMmode = 1; $curKgd = 4;}
+		#get rid of CBM
+		if (0 && $bestSbj =~ m/\|CBM\d+/) {$CBMmode = 1; $curKgd = 4;}
 	} elsif ( 0 && $ACLdb){ #cats are too primitive, doesn't need to be split up any further
 		#67936 >protein:plasmid  25941 >protein:proph  28277 >protein:vir
 		if ($bestSbj =~ m/plasmid/){$curKgd =0;
@@ -543,14 +582,15 @@ sub main(){
 		if (exists($KEGGtax{$splC[0]})){
 			$curKgd = $KEGGtax{$splC[0]};
 		}  #else {print "X";}
-	}
-	#print "XX$bestSbj"."XX\n";
-	if ($tabCats == 1){ #NOG
+	} elsif ($tabCats == 1){ #NOG
 		$bestSbj =~ m/^(\d+)\./; my $taxid = $1;
 		if (!exists $NOGkingd{$taxid}){print "Can't find $taxid in ref tax\n";}
 		$curKgd = $NOGkingd{$taxid} if (!$CBMmode);
+	}
+	
+	if ($tabCats == 1){
 		unless (exists( $g2COG{$bestSbj} )){
-			$COGfail++;	next;
+			$COGfail++;	return;
 		}
 		$curCOG = $g2COG{$bestSbj};
 		$curDef = $COGdef{$curCOG} if (exists $COGdef{$curCOG});
@@ -562,6 +602,14 @@ sub main(){
 	my $score = 1;
 	if ($bestQuery =~ m/\/12$/){
 		$mergeDiaHit ++ ; $score = 2 ;
+	}elsif ($tabCats==5){#ABR CARD
+		$curCOG = $cardName{$bestSbj};
+	}elsif ($tabCats == 2){ #KEGG
+		if (exists $c2CAT{$bestSbj} ){
+			$curCat = $c2CAT{$bestSbj}; $CATexist++;
+		} else {$CATfail++; return;}
+	}elsif ($tabCats==3){  #CAZy
+		$curCOG = $splC[0];
 	}
 	foreach my $normMethod (@normMethods){
 		$totalCOG++; $lpCnt++;
@@ -587,21 +635,37 @@ sub main(){
 			}
 		
 		} elsif ($tabCats == 2){ #KEGG
-			if (exists $c2CAT{$bestSbj} ){
-				$curCat = $c2CAT{$bestSbj}; $CATexist++;
-				#if (!exists($CATabundance{$normMethod}{$curCat})){  $CATabundance{$normMethod}{$curCat}{$_}=0 foreach (@kgdOpts);  }
-				$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
-			} else {$CATfail++; }#print " can't find kegg cat $bestSbj\n" unless ($CATfail>2);}
+			$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
 			if ($lpCnt==1 && $curCat ne "" ){
 				print $O2 "$bestQuery\t$curCat\n" if ($reportGeneCat  );
 			}
+		} elsif ($tabCats==5){#ABR CARD
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			my @curCats = split /,/,$cardFunc{$bestSbj};
+			foreach my $cCt (@curCats){
+				$CATabundance{$normMethod}{$curKgd}{$cCt}+= $score;
+			}
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
+				print $O2 "$bestQuery\t$curCOG\t".join(",",@curCats)."\n" if ($reportGeneCat ==2);
+			}
+		} elsif ($tabCats==3){  #CAZy
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			die "$curCOG\n" unless (exists ($czySubs{$curCOG}));
+			my @subs = @{$czySubs{$curCOG}};
+			#print "@subs\n";
+			foreach my $cCt (@subs){
+				#print "$cCt ";
+				$CATabundance{$normMethod}{$curKgd}{$cCt}+= $score;
+			}
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat );
+				print $O2 "$bestQuery\t$curCOG\t".join(",",@subs)."\n" if ($reportGeneCat );
+			}
+			
 		} else { #Moh / CAZY / ACL
 			$curCOG = $splC[0];
-			#die $curCOG."\n";
-			#$curCat = $curCOG;
-			#if (!exists($COGabundance{$normMethod}{$curCOG})){$COGabundance{$normMethod}{$curCOG}{$_}=0 foreach (@kgdOpts);}
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
-			#print $COGabundance{$normMethod}{$curKgd}{$curCOG}."\n";
 			if ($lpCnt==1){
 				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat );
 			}
@@ -718,6 +782,39 @@ sub readNogKingdom($){
 	}
 	close I;
 	return %ret;
+}
+sub readCzySubs($){#cazy_substrate_info.txt
+	my ($inF) = @_;
+	open I,"<$inF" or die "Can't open $inF\n";
+	my $cnt =0;
+	my %ret;
+	my $catsInCzu =0 ;
+	my @cats = ("PlantCW","Chitin","AlpGlucans","AnimalCarb","BacterialCW","Fructans","FungalCarbs","Dextran");
+	while (<I>){
+		$cnt++;
+		chomp;
+		next if ($cnt==1);
+		#	Plant Cell Wall Carbohydrates	Chitin	Alpha-glucans	Animal Carbohydrates	Bacterial Cell Wall Carbohydrates	Fructans	Fungal Carbohydrates	Dextran
+		my @entr = split /\t/;
+		my $idx = shift @entr;
+		my $idx2 = $idx; $idx2 =~ s/Unclassified-// ;
+		$idx = $idx2 unless (exists($ret{$idx2}));
+		#print "x$idx ";
+		my $hits=0;
+		for( my $x=0;$x< @entr; $x++){
+			if ($entr[$x] eq "YES"){
+				push (@{$ret{$idx}}, $cats[$x]);
+				$hits++;
+				$catsInCzu++;
+			}
+		}
+		if ($hits==0){
+			$ret{$idx} = [];
+		}
+	}
+	close I;
+	#die "$catsInCzu\n";
+	return \%ret;
 }
 
 sub combineBlasts($ $){

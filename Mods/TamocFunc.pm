@@ -7,12 +7,41 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(sortgzblast uniq getE100 getSpecificDBpaths);
+our @EXPORT_OK = qw(sortgzblast uniq getE100 readTabbed readTabbed2 getSpecificDBpaths);
 use Mods::GenoMetaAss qw(systemW readFasta);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 
 
+sub readTabbed($){
+	my ($inF) = @_;
+	my %ret;
+	open It,"<$inF" or die "Cant open tabbed infile $inF\n";
+	while (<It>){
+		chomp;
+		my @spl = split /\t/;
+		$ret{$spl[0]} = $spl[1];
+	}
+	close It;
+	return \%ret;
+}
+sub readTabbed2($ $){
+	my ($inF,$useLast) = @_;
+	my %ret;my $maxDepth=0;
+	open It,"<$inF" or die "Cant open tabbed infile $inF\n";
+	
+	while (<It>){
+		chomp;
+		my @spl = split /\t/;
+		my $ke = pop @spl;
+		#print $ke." ";
+		$ret{$ke} = \@spl;
+		#die "@spl\n";
+		if (scalar(@spl) > $maxDepth){$maxDepth=scalar(@spl);}
+	}
+	close It;
+	return (\%ret,$maxDepth);
+}
 
 
 sub getSpecificDBpaths($ $){
