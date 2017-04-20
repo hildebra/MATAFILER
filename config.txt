@@ -51,7 +51,12 @@ lambda	[MFLRDir]/bin/lambda
 lambdaIdx	[MFLRDir]/bin/lambda_indexer
 #requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
 srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/
-srtMRNA_DBs	silva-euk-28s-id98.fasta,silva-euk-18s-id95.fasta,silva-bac-23s-id98.fasta,silva-bac-16s-id85.fasta,silva-arc-23s-id98.fasta,silva-arc-16s-id95.fasta
+srtMRNA_DBs	silva-euk-18s-id95.fasta,silva-bac-16s-id90.fasta,silva-arc-16s-id95.fasta,silva-euk-28s-id98.fasta,silva-bac-23s-id98.fasta,silva-arc-23s-id98.fasta
+mergeRdScr	[MFLRDir]/bin/merge-paired-reads.sh
+unmergeRdScr	[MFLRDir]/bin/unmerge-paired-reads.sh
+
+
+
 LSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128//SLV_128_LSU.fasta
 LSUtax	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_LSU.tax
 SSUdbFA	/g/bork3/home/hildebra/DB/MarkerG/SILVA/128/SLV_128_SSU.fasta

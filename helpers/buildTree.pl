@@ -280,7 +280,7 @@ sub mergeMSAs($ $ $ $){
 		my $num1 = $ntCnts{$kk};
 		if ( ( ($num1 / $maxNtCnt ) < $ntFrac) || ($num1 < $ntCnt ) ){
 			delete $bigMSAFAA{$kk}; $remSeqNum++; 
-			print "$kk $num1  ".($num1 / $maxNtCnt )." $ntFrac ";
+			print "$kk $num1  ".int($num1*1000 / ($maxNtCnt) )/1000 ." $ntFrac \n";
 		}
 		#print "$num1  $kk \n";#$bigMSAFAA{$kk}\n\n"; last;
 	}

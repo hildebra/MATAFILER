@@ -25,8 +25,8 @@ my $smrPath = getProgPaths("srtMRNA_path");
 
 #my $path2DB = "$smrPath/rRNA_databases/";
 my $smrnaBin = "$smrPath/./sortmerna";
-my $mergeScript = "$smrPath/scripts/merge-paired-reads.sh";
-my $unmergeScript = "$smrPath/scripts/unmerge-paired-reads.sh";
+my $mergeScript = getProgPaths("mergeRdScr");#"$smrPath/scripts/merge-paired-reads.sh";
+my $unmergeScript = getProgPaths("unmergeRdScr");#"$smrPath/scripts/unmerge-paired-reads.sh";
 my $spadesBin = getProgPaths("spades");#"/g/bork5/hildebra/bin/SPAdes-3.7.0-dev-Linux/bin/spades.py";
 my $ltslcaP = "$alignPath/ltsLCA/";
 my $singlMode = 0;

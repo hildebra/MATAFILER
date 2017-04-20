@@ -587,6 +587,8 @@ sub emptyQsubOpt{
 	else {$qmode = findQsubSys("");}
 	die "qsub system mode has to be \'lsf\' or \'sge\'!\n" if ($qmode ne "lsf" && $qmode ne "sge");
 	my $MFdir = getProgPaths("MFLRDir");
+	my $xtraNodeCmds = getProgPaths("subXtraCmd",0);
+	$xtraNodeCmds = "" unless (defined $xtraNodeCmds);
 	my %ret = (
 		rTag => randStr(3),
 		doSubmit => $doSubm,
@@ -596,6 +598,7 @@ sub emptyQsubOpt{
 		perl5lib => "$MFdir:\$PERL5LIB",
 		cpplib => "/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64",
 		tmpSpace => "30G",
+		xtraNodeCmds => $xtraNodeCmds,
 		qmode => $qmode,
 		#LOG => undef,
 	);
@@ -621,6 +624,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	my $memory = $mem;
 	my $rTag = $optHR->{rTag};
 	my $qmode = $optHR->{qmode};
+	my $xtraNodeCmds = $optHR->{xtraNodeCmds};
 	my @restrHosts = @{$restrHostsAR};
 	#different format for bsub
 	if ($memory =~ s/G$//){$memory *= 1024 * $ncores;};
@@ -655,6 +659,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	}
 	#set abortion on program fails
 	print O "set -e\n";
+	#any xtra commands (like module load perl?)
+	print O "$xtraNodeCmds\n";
 	#prevent core dump files
 	print O "ulimit -c 0\n";
 	#file location check availability
