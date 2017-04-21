@@ -1428,21 +1428,29 @@ sub detectRibo(){
 		my $ITSDBfa = getProgPaths("ITSdbFA");
 		my $ITSDBpref = $ITSDBfa;$ITSDBpref =~ s/\.fa*$//;
 		my $ITSDBidx = $ITSDBfa; $ITSDBidx =~ s/\.fa*$/\.idx/;
+		$ITSDBpref =~ m/\/([^\/]+)$/;
+		my $ITSfilePref = $1;
 		my @DBs = split(/,/,getProgPaths("srtMRNA_DBs"));
 		my @DBsIdx = @DBs;my @DBsTestIdx = @DBs; my $filesCopied = 1;
+		#die @DBs."@DBs\n";
+		if ( !-d $DBrna ){
+			$DBcmd .= "mkdir -p $DBrna\n";
+		}
 		for (my $ii=0;$ii<@DBsIdx;$ii++){
 			$DBsIdx[$ii] =~ s/\.fasta$/\.idx/;
 			$DBsTestIdx[$ii] =~ s/\.fasta$/\.idx\.kmer_0\.dat/;
-			$filesCopied=0 if ( !-e "$DBrna/rRNA_databases/$DBs[$ii]"  ||  !-e "$DBrna/rRNA_databases/$DBsTestIdx[$ii]"  );
+			if ( -e "$DBrna/rRNA_databases/$DBs[$ii]"  && -e "$DBrna/rRNA_databases/$DBsTestIdx[$ii]"  ){
+				next;
+			}
 			die "\nCould not find expected sortmerna file:\n$srtMRNA_path/rRNA_databases/$DBs[$ii]\n" if ( !-e "$srtMRNA_path/rRNA_databases/$DBs[$ii]"  );
 			if ( !-e "$srtMRNA_path/rRNA_databases/$DBsTestIdx[$ii]"  ){
 				$DBcmd .= "$srtMRNA_path./indexdb_rna --ref $srtMRNA_path/rRNA_databases/$DBs[$ii],$srtMRNA_path/rRNA_databases/$DBsIdx[$ii]\n";
 			}
+			$DBcmd .= "cp $srtMRNA_path/rRNA_databases/silva* $DBrna\n";
 		}
 		#die @DBs."@DBs\n";
-		if ( !-d $DBrna || !$filesCopied){
+		if (!-e "$DBrna/$ITSDBpref.idx.kmer_0.dat"){ #ITS DBs
 			$DBcmd .= "mkdir -p $DBrna\n";
-			$DBcmd .= "cp $srtMRNA_path/rRNA_databases/silva* $DBrna\n";
 			#$DBcmd .= "cp /g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.* $DBrna\n";
 			if (!-e "$ITSDBfa"){
 				print "Missing $ITSDBfa  ITS DB file!\n"; exit(32);
