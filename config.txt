@@ -160,4 +160,3 @@ ABRcard_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_Card/
 KEGG_path_DB	/g/bork3/home/hildebra/DB/FUNCT/KEGG/
 ACL_path_DB	/g/bork3/home/hildebra/DB/FUNCT/Aclame/
 
-ITS_DB_path	/g/bork3/home/hildebra/DB/MarkerG/ITS_combi

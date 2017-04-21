@@ -1425,7 +1425,9 @@ sub detectRibo(){
 		my $DBcores = 1;
 		$globalRiboDependence{DBcp}="alreadyCopied";
 		my $srtMRNA_path = getProgPaths("srtMRNA_path");
-		my $ITS_DB_path = getProgPaths("ITS_DB_path");
+		my $ITSDBfa = getProgPaths("ITSdbFA");
+		my $ITSDBpref = $ITSDBfa;$ITSDBpref =~ s/\.fa*$//;
+		my $ITSDBidx = $ITSDBfa; $ITSDBidx =~ s/\.fa*$/\.idx/;
 		my @DBs = split(/,/,getProgPaths("srtMRNA_DBs"));
 		my @DBsIdx = @DBs;my @DBsTestIdx = @DBs; my $filesCopied = 1;
 		for (my $ii=0;$ii<@DBsIdx;$ii++){
@@ -1442,10 +1444,13 @@ sub detectRibo(){
 			$DBcmd .= "mkdir -p $DBrna\n";
 			$DBcmd .= "cp $srtMRNA_path/rRNA_databases/silva* $DBrna\n";
 			#$DBcmd .= "cp /g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.* $DBrna\n";
-			if (!-e "$ITS_DB_path/ITS_comb.idx.kmer_0.dat"){
-				$DBcmd .= "$srtMRNA_path./indexdb_rna --ref $ITS_DB_path/ITS_comb.fasta,$ITS_DB_path/ITS_comb.idx\n";
+			if (!-e "$ITSDBfa"){
+				print "Missing $ITSDBfa  ITS DB file!\n"; exit(32);
 			}
-			$DBcmd .= "cp $ITS_DB_path/ITS_comb* $DBrna\n";
+			if (!-e "$ITSDBidx.kmer_0.dat"){
+				$DBcmd .= "$srtMRNA_path./indexdb_rna --ref $ITSDBfa,$ITSDBidx\n";
+			}
+			$DBcmd .= "cp ${ITSDBpref}* $DBrna\n";
 			#has to be noted that this doesn't need to happen again
 			#print "ribo DB already present\n";
 			

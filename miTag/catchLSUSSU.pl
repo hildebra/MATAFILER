@@ -75,7 +75,11 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	}
 	#die "File prep complete\n";
 	#my $refDBits = "/g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.fasta,/g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.idx";
-	my $refDBits = "$path2DB/ITS_comb.fa,$path2DB//ITS_comb.idx";
+	
+	my $ITSDBfa = getProgPaths("ITSdbFA"); $ITSDBfa =~ m/([^\/]+)$/; $ITSDBfa = $1; my $ITSDBidx = $ITSDBfa; $ITSDBidx =~ s/\.fa*$/\.idx/;
+
+	my $refDBits = "$path2DB/$ITSDBfa,$path2DB/$ITSDBidx";
+	
 	my $refDBssu = "$path2DB/silva-euk-18s-id95.fasta,$path2DB/silva-euk-18s-id95.idx:$path2DB/silva-bac-16s-id90.fasta,$path2DB/silva-bac-16s-id90.idx:$path2DB/silva-arc-16s-id95.fasta,$path2DB/silva-arc-16s-id95.idx";
 	my $refDBlsu = "$path2DB/silva-euk-28s-id98.fasta,$path2DB/silva-euk-28s-id98.idx:$path2DB/silva-bac-23s-id98.fasta,$path2DB/silva-bac-23s-id98.idx:$path2DB/silva-arc-23s-id98.fasta,$path2DB/silva-arc-23s-id98.idx";
 	#memory dependent on input file
@@ -84,13 +88,18 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 
 	my $curStone = "$alignPath/ITS_pull.sto";
 	unless (-e $curStone){
-		my $ltag = "reads_ITS";
-		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBits,$interLeave,$alignPath);print $runner."\n";
-		if (system $runner) {print "Error in $runner\n"; exit(90);}#unless (system $runner) {die "Failed\n$runner\n";}
-		#renameFastqCnts($alignPath."/reads_ITS.r1.fq",$smpN."__ITS"); renameFastqCnts($alignPath."/reads_ITS.r2.fq",$smpN."__ITS");
-		outfileCpy($tmpP."/$ltag",$alignPath);
-		system "rm -f $ltslcaP/ITS_ass.sto" if (-e " $ltslcaP/ITS_ass.sto"); #fwd destruction of assignments
-		system "touch $curStone" unless (`wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` != `wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` );
+		
+		if (-e "$path2DB/$ITSDBfa" && -e "$path2DB/$ITSDBidx"){
+			my $ltag = "reads_ITS";
+			my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBits,$interLeave,$alignPath);print $runner."\n";
+			if (system $runner) {print "Error in $runner\n"; exit(90);}#unless (system $runner) {die "Failed\n$runner\n";}
+			#renameFastqCnts($alignPath."/reads_ITS.r1.fq",$smpN."__ITS"); renameFastqCnts($alignPath."/reads_ITS.r2.fq",$smpN."__ITS");
+			outfileCpy($tmpP."/$ltag",$alignPath);
+			system "rm -f $ltslcaP/ITS_ass.sto" if (-e " $ltslcaP/ITS_ass.sto"); #fwd destruction of assignments
+			system "touch $curStone" unless (`wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` != `wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` );
+		} else {
+			print "Skipping ITS since DB could not be found\n" 
+		}
 	}
 
 	$curStone = "$alignPath/SSU_pull.sto";
