@@ -5,7 +5,7 @@ use warnings;
 use strict;
 use FileHandle;
 
-use Mods::TamocFunc qw(sortgzblast readTabbed uniq);
+use Mods::TamocFunc qw(sortgzblast readTabbed readTabbed2 uniq);
 use Mods::GenoMetaAss qw(gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
 use Getopt::Long qw( GetOptions );
@@ -21,6 +21,7 @@ sub readMohTax;
 sub combineBlasts;
 sub bestBlHit;
 sub help;
+sub fixCardMeta;
 sub readCzySubs;
 sub eggMap_interpret;
 my $emBin = getProgPaths("emapper");
@@ -31,30 +32,31 @@ my $emBin = getProgPaths("emapper");
 my $blInf = "";#$ARGV[0];
 my $mode = 0;#ARGV[3]
 my $DBmode = "NOG";#$ARGV[1];
-my $quCovFrac = 0; #how much of the query needs to be covered?
+my $quCovFrac = 0; #how much of the subject (DB) needs to be covered?
 my $noHardCatCheck = 0; #select for the hit with KO assignment rather than the real best hit (w/o KO assignment)
 
 #$DBmode = uc $DBmode;
 my $minBLE= 1e-7;#ARGV[2]
 my $minScore=0;#min required bit score
-my $minAlLen = 20; #my $minPidGlobal = 40;
+my $minAlLen = 30; #my $minPidGlobal = 40;
 my $tmpD="";#$ARGV[6]
 my $DButil = "";#$ARGV[5];
 my $lengthF = "";#$ARGV[4];
 my $reportEggMapp=0; #do eggNOG mapper?
 my $ncore = 4;
 my $writeSumTbls = 1; #report all the higher level stats?
-my $percID = 30;
+my $percID = 20;
 my $Card_leniet = 1; #take more CARD hits: eval^(1/$Card_leniet)
 my $calcGL = 1;
 my $noTax=0;
+my $KOfromNOG=0;
 
 die "no input args!\n" if (@ARGV == 0 );
 GetOptions(
 	"help|?" => \&help,
 	"i=s"      => \$blInf,
 	"DB=s"      => \$DBmode,
-	"mode=i"      => \$mode,#0=normal, 1=normal and print per gene anno, 2=file check 4=remove outputfile
+	"mode=i"      => \$mode,#0=normal, 1=normal and print per gene anno, 2=print extended per gene annotation, no summary,3=file check 4=remove outputfile
 	"eval=f"      => \$minBLE,
 	"minBitScore=f" => \$minScore,
 	"minAlignLen=i"      => \$minAlLen,
@@ -62,6 +64,7 @@ GetOptions(
 	"tmp=s"      => \$tmpD,
 	"DButil=s"	=> \$DButil,
 	"LF=s"	=> \$lengthF,
+	"KOfromNOG=i"	=> \$KOfromNOG,
 	"lenientCardAssignments=i" => \$Card_leniet,
 	"eggNOGmap=i"	=> \$reportEggMapp,
 	"summaryTbls=i" => \$writeSumTbls,
@@ -72,7 +75,7 @@ GetOptions(
 ) or die("Error in command line arguments\n");
 
 die "Database mode requires -tmp -minAlignLen -LF\n" if ( ($mode != 4 && $mode != 3) && ( $tmpD eq "" || $lengthF eq "" ) );
-#die "$tmpD XX\n";
+#die "$writeSumTbls XX\n";
 $reportEggMapp=0 if ($DBmode ne "NOG" );
 
 
@@ -131,7 +134,8 @@ my @aminPID = ($percID) x scalar(@aminBLE);
 
 my %NOGkingd ; my %KEGGtax;
 my %COGdef ;my %g2COG ; my %c2CAT ; 
-my %cardE; my %cardFunc; my %cardName;
+my %cardE; my %cardFunc; my %cardName; 
+my %cardFull;my %cardAux;
 my $tabCats = 0; my $cazyDB = 0; my $ACLdb = 0; my $KGMmode=0;
 if ($mode == 3 || $mode == 4){ #scan for all reads finished
 } elsif ( $DBmode eq "KGB" || $DBmode eq "KGE" || $DBmode eq "KGM"){
@@ -178,12 +182,24 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	@kgdName = ("","","","All");
 	@kgdNameShrt = ("","","","ALL");
 	print "ABR Card database\n";
-	my $hr = readTabbed($DButil."cardEval.txt");
-	%cardE = %{$hr};
-	$hr = readTabbed($DButil."cardClass.txt");
-	%cardFunc = %{$hr};
-	$hr = readTabbed($DButil."cardName.txt");
-	%cardName = %{$hr};
+	if (0){#old style dependant on full length gene predictions
+		my $hr = readTabbed($DButil."cardEval.txt");
+		%cardE = %{$hr};
+		$hr = readTabbed($DButil."cardClass.txt");
+		%cardFunc = %{$hr};
+		$hr = readTabbed($DButil."cardName.txt");
+		%cardName = %{$hr};
+	} else {
+		my ($hr,$MaxDepth) = readTabbed2($DButil."card.parsed.f11.tab.map",0);
+		$hr = fixCardMeta($hr);
+#		($hr,$MaxDepth) = readTabbed2($DButil."card.parsed.f11.txt",0);
+		%cardFull = %{$hr};
+#		%cardAux = %{$hr};
+		
+		#print $cardFull{"GI:CAP12351.2"}."\n";
+		#die $cardFull{"796891.PRJNA163057.ATYY01000007_gene147"}."\n";
+
+	}
 	$tabCats=5;
 } else{
 	@kgdOpts = qw (3);
@@ -202,7 +218,7 @@ if ($noTax){
 
 #read DB file
 my $readLim = 1000000; my $lcnt=0;my $lastQ=""; my $stopInMiddle=0; my $reportGeneCat=0;
-my $mergeDiaHit =0; 
+my $mergeDiaHit =0;  my $noMerge=0;
 my %COGhits; my %CAThits; my %GENEhits; my $O2; my %OEM;
 my %emFiles ; my %emFilesFinal;
 for (my $i=0; $i<@aminBLE ; $i++){$COGhits{$i} = {}; $CAThits{$i} = {}; $GENEhits{$i} = {};}
@@ -275,11 +291,12 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 	}
 	close $I;
 	close $O2 if ($reportGeneCat);
+	
 	if ($reportEggMapp){foreach my $kk (keys %OEM){	close $OEM{$kk}}}
-	print"writing Tables\n";
 	
 	
 	if ($writeSumTbls){
+		print"writing Tables\n";
 		for (my $i=0; $i<@aminBLE ; $i++){
 			my $pathXtra = "/CNT_".$aminBLE[$i]."_".$aminPID[$i]."/";
 			my $outPath = $inP.$pathXtra;
@@ -289,7 +306,8 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 		}
 	}
 	system "touch $blInf.stone";
-	print "Merged $mergeDiaHit Diamond hits from DB\n";
+	$noMerge /= 2; $mergeDiaHit /= 2;
+	print "Merged $mergeDiaHit Diamond hits from DB, $noMerge hits were singletons\n";
 	print "all done\n" if ($mode <3);
 	
 	exit(0);
@@ -315,6 +333,18 @@ if ($mode ==3){
 
 #print "all done\n";
 exit(0);
+
+sub fixCardMeta($){
+	my ($hh)=@_; my %dd = %{$hh};
+	foreach my $k (keys %dd){
+		#print "$dd{$k}->[1]    ";
+		$dd{$k}->[1] =~ s/\s/\_/g;
+		$dd{$k}->[1] =~ s/-/\./g;
+		$dd{$k}->[1] =~ s/[^A-Za-z0-9\.\_\(\)]//g;
+		#print "$dd{$k}->[1]\n";
+	}
+	return (\%dd);
+}
 
 sub splitandadd($ $ $){
 	my ($hr,$terms,$shareEffect) = @_;
@@ -359,7 +389,13 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 	my $cmd = "rm $oFil.1* \n";
 	$cmd .= "$emBin -d none --cpu $ncore --no_search --temp_dir $tmpD --no_file_comments --override --no_refine --annotate_hits_table $tmpEM -o $oFil.1\n" ;
 	system "$cmd\n";
-	print $cmd."\n";
+	#$print $cmd."\n";
+	if (-e "/g/bork1/huerta/_soft/eggnog-mapper-bigg/emapper.py" && $KOfromNOG){
+		$cmd = "/g/bork1/huerta/_soft/eggnog-mapper-bigg/emapper.py --big /g/bork1/huerta/_shared/kegg77_to_egggnog.m8.emapper_table 95 9 -d none -o $oFil.2 --annotate_hits_table $tmpEM";
+		print $cmd."\n";
+		system $cmd;
+		
+	}
 	
 	#objects to count on higher level
 	my %GOs; my %Kmaps; my %COGcats;
@@ -433,6 +469,7 @@ sub check_files{
 
 sub writeAllTable(){
 	my ($outF,$outD,$minBLE,$minPID,$pos) = @_;#,$hr1,$hr2,$hr3) = @_;
+	#die "X";
 	system "mkdir -p $outD" ;#or die "Failed to create out dir $outD\n";
 	my $out = $outD."/".$outF;
 	system "rm -f $out*";
@@ -452,7 +489,6 @@ sub writeAllTable(){
 				foreach my $k (@kk){print $O $k."\t".$funHit{$normMethod}{$y}{$k}."\n";}
 				close $O;
 			}
-				
 			if ($tabCats != 2 ){#all but KO & CZy
 				@kk = sort { $COGabundance{$normMethod}{$y}{$b} <=> $COGabundance{$normMethod}{$y}{$a} } keys(%{$COGabundance{$normMethod}{$y}});
 				$O = gzipwrite("$out.$DBmode.$kgdNameShrt[$y].$normMethod.cat.cnts","Dia cat $y Counts");
@@ -516,25 +552,31 @@ sub main(){
 	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; my $bestBitScpre=0;
 	
 	for( ;$ii<@blRes;$ii++){
-		#print "@{$blRes[$ii]}[0]\n";
+		#print "@{$blRes[$ii]}\n";
 		my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
 		#print $eval."\n";
 		#sort by eval #changed from bestE -> bestScore
-#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
+		#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
+		#die "Can't find ABRc ID $Subject\n" if ($tabCats==5 && !exists($cardFull{$Subject}) );#|| $cardFull{$Subject}->[2] eq "");
+		next if ($tabCats==5 && !exists($cardFull{$Subject}) );#expected to be missing non relevant 
+		#if ($Query eq "NZ_CP014348.1_194"){
+		#	print "$Query\n$bitSc>=".($cardFull{$Subject}->[3])*($AlLen/$SbjLen)."\n ${$cardFull{$Subject}}[3]  $AlLen /  $SbjLen\n@{$cardFull{$Subject}}\n";
+		#}
 		if ( ($eval <= $minBLE && $bitSc >= $minScore)
 					&& ($AlLen >= $minAlLen)
 					&& ($id >= $minPid)
 					&& ($quCovFrac == 0 || $AlLen > $SbjLen*$quCovFrac) 
 					&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject})
-					&& ($tabCats!=5 || $eval <= ($cardE{$Subject}**(1/$Card_leniet)) ) #Card
+					&& ($tabCats!=5 ||  $bitSc >= ($cardFull{$Subject}->[3]*$AlLen/$SbjLen)  )  #$eval <= ($cardE{$Subject}**(1/$Card_leniet)) ) #Card
+					#&& $Subject =~ m/^GI:/ #ABRc specific
 					) {
 					#now decide if the hit itself is actually better
 					
 			if (($bestID -5)< $id && $bestE*10 > $eval &&
 					( $id >= ($bestID *0.97) && $id >= $bestIDever*0.9   && ( $AlLen >= $bestAlLen * 1.15 ) )  ||  #length is just better (15%+)
 					(   ($id >= $bestID *1.03) && ( $AlLen >= $bestAlLen * 0.9) ) ||#id is just better, while length is not too much off
-					$bitSc > $bestBitScpre*0.8){   #convincing score
-						
+					$bitSc > $bestBitScpre*0.8
+					){   #convincing score
 						$fndCat =1; 
 						$bestSbj =$Subject; 
 						$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
@@ -599,11 +641,18 @@ sub main(){
 		print  {$OEM{$curKgd}} "$bestQuery\t$bestSbj\t$bestE\t$bestBitScpre\n" ;
 	}
 	my $lpCnt=0;
-	my $score = 1;
-	if ($bestQuery =~ m/\/12$/){
+	my $score = 0;
+	if ($bestQuery =~ m/\/[12]$/){
+		$noMerge++;
+		$score=1;
+	} else {
 		$mergeDiaHit ++ ; $score = 2 ;
-	}elsif ($tabCats==5){#ABR CARD
-		$curCOG = $cardName{$bestSbj};
+		#print "HIT";
+	}
+	
+	if ($tabCats==5){#ABR CARD
+		#$curCOG = $cardName{$bestSbj};
+		$curCOG = $cardFull{$bestSbj}->[1];
 	}elsif ($tabCats == 2){ #KEGG
 		if (exists $c2CAT{$bestSbj} ){
 			$curCat = $c2CAT{$bestSbj}; $CATexist++;
@@ -641,7 +690,8 @@ sub main(){
 			}
 		} elsif ($tabCats==5){#ABR CARD
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
-			my @curCats = split /,/,$cardFunc{$bestSbj};
+			my @curCats = split(/,\s*/,$cardFull{$bestSbj}->[2]);
+			#die "@curCats\n";
 			foreach my $cCt (@curCats){
 				$CATabundance{$normMethod}{$curKgd}{$cCt}+= $score;
 			}
@@ -651,8 +701,12 @@ sub main(){
 			}
 		} elsif ($tabCats==3){  #CAZy
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
-			die "$curCOG\n" unless (exists ($czySubs{$curCOG}));
-			my @subs = @{$czySubs{$curCOG}};
+			my @subs = ();
+			if (exists ($czySubs{$curCOG})){
+				@subs = @{$czySubs{$curCOG}};
+			} else {
+				print "missing cur subject $curCOG\n" ;
+			}
 			#print "@subs\n";
 			foreach my $cCt (@subs){
 				#print "$cCt ";

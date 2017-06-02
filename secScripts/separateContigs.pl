@@ -89,7 +89,7 @@ if ($subparts =~ m/e/ && !-e "$outDFMG/FMGids.txt"){
 	if ( !-s "$outDFMG/COG0012.faa" && !-s "$outDFMG/COG0016.faa"){
 		systemW $cmd;
 	}
-	system "rm  -rf $inD/assemblies/metag/genePred/*.cidx $outDFMG/temp $outDFMG/hmmResults";
+	system "rm  -rf $assD/genePred/*.cidx $outDFMG/temp $outDFMG/hmmResults";
 	############################### essential 100 proteins ###############################
 	
 	getE100($oDess,$proteins,$genesNT);

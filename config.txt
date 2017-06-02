@@ -27,7 +27,7 @@ essentialEUK	[MFLRDir]/DB/eukCore.hmm
 #		SNPs / tree building - not public currently
 pal2nal	perl /g/bork3/home/hildebra/bin/pal2nal.v14/pal2nal.pl
 phyml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/phyml
-raxml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/raxmlHPC-PTHREADS-SSE3
+raxml	/g/bork3/home/hildebra/bin/RAxML/raxmlHPC-PTHREADS-SSE3
 msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
@@ -35,6 +35,9 @@ trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
 #     experimental
 sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
 br2dCnt	/g/bork3/home/hildebra/bin/bam-readcount/bin/./bam-readcount
+seqtk	/g/bork3/home/hildebra/bin/seqtk/seqtk
+bam2cns	/g/bork3/home/hildebra/bin/proovread/bin/bam2cns
+treeDistScr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/bin/distv9.pl
 
 
 
@@ -75,6 +78,7 @@ nonpareil	/g/bork5/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage seq
 hmmer3	/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
 mmseqs2	/g/bork3/home/hildebra/bin/mmseqs2/bin/mmseqs   #experimental clustering of genes
 growthP	python /g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
+rnammer	/g/bork5/hildebra/bin/rna_mmer/./rnammer
 
 #no longer used
 #usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
@@ -120,7 +124,7 @@ sepCts_scr	perl [MFLRDir]/secScripts/separateContigs.pl
 assStat_scr	perl [MFLRDir]/secScripts/assemblathon_stats.pl
 renameCtg_scr	[MFLRDir]/secScripts/renameCtgs.pl
 sizFilt_scr	perl [MFLRDir]/secScripts/sizeFilterFas.pl
-buildTree_scr	[MFLRDir]/helpers/buildTree.pl
+buildTree_scr	perl [MFLRDir]/helpers/buildTree3.pl
 sizSplit_scr	[MFLRDir]/secScripts/splitFNAbyLength.pl
 contigKgdSplit_scr	[MFLRDir]/secScripts/sortCtgKingdom.pl
 calcGC_scr	[MFLRDir]/secScripts/calcGC.pl

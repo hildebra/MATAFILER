@@ -28,12 +28,14 @@ foreach my $k (keys %FNA){
 	}
 }
 writeFasta(\%FNA ,$inFNA) if ($fnaChg);
-my $inP = $inFNA; $inP =~ s/[^\/]+$//;
+my $inP = $inFNA; $inP =~ s/([^\/]+)$//;
+my $baseF = $1; $baseF =~ s/\.[^\.]+$//;
 my $oDess = $inP."e100/"; system "mkdir -p $oDess" unless (-d $oDess);
 
 if ( !-e "$oDess/alle100.fna"){
 	getE100($oDess,$inFAA,$inFNA);
 	systemW("cat $oDess/*.fna >$oDess/alle100.fna") unless (-e "$oDess/alle100.fna");
 }
-my $cmd = "$growthBin -f $oDess/alle100.fna -g $inFNA -c 0 -T 37 -s -S --tmp $tmpDir";
-die "$cmd\n";
+my $cmd = "$growthBin -f $oDess/alle100.fna -o $inP$baseF.grPred -g $inFNA -c 0 -T 37 -s -S --tmp $tmpDir";
+if (system ($cmd)){ die "Couldn't execute command\n$cmd\n";}
+

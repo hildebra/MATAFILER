@@ -7,10 +7,9 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(sortgzblast uniq getE100 readTabbed readTabbed2 getSpecificDBpaths);
-use Mods::GenoMetaAss qw(systemW readFasta);
+our @EXPORT_OK = qw(runRaxML sortgzblast uniq getE100 getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
+use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
-
 
 
 sub readTabbed($){
@@ -25,15 +24,24 @@ sub readTabbed($){
 	close It;
 	return \%ret;
 }
-sub readTabbed2($ $){
-	my ($inF,$useLast) = @_;
+sub readTabbed2{
+	my $inF = $_[0];
+	my $useLast = 0;
+	$useLast = $_[1] if (@_>1);#not used currently
+	
 	my %ret;my $maxDepth=0;
 	open It,"<$inF" or die "Cant open tabbed infile $inF\n";
 	
 	while (<It>){
 		chomp;
 		my @spl = split /\t/;
-		my $ke = pop @spl;
+		my $ke;
+		if ($useLast==1){
+			$ke	= pop @spl;
+		} else {
+			$ke	= shift @spl;
+		}
+		#print "$ke\n";
 		#print $ke." ";
 		$ret{$ke} = \@spl;
 		#die "@spl\n";
@@ -60,7 +68,7 @@ sub getSpecificDBpaths($ $){
 	elsif ($curDB eq "MOH"){$DBpath = getProgPaths("Moh_path_DB"); $refDB = "Extra_functions.fna";$shrtDB = $curDB;}
 	elsif ($curDB eq "CZy"){$DBpath = getProgPaths("CAZy_path_DB"); $refDB = "Cazys_2015.fasta";$shrtDB = $curDB;}
 	elsif ($curDB eq "ABR"){$DBpath = getProgPaths("ABRfors_path_DB"); $refDB = "ardb_and_reforghits.fa";$shrtDB = $curDB;}
-	elsif ($curDB eq "ABRc"){$DBpath = getProgPaths("ABRcard_path_DB"); $refDB = "f11_and_card.faa";$shrtDB = $curDB; }
+	elsif ($curDB eq "ABRc"){$DBpath = getProgPaths("ABRcard_path_DB"); $refDB = "card.parsed.f11.faa";$shrtDB = $curDB; }
 	elsif ($curDB eq "KGE"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "genus_eukaryotes.pep";$shrtDB = $curDB; }
 	elsif ($curDB eq "KGB"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "species_prokaryotes.pep";$shrtDB = $curDB; }
 	elsif ($curDB eq "ACL"){$DBpath = getProgPaths("ACL_path_DB");$refDB = "aclame_proteins_all_0.4.fasta";$shrtDB = $curDB; }
@@ -74,50 +82,6 @@ sub getSpecificDBpaths($ $){
 	return ($DBpath ,$refDB ,$shrtDB );
 }
 
-
-sub getE100($ $ $){
-	my ($oDess,$proteins,$genesNT) = @_;
-	my $hmmbin = getProgPaths("hmmsearch");#"/g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries/hmmsearch";
-	my $essDB = getProgPaths("essentialHMM");#"/g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/essential.hmm";
-	my $essEukDB = getProgPaths("essentialEUK");#"/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
-	systemW("mkdir -p $oDess");
-	my $cmd = "";
-	$cmd .= "$hmmbin --domtblout $oDess/assembly.hmm.orfs.txt -o $oDess/assembly.hmmsout.txt --cut_tc --cpu 1 --notextw $essDB $proteins\n";
-	$cmd .= "tail -n+4 $oDess/assembly.hmm.orfs.txt | sed \'s/\\s\\s*/ /g\' | sed \'s/^#.*//g\' | cut -f1,4 -d \" \" > $oDess/ess100.id.txt\n";
-
-	if (!-s "$oDess/ess100.id.txt" && !-e "$oDess/e100split.sto"){
-		print "\nDetecting 100 essential proteins\n";
-		systemW $cmd ."\n";
-	}
-	my $protIDss = `cut -f1 -d " " $oDess/ess100.id.txt `;
-	my $protClsTmp = `cut -f2 -d " " $oDess/ess100.id.txt `;
-	my @protIDs = split("\n",$protIDss);
-	my @protCls = split("\n",$protClsTmp);
-	my $phr = readFasta("$proteins");
-	my $ghr = readFasta("$genesNT");
-	my %prots = %{$phr}; my %essProt;
-	my %genes = %{$ghr};
-
-	my %seen;
-	#split 100 essentials into separate files for each gene class
-	#my @unique = grep { ! $seen{$_}++ } @faculty;
-	foreach ( grep { ! $seen{$_}++ } @protCls){
-		open O,">$oDess/pe100_".$_.".faa";	close O;
-		open O,">$oDess/ge100_".$_.".fna";	close O;
-	}
-	for (my$i=0;$i<@protIDs;$i++){
-		my $id = $protIDs[$i];
-		next if ($id eq "");
-		if (!exists($prots{$id})){die "Can't find $id protein in file $proteins\n";}
-		if (!exists($genes{$id})){die "Can't find $id protein in file $proteins\n";}
-		open O,">>$oDess/pe100_".$protCls[$i].".faa" or die "Can't open $oDess/pe100_$protCls[$i].faa";
-		print O ">$id\n$prots{$id}\n";
-		close O;
-		open O,">>$oDess/ge100_".$protCls[$i].".fna"or die "Can't open $oDess/ge100_$protCls[$i].faa";
-		print O ">$id\n$genes{$id}\n";
-		close O;
-	}
-}
 
 sub uniq {
     my %seen;

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
-#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree.pl /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ 12 0 0.8
-#ARGS: ./buildTree.pl [FNA] [FAA] [categoryFile] [outDir] [CPUs] [useEte? [1=ETE,0=this script]] [filter, ignore]
+#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 1 -SynTree 1
+#ARGS: ./buildTree.pl [FNA] [FAA] [categoryFile] [outDir] [CPUs] [useEte? [1=ETE,0=this script]] [filter]
 
 use warnings;
 use strict;
@@ -10,11 +10,13 @@ use threads ('yield',
                  'stringify');
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::GenoMetaAss qw( systemW readFasta);
+use Getopt::Long qw( GetOptions );
 
 
 sub convertMultAli2NT;
 sub mergeMSAs;
 sub synPosOnly;
+sub runRaxML;
 
 my $doPhym= 0;
 
@@ -36,10 +38,32 @@ my $pigzBin  = getProgPaths("pigz");
  my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
  if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
 
-my $ntCnt =0;
-if (@ARGV < 2){die "Not enough input args!!!\n";}
-my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt) = @ARGV;
+my $ntCnt =0; my $bootStrap=0;
+my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn) = ("","","","",12,0,0.8,1,"_",1,0);
+my $outgroup="";
+
+die "no input args!\n" if (@ARGV == 0 );
+
+
+GetOptions(
+	"fna=s" => \$fnFna,
+	"aa=s"      => \$aaFna,
+	"cats=s"      => \$cogCats,
+	"outD=s"      => \$outD,
+	"cores=i" => \$ncore,
+	"useEte=i"      => \$Ete,
+	"NTfilt=f"      => \$filt,
+	"smplDef=i"	=> \$smplDef, #is the genome somehow quantified with a delimiter (_) ?
+	"smplSep=s" => \$smplSep, #set the delimiter
+	"outgroup=s"	=> \$outgroup,
+	"NonSynTree=i"	=> \$calcNonSyn,
+	"SynTree=i"	=> \$calcSyn,
+	"bootstrap=i" => \$bootStrap,
+) or die("Error in command line arguments\n");
+
 if ($filt <1){$ntFrac=$filt; print "Using filter with $ntFrac fraction of nts\n";}
+if ($outgroup ne ""){print "Using outgroup $outgroup\n";}
+if ($bootStrap>0){print "Using bootstrapping in tree building\n";}
 else {$ntCnt = $filt;}
 my $tmpD = $outD;
 system "mkdir -p $outD" unless (-d $outD);
@@ -47,46 +71,68 @@ my $cmd =""; my %usedGeneNms;
 
 #------------------------------------------
 #sorting by COG, MSA & syn position extraction
-
 if (!$Ete){
 	my $treeD = "$outD/TMCtree/";
-	my $raxD = "$treeD";
-	my $raxLogD = "$raxD/Logs/";
 	system "rm -fr $treeD" if (-d $treeD);
-	system "mkdir -p  $raxLogD" unless (-d $raxLogD);
 	system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
 	my $multAli = "$outD/MSA/MSAli.fna";
 	my $multAliSyn = $multAli.".syn.fna";
+	my $multAliNonSyn = $multAli.".nonsyn.fna";
 
-	my @MSAs; my @MSAsSyn;#full MSAs and MSAs with syn pos only
-	my @MSrm;
+	my @MSAs; my @MSAsSyn; my @MSAsNonSyn;#full MSAs and MSAs with syn / nonsyn pos only
+	my @MSrm; 
+	my %FAA ; my %FNA ;
 	#my @xx = keys %FAA; die "$xx[0] $xx[1]\n$FAA{HM29_COG0185}\n";
 	if (1 && $cogCats ne ""){
-		my $hr = readFasta($aaFna); my %FAA = %{$hr};
-		$hr = readFasta($fnFna); my %FNA = %{$hr};
+		my $hr = readFasta($aaFna,1); my %FAA = %{$hr};
+		#die $FAA{"642204217"}."\n";
+		$hr = readFasta($fnFna,1); my %FNA = %{$hr};
+		print "ReadFasta\n";
 		open I,"<$cogCats" or die "Can't open cogcats $cogCats\n";
 		my $cnt = 0; 
-		my %samples; my %genCats;
+		my %samples; my $ogrpCnt=0;#my %genCats; 
 		while (<I>){
 			chomp; my @spl = split /\t/;
+			@spl = grep !/NA/, @spl;#remove NAs
 			next if (@spl ==0);
-			my @spl2 = split /_/,$spl[0] ;
+			$spl[0] =~ m/^(.*)$smplSep(.*)$/;
+			my @spl2 = ($1,$2);#split /$smplSep/,$spl[0] ;
+			my $ogrGenes = "";
+			if ($outgroup ne ""){
+				foreach my $seq (@spl){
+					#my @spl3 = split /$smplSep/,$seq ; 
+					$seq =~ m/^(.*)$smplSep(.*)$/;#my @spl3 =($1,$2);
+					if ($1 eq $outgroup){$ogrGenes = $seq; $ogrpCnt ++ ; last;}
+				}
+			}
+			
+			#die "$ogrGenes $spl2[0]   $spl2[1] \n";
+			
 			die "Double gene name in tree build pre-concat: $spl2[1]\n" if (exists($usedGeneNms{$spl2[1]}));
 			$usedGeneNms{$spl2[1]} = 1;
+			
 			my $tmpInMSA = "$tmpD/inMSA$cnt.faa";
 			my $tmpInMSAnt = "$tmpD/inMSA$cnt.fna";
 			my $tmpOutMSA2 = "$outD/MSA/$spl2[1].$cnt.faa";
 			my $tmpOutMSA = "$outD/MSA/$spl2[1].$cnt.fna";
 			my $tmpOutMSAsyn = "$tmpD/MSA/$spl2[1].$cnt.syn.fna";
+			my $tmpOutMSAnonsyn = "$tmpD/MSA/$spl2[1].$cnt.nonsyn.fna";
 			open O,">$tmpInMSA" or die "Can;t open tmp faa file for MSA: $tmpInMSA\n";
 			open O2,">$tmpInMSAnt" or die "Can;t open tmp fna file for MSA: $tmpInMSAnt\n";
 			foreach my $seq (@spl){
-				my @spl2 = split /_/,$seq; $genCats{$spl2[1]} = 1; $samples{$spl2[0]} = 1;
+				#print "$seq\n";
+				#my @spl2 = split /$smplSep/,$seq; 
+				my $seq2 = $seq;
+				if (!$smplDef){#create artificial head tag
+					#TODO.. don't need it now for tec2, since no good NCBI taxid currently...
+				}
+				$seq2 =~ m/^(.*)$smplSep(.*)$/;#my @spl2 =($1,$2);
+				$samples{$1} = 1; #$genCats{$spl2[1]} = 1; 
 				die "can't find AA seq $seq\n" unless (exists ($FAA{$seq}));
 				die "can't find fna seq $seq\n" unless (exists ($FNA{$seq}));
 				$FAA{$seq} =~ s/\*//g if (!$clustalUse);
-				print O ">$seq\n$FAA{$seq}\n";
-				print O2 ">$seq\n$FNA{$seq}\n";
+				print O ">$seq2\n$FAA{$seq}\n";
+				print O2 ">$seq2\n$FNA{$seq}\n";
 			}
 			close O;close O2;
 			if ($clustalUse){
@@ -100,19 +146,25 @@ if (!$Ete){
 			convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
 			
 			#die("XX\n") if ($spl2[1] eq "COG0081");
-			synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,0);
+			($tmpOutMSAsyn,$tmpOutMSAnonsyn) = synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,$ogrGenes,$calcSyn,$calcNonSyn);
 			system "rm -f $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
 			push (@MSAs,$tmpOutMSA);
-			push (@MSAsSyn,$tmpOutMSAsyn);
+			push (@MSAsSyn,$tmpOutMSAsyn) if ($tmpOutMSAsyn ne "");
+			push (@MSAsNonSyn,$tmpOutMSAnonsyn) if ($tmpOutMSAnonsyn ne "");
+			
 			push (@MSrm,$tmpOutMSA2,$tmpOutMSA);
 			$cnt ++;
 			print "$cnt ";
+
 		}
 		close I;
+		if ($outgroup ne ""){print "Found $ogrpCnt of $cnt outgroup sequences\n";}
 		#die;
 		#merge cogcats - can go to tree from here
 		mergeMSAs(\@MSAs,\%samples,$multAli,0);
-		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1);
+		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1) if ($calcSyn);
+		mergeMSAs(\@MSAsNonSyn,\%samples,$multAliNonSyn,1) if ($calcNonSyn);
+		
 		#die();
 		system "rm -f ".join(" ",@MSrm)." ".join(" ",@MSAsSyn); 
 	} elsif (1) {#no marker way, single gene
@@ -121,6 +173,7 @@ if (!$Ete){
 		my $tmpOutMSA2 = "$tmpD/outMSA.faa";
 		my $tmpOutMSA = $multAli;#"$tmpD/outMSA.fna";
 		my $tmpOutMSAsyn = $multAliSyn;#"$tmpD/outMSA.syn.fna";
+		my $tmpOutMSAnonsyn = $multAliNonSyn;
 		my $numFas = `grep -c '^>' $tmpInMSA`;
 		chomp $numFas;
 		if ($numFas <= 1){print "Not enough Sequences\n"; exit(0);}
@@ -133,7 +186,7 @@ if (!$Ete){
 		#die $cmd;
 		system $cmd; print "finished MSA\n";
 		convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
-		synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,0);
+		synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,"",$calcSyn,$calcNonSyn);
 		#system "rm $tmpInMSA $tmpInMSAnt $tmpOutMSA2";
 		system "rm $tmpOutMSA2";
 		push (@MSAs,$tmpOutMSA);
@@ -145,54 +198,21 @@ if (!$Ete){
 	#Tree building part with RaxML
 	#die $multAli."\n";
 	#convert fasta again
-	my $nwkFile = "$treeD/tree_phyml_all.nwk";
-	my $nwkFile2 = "$treeD/tree_phyml_syn.nwk";
 	
-	my $raTmpF = "RXMtmp"; my $raxFile = "RXMall";
-	my $raxFile2 = "RXMsyn";
 	my @thrs;
 	my $tcmd = "$fastq2phylip -c 50 $multAli > $multAli.ph\n";
-	$tcmd .= "$fastq2phylip -c 50 $multAliSyn >$multAliSyn.ph\n";
+	$tcmd .= "$fastq2phylip -c 50 $multAliSyn >$multAliSyn.ph\n" if ($calcSyn);
+	$tcmd .= "$fastq2phylip -c 50 $multAliNonSyn >$multAliNonSyn.ph\n"if ($calcNonSyn);
 	if (system $tcmd) {die "fasta2phylim failed:\n$tcmd\n";}
-
-	my $raxDef = " --silent -m GTRGAMMA";
-	#raxml - on all sites
-	$tcmd="";
-	if (1){
-		$tcmd =  "$raxmlBin -T$ncore -f d -p 31416 -s $multAli.ph $raxDef -n $raTmpF -w $raxD > $raxLogD/ini.log\n";
-		if (system $tcmd){#failed.. prob optimization problem, use other tree instead
-			$raxDef = " --silent -m GTRGAMMAI";
-			system "rm $raxD/*$raTmpF";
-			systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
-			#system "mv $raxD/RAxML_bestTree.$raTmpF $raxD/RAxML_fastTreeSH_Support.$raxFile";
-		}
-		systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAli.ph $raxDef -n $raxFile -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
-		systemW  "$raxmlBin -T$ncore -f x -p 31416 -s $multAli.ph $raxDef -n all -w $raxD -t $raxD/RAxML_bestTree.$raTmpF > $raxLogD/optimized.log\n";
-		#push(@thrs, threads->create(sub{system $tcmd;}));
-	}
-	#reset to GTRGAMMA model
-	$raxDef = " --silent -m GTRGAMMA";
-	
-	
-	#raxml - on syn sites only
-	$tcmd = "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph $raxDef -n $raTmpF.s -w $raxD  > $raxLogD/ini_syn.log\n";
-	if (system $tcmd){#failed.. prob optimization problem, use other tree instead
-		$raxDef = " --silent -m GTRGAMMAI";
-		system "rm $raxD/*$raTmpF.s";
-		$tcmd= "$raxmlBin -T$ncore -f d -p 31416 -s $multAliSyn.ph $raxDef -n $raTmpF.s -w $raxD  > $raxLogD/ini_syn.log\n";
-		print $tcmd."\n\n\n";
-		systemW $tcmd;
-		#system "mv $raxD/RAxML_bestTree.$raTmpF.s $raxD/RAxML_fastTreeSH_Support.$raxFile2";
-		#print "Fallback to original optimized tree\n";
-	}
-	systemW "$raxmlBin -T$ncore -f J -p 31416 -s $multAliSyn.ph $raxDef -n $raxFile2 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
-	systemW "$raxmlBin -T$ncore -f x -p 31416 -s $multAliSyn.ph $raxDef -n syn -w $raxD -t $raxD/RAxML_bestTree.$raTmpF.s > $raxLogD/optimized_syn.log\n";
-#die $tcmd."\n";	
-	#push(@thrs, threads->create(sub{system $tcmd;}));
-	
+	my $BStag = ""; if ($bootStrap>0){$BStag="_BS$bootStrap";}
+	runRaxML("$multAli.ph",$bootStrap,$outgroup,"$treeD/RXML_allsites$BStag.nwk");
+	runRaxML("$multAliSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_syn$BStag.nwk") if ($calcSyn);
+	runRaxML("$multAliNonSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_nonsyn$BStag.nwk") if ($calcNonSyn);
 
 	#phyml
 	if ($doPhym){
+		my $nwkFile = "$treeD/tree_phyml_all.nwk";
+		my $nwkFile2 = "$treeD/tree_phyml_syn.nwk";
 		$tcmd = "$phymlBin --quiet -m GTR --no_memory_check -d nt -f m -v e -o tlr --nclasses 4 -b 2 -a e -i $multAli.ph > $nwkFile\n";
 		push(@thrs, threads->create(sub{system $tcmd;}));
 		$tcmd = "$phymlBin --quiet -m GTR --no_memory_check -d nt -f m -v e -o tlr --nclasses 4 -b 2 -a e -i $multAliSyn.ph > $nwkFile2\n";
@@ -202,9 +222,7 @@ if (!$Ete){
 		my $state = $thrs[$t]->join();
 		if ($state){die "Thread $t exited with state $state\nSomething went wrong with RaxML\n";}
 	}
-	system "rm  $multAli.ph $multAliSyn.ph $raxD/*_info* $raxD/*_log* $raxD/*_parsimony* $raxD/*_result*";
-	system "mv $raxD/RAxML_fastTreeSH_Support.$raxFile2 $raxD/RXML_sym.nwk";
-	system "mv $raxD/RAxML_fastTreeSH_Support.$raxFile $raxD/RXML_allsites.nwk";
+	system "rm  $multAli.ph $multAliSyn.ph ";
 	
 	#die "$distTree_scr -d -a --dist-output $raxD/distance.syn.txt $raxD/RXML_sym.nwk\n";
 
@@ -218,7 +236,7 @@ if (!$Ete){
 	print " Done.\n$outD/tree\n";
 }
 
-print "All done \n\n";
+print "All done: $outD \n\n";
 exit(0);
 
 
@@ -235,6 +253,52 @@ exit(0);
 
 ##########################################################################################
 ##########################################################################################
+
+sub runRaxML{
+	my ($mAli,$bootStrap,$outgroup,$outTree) = @_;
+	my ($raTmpF,$raTmpF2,$raTmpF3) = ("RXMtmp","R2XM","RX3M"); #my $raxFile = "RXMall";
+#	my $raxFile2 = "RXMsyn";
+	my $raxD = $outTree; $raxD =~ s/[^\/]+$/tmp\//;
+	my $raxLogD= $outTree; $raxLogD =~ s/[^\/]+$/Logs\//;
+	system "mkdir -p  $raxLogD" unless (-d $raxLogD);
+	system "rm -rf $raxD;mkdir -p $raxD";
+	my $outGrpRXML = "";
+	if ($outgroup ne ""){$outGrpRXML = "-o $outgroup";}
+	my $raxDef = " --silent -m GTRGAMMA -p 312413 ";
+	#raxml - on all sites
+	my $tcmd="";
+	my $bootCmd = "";
+	if ($bootStrap > 0){$bootCmd.= "-N $bootStrap -b ". int(rand(10000));}
+	$tcmd =  "$raxmlBin -T$ncore -f d -s $mAli $raxDef -n $raTmpF -w $raxD $outGrpRXML > $raxLogD/ini.log\n";
+	#die "$tcmd\n";
+	if (system $tcmd){#failed.. prob optimization problem, use other tree instead
+		$raxDef = " --silent -m GTRGAMMAI -p 312413 ";	system "rm $raxD/*$raTmpF";
+		systemW "$raxmlBin -T$ncore -f d -p 31416 -s $mAli $raxDef -n $raTmpF -w $raxD $outGrpRXML > $raxLogD/optimized.log\n";
+	}
+	#decide which support vals to calc
+	if ($bootStrap==0){
+		systemW "$raxmlBin -T$ncore -f J -s $mAli $raxDef -n $raTmpF3 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF $outGrpRXML > $raxLogD/optimized.log\n";
+		system "mv $raxD/RAxML_fastTreeSH_Support.$raTmpF3 $outTree";
+	} else {
+		systemW  "$raxmlBin -T$ncore -f d  -s $mAli $raxDef -n $raTmpF2 -w $raxD $bootCmd $outGrpRXML > $raxLogD/ini.log\n";
+		systemW  "$raxmlBin -T$ncore -f b  -s $mAli $raxDef -n $raTmpF3 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF -z $raxD/RAxML_bootstrap.$raTmpF2 $outGrpRXML > $raxLogD/ini.log\n";
+		system "mv $raxD/RAxML_bipartitions.$raTmpF3 $outTree";
+	
+	}
+	#and create distance matrix
+	systemW  "$raxmlBin -T$ncore -f x -s $mAli $raxDef -n all -w $raxD -t $raxD/RAxML_bestTree.$raTmpF $outGrpRXML > $raxLogD/.log\n";
+	my $outDist = $outTree; $outDist =~ s/\.[^\.]+$/\.dist/;
+	#die "$outDist\n";
+	system "mv $raxD/RAxML_distances.all $outDist";
+
+	
+	#clean up
+	system "rm $raxD/*_info* $raxD/*_log* $raxD/*_parsimony* $raxD/*_result*";
+}
+
+
+
+
 sub mergeMSAs($ $ $ $){
 	my ($MSAsAr,$samplesHr,$multAliF,$del) = @_;
 	my @MSAs = @{$MSAsAr}; my %samples = %{$samplesHr};
@@ -242,16 +306,18 @@ sub mergeMSAs($ $ $ $){
 	foreach my $MSAf (@MSAs){
 		#print $MSAf."\n"; 
 		my $hit =0; my $miss =0;
-		my $hr = readFasta($MSAf); my %MFAA = %{$hr};
+		my $hr = readFasta($MSAf,1); my %MFAA = %{$hr};
 		system "rm $MSAf" if ($del);
 		my @Mkeys = keys %MFAA;
 		#die "$Mkeys[0]\n";
 		
-		my @spl2 = split /_/,$Mkeys[0]; my $gcat = $spl2[1];
+#		my @spl2 = split /$smplSep/,$Mkeys[0];
+		$Mkeys[0] =~ m/^(.*)$smplSep(.*)$/;my @spl2 =($1,$2);
+		my $gcat = $spl2[1];
 		my $len = length( $MFAA{$Mkeys[0]} );
 		#die $len;
 		foreach my $sm (keys %samples){
-			my $curK = $sm."_".$gcat; #print $curK. " ";
+			my $curK = $sm.$smplSep.$gcat; #print $curK. " ";
 			#print "$MFAA{$curK}\n";
 			if (exists $MFAA{$curK}){
 				$bigMSAFAA{$sm} .= $MFAA{$curK}; $hit++;
@@ -315,7 +381,7 @@ sub synPosOnlyAA($ $){#only leaves "constant" AA positions in MSA file..
 #stupid, don't know if pal2nal can handle this.. prob not
 	my ($inMSA,$outMSA) = @_;
 	print "Syn";
-	my $hr = readFasta($inMSA); my %FNA = %{$hr};
+	my $hr = readFasta($inMSA,1); my %FNA = %{$hr};
 	my @aSeq = keys %FNA;
 	my $len = length ($FNA{$aSeq[0]});
 	for (my $i=0; $i< $len; $i+=3){
@@ -328,8 +394,8 @@ sub synPosOnlyAA($ $){#only leaves "constant" AA positions in MSA file..
 
 }
 
-sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
-	my ($inMSA,$inAAMSA,$outMSA, $ffold) = @_;
+sub synPosOnly{#now finished, version is cleaner
+	my ($inMSA,$inAAMSA,$outMSA, $outMSAns, $ffold, $outgroup, $doSyn, $doNSyn) = @_;
 	#print "Syn NT";
 	my %convertor = (
     'TCA' => 'S', 'TCC' => 'S', 'TCG' => 'S', 'TCT' => 'S',    # Serine
@@ -377,13 +443,15 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 	}
 
 	#assumes correct 3 frame for all sequences in inMSA
-	my $hr = readFasta($inMSA); my %FNA = %{$hr};
+	my $hr = readFasta($inMSA,1); my %FNA = %{$hr};
 	#my %FAA;
 	#if (0  || !$ffold){
 	#	$hr = readFasta($inAAMSA); %FAA = %{$hr};
 	#}
 	#print "$inMSA\n$inAAMSA\n$outMSA\n";
-	my @aSeq = keys %FNA; my %outFNA;
+	my @aSeq = keys %FNA; 
+	my %outFNA;#syn
+	my %outFNAns;#non syn
 	for (my $j=0;$j<@aSeq;$j++){$outFNA{$aSeq[$j]}="";}
 	my $len = length ($FNA{$aSeq[0]});
 	my $nsyn=0;my $syn=0;
@@ -402,6 +470,7 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 		next unless (!$ffold || $ffd{$iniAA} == 4);
 	#print $i." $iniAA ";
 		for (;$j<@aSeq;$j++){
+			if ($aSeq[$j] eq $outgroup){next;}#print "HIT   $aSeq[$j] eq $outgroup";
 			my $newCodon = substr $FNA{$aSeq[$j]},$i,3;
 			my $newAA = "-";
 			if ($newCodon !~ m/-/ && $newCodon =~ m/[ACTG]{3}/i){
@@ -425,19 +494,42 @@ sub synPosOnly($ $ $ $){#not finished, I used the AA version instead
 				#print substr $FNA{$aSeq[$j]},$i*3,3 . " ";
 			}
 			$syn++;
-		} else {$nsyn++;}
+		} else {
+			for (my $j=0;$j<@aSeq;$j++){
+				$outFNAns{$aSeq[$j]} .= substr $FNA{$aSeq[$j]},$i,3;
+			}
+			$nsyn++;
+		}
 	}
 	#die $inMSA."\n";
-	open O ,">$outMSA" or die "Can't open outMSA $outMSA\n";
-	for (my $j=0;$j<@aSeq;$j++){
-		print O ">$aSeq[$j]\n$outFNA{$aSeq[$j]}\n";
+	if ($doSyn){
+		if ($syn ==0){
+			$outMSA = "";
+		} else {
+			open O ,">$outMSA" or die "Can't open outMSA $outMSA\n";
+			for (my $j=0;$j<@aSeq;$j++){
+				print O ">$aSeq[$j]\n$outFNA{$aSeq[$j]}\n";
+			}
+			close O;
+		}
 	}
-	close O;
+	if ($doNSyn){
+		if ($nsyn ==0){
+			$outMSAns = "";
+		} else {
+			open O ,">$outMSAns" or die "Can't open outMSA $outMSAns\n";
+			for (my $j=0;$j<@aSeq;$j++){
+				print O ">$aSeq[$j]\n$outFNAns{$aSeq[$j]}\n";
+			}
+			close O;
+		}
+	}
 	$aSeq[0] =~ m/^.*_(.*)$/;
 	#die "$outMSA\n";
 	print "$1 ($syn / $nsyn) ".@aSeq." seqs \n";
 	#print " only\n";
 	#print "\n";
+	return ($outMSA,$outMSAns);
 }
 
 

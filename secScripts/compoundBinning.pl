@@ -8,6 +8,8 @@ use Data::Dumper;
 use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt  unzipFileARezip);
 use Mods::IO_Tamoc_progs qw(jgi_depth_cmd );
 
+#add this? https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748697/figure/fig-1/
+
 sub runMetaBat;
 
 my $inD = $ARGV[0];

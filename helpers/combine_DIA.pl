@@ -15,7 +15,7 @@ sub writeMat;
 #MOHparse.MOH.gene.cnts.gz
 #NOGparse.NOG.cat.cnts.gz
 #NOGparse.NOG.gene.cnts.gz
-my @DBs = ("CZy","NOG","KGM"); # ("KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
+my @DBs = ("ABRc"); # ("ABRc","KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
 my @modDBs = ("KGM");
 #@DBs = ("NOG","KGB","KGE"); # ("KGB","KGE","CZy","NOG","ABR","MOH");#("NOG","CZy","MOH");
 #@DBs = ("NOG");#("NOG","CZy","MOH");
@@ -48,7 +48,7 @@ my %Taxs; #contains the subparts that the matrix is split into
 foreach my $DB (@DBs){
 	my @subDirs = ();
 	$testD = $inD.$map{$samples[0]}{dir}."/diamond/";
-	#print $testD."\n";
+	print $testD."\n";
 	opendir D,$testD or die "Can't open dir $testD\n";
 	my $cnt=0;
 	while (my $dd = readdir D){
@@ -74,7 +74,7 @@ foreach my $DB (@DBs){
 	if ($DB eq "KGE"){$Taxs{$DB} = ["EUK"]; $calcModules = 1; next;}
 	if ($DB eq "KGM"){$Taxs{$DB} = ["EUK","BAC","UNC"]; $calcModules = 1; next;}
 	my @tmp2 = @{$DBsD{$DB}};# die "@tmp2\n";
-	print $DBsD{$DB}."\n".@tmp2."\n";
+	print "@{$DBsD{$DB}}\n".@tmp2."\n";
 	$testD = $inD.$map{$samples[0]}{dir}."/diamond/".${$DBsD{$DB}}[0]."/";
 	#die $testD;
 	opendir D,$testD or die "Can't open dir $testD\n";
@@ -90,6 +90,7 @@ foreach my $DB (@DBs){
 	#print "@ins\n";
 	$Taxs{$DB} = \@ins;
 }
+#die;
 #print "D2\n";
 
 #die;
@@ -124,7 +125,7 @@ foreach my $DB (@DBs){
 					
 					#print $DiaCATf."\n";
 					#MOHparse.MOH.gene.cnts.gz
-					if ($DB ne "NOG" && $DB ne "KGB" && $DB ne "KGE" && $DB ne "KGM"){
+					if ($DB ne "NOG" && $DB ne "KGB" && $DB ne "KGE" && $DB ne "KGM"&& $DB ne "ABRc"){
 						$DiaCATf = "$dir2rd/diamond/$deepDir/$DB"."parse.$DB.$TAX.$NORM.gene.cnts.gz" ;
 					} else {
 						$DiaCATf = "$dir2rd/diamond/$deepDir/$DB"."parse.$TAX.$NORM.CATcnts";
@@ -142,7 +143,7 @@ foreach my $DB (@DBs){
 							while (my $l = <$I>){
 								next if (length($l) < 4);
 								chomp $l;
-								my @spl = split /\s/,$l;
+								my @spl = split /\t/,$l;
 								#print "@spl\n";#		die $l;
 								$COGs{$spl[0]}{$smpl} = $spl[1]; 
 								if (exists $tCOGs{$spl[0]}{$smpl}){$tCOGs{$spl[0]}{$smpl} += $spl[1];} else {$tCOGs{$spl[0]}{$smpl} = $spl[1]; }
@@ -161,7 +162,8 @@ foreach my $DB (@DBs){
 						while (my $l = <$I>){
 							chomp $l;
 							next if (length($l) < 4);
-							my @spl = split /\s/,$l;
+							my @spl = split /\t/,$l;
+							#die "$l\n" unless ($spl[1] =~ m/^[\d\.]+$/);
 							#print "@spl\n";		die $l;
 							$CATs{$spl[0]}{$smpl} = $spl[1]; 
 							if (exists $tCATs{$spl[0]}{$smpl}){$tCATs{$spl[0]}{$smpl} += $spl[1]; } else {$tCATs{$spl[0]}{$smpl} = $spl[1]; }

@@ -60,7 +60,10 @@ my $LSUtax = "$DBdir/SLV_128_LSU.tax";
 my $SSUdbFA= "$DBdir/SLV_128_SSU.fasta";
 my $SSUtax = "$DBdir/SLV_128_SSU.tax";
 #my $ITSdbFA = "$DBdir/sh_refs_qiime_ver7_99_02.03.2015.fasta";my $ITStax = "$DBdir/sh_taxonomy_qiime_ver7_99_02.03.2015.txt";
-my $ITSdbFA = "$DBdir/ITS_comb.fa";my $ITStax = "$DBdir/ITS_comb.tax";
+my $ITSdbFA = getProgPaths("ITSdbFA"); $ITSdbFA =~ m/([^\/]+)$/; $ITSdbFA = $1; $ITSdbFA = "$DBdir/$ITSdbFA";
+my $ITStax = getProgPaths("ITStax");$ITStax =~ m/([^\/]+)$/; $ITStax = $1;$ITStax = "$DBdir/$ITStax";
+ 
+
 my $PR2dbFA = "$DBdir/gb203_pr2_all_10_28_99p.fasta";
 my $PR2tax = "$DBdir/PR2_taxonomy.txt";
 
@@ -330,7 +333,6 @@ sub runBlastLCA(){
 			if (!-f $DB.".dna5.fm.sa.val"  ) {
 				print "Building LAMBDA index anew (may take up to an hour)..\n";
 				my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
-				#system "touch $DB.dna5.fm.lf.drv.wtc.24";
 				if (system($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
 			}
 			print "Starting LAMBDA similarity search..\n";

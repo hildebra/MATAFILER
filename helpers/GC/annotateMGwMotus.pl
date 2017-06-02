@@ -3,7 +3,6 @@
 #also creates specI abundance tables
 #  ./annotateMGwMotus.pl /g/bork3/home/hildebra/data/SNP/GCs/T2_HM3_GNM3_ABR 12
 
-/g/bork3/home/hildebra/dev/python/python get_ranks.py 9606 7227
 
 use warnings;
 use strict;
@@ -23,6 +22,7 @@ sub read_matrix; sub getCorrs;sub passBlast;
 sub add2geneList; sub rm4geneList;
 sub sanityCheckCorr;
 sub specImatrix;
+sub createAreadSpecItax;
 
 my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/";
 #progenomes.specIv2_2
@@ -32,6 +32,7 @@ my $globalCorrThreshold = 0.8; # determines cutoff, when still to accept correla
 my $rarBin = getProgPaths("rare");#"/g/bork5/hildebra/dev/C++/rare/rare";
 my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
 my $lambdaIdxBin = $lambdaBin."_indexer";#getProgPaths("");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
+my $samBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
 
 if (@ARGV == 0){
 	die "Not enough input args: use ./annotateMGwMotus.pl [path to GC] [# Cores]\n";
@@ -42,7 +43,7 @@ my $BlastCores = $ARGV[1];
 my $MGdir = "$GCd/FMG/";
 system "mkdir -p $MGdir/tax" unless (-d "$MGdir/tax");
 
-my $motuDir = "/g/bork3/home/hildebra/DB/MarkerG/mOTU";
+my $motuDir = "";#"/g/bork3/home/hildebra/DB/MarkerG/mOTU";
 #load motu DBs...
 #my ($hr1,$hr2) = readMotuTax("$motuDir/mOTU.v1.1.padded.motu.linkage.map");
 #my %LG2motu = %{$hr1}; my %motu2tax = %{$hr2};
@@ -52,8 +53,8 @@ my $motuDir = "/g/bork3/home/hildebra/DB/MarkerG/mOTU";
 #my %NTax = %{$hr1};
 my $hr1 = read_matrix("$GCd/FMG.subset.mat");
 my %FMGmatrix= %{$hr1};
-$hr1 = read_speci_tax("$SpecID/specI.tax");
-my %specItax = %{$hr1};
+#$hr1 = read_speci_tax("$SpecID/specI.tax");
+#my %specItax = %{$hr1};
 #annotate against DB using lambda
 
 if (0){ #too general
@@ -61,10 +62,13 @@ if (0){ #too general
 	lambdaBl($tar,$DB,$taxblastf);
 }
 
-my %specIid;#my %specItax;
+my %specIid;my %specItax;
 open I,"<$SpecID/progenomes.specIv2_2";
-while (<I>){next if (m/^#/);chomp; my @xx = split /\t/;$specIid{$xx[1]} = $xx[0];$xx[1]=~m/^(\d+)\./; }#$specItax{$xx[0]}=$1;}
+while (<I>){next if (m/^#/);chomp; my @xx = split /\t/;$specIid{$xx[1]} = $xx[0];$xx[1]=~m/^(\d+)\./; $specItax{$xx[0]}=$1;}
 close I;
+my %specItaxM; #real matrix with tax levels
+
+my $specIfullTax = createAreadSpecItax(\%specItax,"$SpecID/specI.tax2");
 
 #assign each COG separately
 my @catsPre = split/\n/,`cat $GCd/FMG.subset.cats`;
@@ -84,7 +88,6 @@ foreach (@catsPre){
 	my $COG = $spl[0];
 	
 	#actual blast (heavy)
-	my $samBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
 	my $cmd = "$samBin faidx $GCd/compl.incompl.95.fna ". join (" ", @genes ) . " > $MGdir/$COG.fna\n";
 	system $cmd unless (-e "$MGdir/$COG.fna");
 	$cmd = "$samBin faidx $GCd/compl.incompl.95.prot.faa ". join (" ", @genes ) . " > $MGdir/$COG.faa";
@@ -219,7 +222,7 @@ foreach my $k (keys %gene2specI){
 close O;
 
 #create abundance profile
-specImatrix("$MGdir/specI.mat");
+specImatrix("$MGdir/specI.mat",$specIfullTax);
 
 
 
@@ -437,7 +440,13 @@ sub ss {
    }
    return $sum;
 }
- 
+ sub correl {
+   my($ssxx,$ssyy,$ssxy)=@_;
+   if ($ssyy==0 || $ssxy==0){return 0;}
+   my $sign=$ssxy/abs($ssxy);
+   my $correl=$sign*sqrt($ssxy*$ssxy/($ssxx*$ssyy));
+   return $correl;
+}
 sub correlation {
    my ($x,$y) = @_;
    my ($mean_x) = mean($x);
@@ -451,13 +460,7 @@ sub correlation {
  
 }
  
-sub correl {
-   my($ssxx,$ssyy,$ssxy)=@_;
-   if ($ssyy==0 || $ssxy==0){return 0;}
-   my $sign=$ssxy/abs($ssxy);
-   my $correl=$sign*sqrt($ssxy*$ssxy/($ssxx*$ssyy));
-   return $correl;
-}
+
 
 sub read_matrix($){
 	my ($mF) = @_;
@@ -479,8 +482,9 @@ sub read_matrix($){
 	close I;
 	return \%oM;
 }
-sub specImatrix($){
-	my ($oF) = @_;
+sub specImatrix($$){
+	my ($oF,$hr) = @_;
+	my %sTax = %{$hr};
 	open O,">$oF";
 	my @bkgrnd; my @dblCh;
 	foreach my $gid (keys %FMGmatrix){
@@ -491,15 +495,45 @@ sub specImatrix($){
 	}
 	
 	
-	print O "SpecI\t\t".join ("\t",@{$FMGmatrix{ header }})."\n";
-	print O "SUM\t\t".join ("\t",@dblCh)."\n";
-	print O "?\t\t".join ("\t",@bkgrnd)."\n";
+	print O "SpecI\t".join ("\t",@{$FMGmatrix{ header }})."\n";
+	#print O "SUM\t\t".join ("\t",@dblCh)."\n";
+	print O "?\t".join ("\t",@bkgrnd)."\n";
 	foreach my $si (keys %specIprofiles){
+		if (exists($specItax{$si})){
+#			print O "$si\t$specItax{$si}\t@{$sTax{$si}}\t".join ("\t",@{$specIprofiles{ $si }})."\n";
+			print O "$si\t".join ("\t",@{$specIprofiles{ $si }})."\n";
+		} else {
+			print "Can't find $si\n";
+		}
 		
-		print O "$si\t$specItax{$si}\t".join ("\t",@{$specIprofiles{ $si }})."\n";
 		#for (my $j=0;$j<scalar(@{$specIprofiles{ $gid }});$j++){$bkgrnd[$j] +=  ${$specIprofiles{ $gid }}[$j];}
 	}
 	close O;
+	#calculating higher level abundance matrix
+	my $oFx = $oF; $oFx =~ s/\.[^\.]*$//;
+	my @taxLs = ("superkingdom","phylum","class","order","family","genus","species");
+	for (my $t=0;$t<@taxLs;$t++){
+		#sum up to hi lvl
+		my %thisMap;
+		foreach my $si (keys %specIprofiles){
+			my $clvl = join (";",@{$sTax{$si}}[0 .. $t]);
+			if (exists($thisMap{$clvl})){
+				for (my $kl=0;$kl<scalar(@{$specIprofiles{ $si }});$kl++){
+					${$thisMap{$clvl}}[$kl] += ${$specIprofiles{ $si }}[$kl];
+				}
+			} else {
+				$thisMap{$clvl} =\@{$specIprofiles{ $si }}
+			}
+		}
+		open O,">$oFx.$taxLs[$t]";
+		print O "$taxLs[$t]\t".join ("\t",@{$FMGmatrix{ header }})."\n";
+		print O "?\t".join ("\t",@bkgrnd)."\n";
+		foreach my $kk (keys %thisMap){
+			print O "$kk\t".join("\t",@{$thisMap{$kk}}) . "\n";
+		}
+		close O;
+	}
+
 }
 sub nonZero($){
 	my ($ar) = @_;
@@ -518,6 +552,45 @@ sub add2geneList($ $ $){
 	$SpecIgenes2{$k}{$c}=$sg;#set mark to block this MG in this specI...
 	return $ret;
 }
+
+sub createAreadSpecItax{
+	my ($hr1,$file) = @_;#\$specIid,"$SpecID/specI.tax2");
+	my %sNTID = %{$hr1};
+	my %ret; my $cnt = -1;
+	if (-e $file){
+	open I,"<$file";
+		while (my $l = <I>){
+			$cnt++;
+			chomp $l; my @spl = split /\t/,$l;
+			#if ($cnt == 0){}
+			my $id = shift @spl;
+			$ret{$id} = \@spl;
+		}
+	}
+	close I;
+	my @taxids; my @spids;
+	foreach my $k (keys %sNTID){
+		next if (exists($ret{$k}));
+		#jaimes ete prog
+		push (@taxids,$sNTID{$k});
+		push (@spids,$k);
+
+	}
+	#die "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
+	my $cmd = "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
+	my $tret= `$cmd`;
+	my @newT = split /\n/,$tret;
+	if (@newT > 0){
+		open O,">>$file";
+		for (my $i=0;$i<@newT;$i++){
+			my @spl = split /\t/,$newT[$i]; shift @spl;
+			print O "$spids[$i]\t".join("\t",@spl)."\n";
+		}
+		close O;
+	}
+	return (\%ret);
+}
+
 sub rm4geneList($ $){
 	my ($k,$sg) = @_;
 	#die "ASDA";

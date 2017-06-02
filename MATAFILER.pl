@@ -52,11 +52,11 @@ sub d2metaDist;
 sub metphlanMapping;sub mergeMP2Table;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
-#bjobs | grep '_ABR' | cut -f1 -d' ' | xargs -t -i bkill {}
+#bjobs | grep 'Cons' | cut -f1 -d' ' | xargs -t -i bkill {}
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
-my $MATFILER_ver = 0.12;
+my $MATFILER_ver = 0.14;
 
 #----------------- defaults ----------------- 
 my $rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';
@@ -158,6 +158,7 @@ my $RedoRiboAssign = 0;
 my $DoBinning = 1;
 my $doReadMerge = 0;
 my $DoAssembly = 1;  my $SpadesAlwaysHDDnode = 1;my $spadesBayHam = 0; my $useSDM = 2;my $spadesMisMatCor = 0; my $redoAssembly =0 ;
+my $map2Assembly = 0;
 my $doBam2Cram= 1; my $redoAssMapping=0;
 my $DoNP=0; #non-pareil
 my $doDateFileCheck = 0; #very specific option for Moh's reads that were of different dates..
@@ -177,6 +178,7 @@ my $Spades_Kmers = "27,33,55,71";
 my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??? ; remove Dups (can be costly if many ref seqs present)
 my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
 my $MappingMem = "3G";
+my $oldStylFolders=0; #0=smpl name as out folder; 1=inputdir as out foler (legacy)
 
 #----------- map all reads to a specific reference - options ---------
 my $prevDeps= "";my $mapModeActive=0; my $mapModeCovDo=1;#get the coverage per gene etc
@@ -199,6 +201,7 @@ GetOptions(
 	"rm_tmpInput=i" => \$removeInputAgain,
 	"globalTmpDir=s" => \$sharedTmpDirP,
 	"nodeTmpDir=s" => \$nodeTmpDirBase,
+	"legacyFolders=i" => \$oldStylFolders,
 	"submSystem=s" => \$submSytem,  #qsub,SGE,bsub,LSF
 	"submit=i" => \$doSubmit,
 	"from=i" => \$from,
@@ -217,6 +220,7 @@ GetOptions(
 	"binSpeciesMG=i" => \$DoBinning,
 	"reAssembleMG=i" => \$redoAssembly,
 	"assembleMG=i" => \$DoAssembly,
+	"mapReadsOntoAssembly=i" => \$map2Assembly,  #map original reads back on assembly, to estimate abundance etc
 	#gene prediction on assembly
 	"predictEukGenes=i" => \$DO_EUK_GENE_PRED,#severely limits total predicted gene amount (~25% of total genes)
 	#mapping related (asselmbly)
@@ -309,9 +313,10 @@ my $scaffTarExternal = "";my $scaffTarExternalName = ""; my @scaffTarExternalOLi
 my $scaffTarExtLibTar = ""; my $bwt2ndMapDep = ""; my @bwt2ndMapNmds;
 
 #here the map and some base parameters (base ID, in path, out path) can be (re)set
-my ($hr,$hr2) = readMap($mapF);
-my %AsGrps = %{$hr2};
-my %map = %{$hr};
+my %map; my %AsGrps;
+my ($hr,$hr2) = readMap($mapF,0,\%map,\%AsGrps,$oldStylFolders);
+%AsGrps = %{$hr2};
+%map = %{$hr};
 #$baseDir = $map{inDir} if (exists($map{inDir} ));
 $baseOut = $map{outDir} if (exists($map{outDir} ));
 $baseID = $map{baseID} if (exists($map{baseID} ));
@@ -371,7 +376,7 @@ if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 		#die $DBbtRef."\n$runTmpDBDirGlobal/\n";
 		unless (-e "$DBbtRef.bw2.0.sa" || -e  "$DBbtRef.bw2.rev.1.bt2l"){
 			#system $cmd 
-			($bwt2ndMapDep,$cmd) = qsubSystem($bwt2outDl."/LOGandSUB/builBwtIdx$i.sh",$cmd,$bwtDBcore,int(400/$bwtDBcore)."G","BWI".$i,"","",1,[],\%QSBopt) ;
+			($bwt2ndMapDep,$cmd) = qsubSystem($bwt2outDl."/LOGandSUB/builBwtIdx$i.sh",$cmd,$bwtDBcore,int(20/$bwtDBcore)."G","BWI".$i,"","",1,[],\%QSBopt) ;
 		}
 		
 		#$DBbtRefX = $DBbtRef;
@@ -566,7 +571,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	if ($cAssGrp eq "-1"){
 		die "Should not be here";
 		$assDir="$GlbTmpPath/assemblies/"; #"$curOutDir/assemblies"
-		$AsGrps{$cAssGrp}{AssemblJobName} = "_ASS$JNUM";		$AssemblyGo = 1;
+		$AsGrps{$cAssGrp}{AssemblJobName} = "_A$JNUM";		$AssemblyGo = 1;
 	} else { #complicated flow control for multi sample assemblies
 		$assDir="$runTmpDirGlobal/AssmblGrp_$cAssGrp/";
 		die $baseID."\n" if ($cAssGrp eq "");
@@ -644,8 +649,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	
 	#central flag
 	$boolAssemblyOK=1 if ($boolGenePredOK && -e "$finalCommAssDir/scaffolds.fasta.filt" && 
-			-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && 
-			(-s "$finalMapDir/$SmplName-smd.bam" || -s "$finalMapDir/$SmplName-smd.cram"));
+			!$map2Assembly || (-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && 
+			(-s "$finalMapDir/$SmplName-smd.bam" || -s "$finalMapDir/$SmplName-smd.cram")) );
 	#die "$boolAssemblyOK $AssemblyGo ass $finalCommAssDir\n";
 	
 	
@@ -714,7 +719,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		#my ($map2Ctgs,$delaySubmCmd) = mapReadsToRef("$curOutDir/mapping/","",\@cfp1,\@cfp2,$GlbTmpPath."/toMGctgs/",$nodeSpTmpD,$bwt_Cores,
 		#	"$finalCommAssDir/scaffolds.fasta.filt",$AsGrps{$cAssGrp}{AssemblJobName},$mapOut."unaligned/",1,"$curOutDir/mapping/",1,$SmplName,\@libsCFP);#$localAssembly);
 
-		if ($doBam2Cram && !-e $CRAMsto){#.cram.sto to check that everything went well
+		if ($map2Assembly && $doBam2Cram && !-e $CRAMsto){#.cram.sto to check that everything went well
 			$QSBopt{LocationCheckStrg}="";
 			bam2cram("$finalMapDir/$SmplName-smd.bam", "$finalCommAssDir/scaffolds.fasta.filt",1,1,$doBam2Cram,$CRAMsto,4);
 		}
@@ -791,7 +796,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $nonPareilFlag = !-s "$NPD/$SmplName.npo" && $DoNP ;
 	my $scaffoldFlag = 0; $scaffoldFlag = 1 if (( !-e $finScaffStone) && $map{$curSmpl}{"SupportReads"} =~ /mate/i );
 	my $assemblyFlag = 0; $assemblyFlag = 1 if (!-s $finAssLoc && $DoAssembly);
-	my $mapAssFlag = 0; $mapAssFlag = 1 if (!-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && $assemblyFlag );
+	my $mapAssFlag = 0; $mapAssFlag = 1 if ($map2Assembly && !-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && $assemblyFlag );
 	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$curSmpl}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
 	my $dowstreamAnalysisFlag = 0; $dowstreamAnalysisFlag=1 if ( ($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
 	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && $dowstreamAnalysisFlag );
@@ -1072,7 +1077,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#print "end of ref map \n";next;
 	
 	#%%%%%%%%%%%%%%%%   functions dependent on assembly -> submit post-assembly   #%%%%%%%%%%%%%%%%
-	if ($DoAssembly || $mapAssFlag){
+	if ($map2Assembly && ($DoAssembly || $mapAssFlag)){
 		my $cramthebam = 1;
 		my %dirset = 	(nodeTmp=>$nodeSpTmpD,
 						outDir => "$finalMapDir/",
@@ -1439,7 +1444,7 @@ sub detectRibo(){
 		for (my $ii=0;$ii<@DBsIdx;$ii++){
 			$DBsIdx[$ii] =~ s/\.fasta$/\.idx/;
 			$DBsTestIdx[$ii] =~ s/\.fasta$/\.idx\.kmer_0\.dat/;
-			if ( -e "$DBrna/rRNA_databases/$DBs[$ii]"  && -e "$DBrna/rRNA_databases/$DBsTestIdx[$ii]"  ){
+			if ( -e "$DBrna//$DBs[$ii]"  && -e "$DBrna//$DBsTestIdx[$ii]"  ){
 				next;
 			}
 			die "\nCould not find expected sortmerna file:\n$srtMRNA_path/rRNA_databases/$DBs[$ii]\n" if ( !-e "$srtMRNA_path/rRNA_databases/$DBs[$ii]"  );
@@ -1449,7 +1454,8 @@ sub detectRibo(){
 			$DBcmd .= "cp $srtMRNA_path/rRNA_databases/$DBs[$ii] $srtMRNA_path/rRNA_databases/$DBsIdx[$ii]* $DBrna\n";
 		}
 		#die @DBs."@DBs\n";
-		if (!-e "$DBrna/$ITSDBpref.idx.kmer_0.dat"){ #ITS DBs
+		$ITSDBpref=~ m/(^.*)\/[^\/]+/;
+		if (!-e "$1/$ITSDBpref.idx.kmer_0.dat"){ #ITS DBs
 			#$DBcmd .= "cp /g/bork3/home/hildebra/DB/MarkerG/ITS_fungi/sh_general_release_30.12.2014.* $DBrna\n";
 			if (!-e "$ITSDBfa"){
 				print "Missing $ITSDBfa  ITS DB file!\n"; exit(32);
@@ -1582,11 +1588,11 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 			$DBcmd .= "$diaBin makedb --in $DBpath$refDB -d $DBpath$refDB.db -p $ncoreDB\n";
 		}
 		unless (-e "$DBpath$refDB.length"){
-				$DBcmd .= "$genelengthScript $DBpath$refDB $DBpath$refDB.length\n";
+			$DBcmd .= "$genelengthScript $DBpath$refDB $DBpath$refDB.length\n";
 		}
 		#$clnCmd .= "rm -rf $CLrefDBD;" if (length($CLrefDBD)>6);
 		#idea here is to copy to central hdd (like /scratch)
-		#system "rm $CLrefDBD/$refDB.db.dmnd"  if ($rewriteDiamond && -d $CLrefDBD);
+		system "rm $CLrefDBD/$refDB.db.dmnd"  if ($rewriteDiamond && -d $CLrefDBD);
 		#print " !-e $CLrefDBD/$refDB.db.dmnd && !-e $CLrefDBD/$refDB.length\n ";
 		if ( -e "$CLrefDBD/$refDB.db.dmnd" && -e "$CLrefDBD/$refDB.length" 
 			#&& ($curDB eq "NOG" && !-e "$CLrefDBD/NOG.members.tsv") &&
@@ -1598,22 +1604,26 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 			$DBcmd .= "mkdir -p $CLrefDBD\n";
 			$DBcmd .= "cp $DBpath$refDB.db.dmnd $DBpath$refDB.length $CLrefDBD\n";
 			if ($curDB eq "NOG" && !-s "$CLrefDBD/NOG.members.tsv"){
+				system "rm -f $CLrefDBD/NOG* $CLrefDBD/all_species_data.txt";
 				$DBcmd .= "cp $DBpath/NOG.members.tsv $DBpath/NOG.annotations.tsv $DBpath/all_species_data.txt $CLrefDBD\n";
 			}
 			if ($curDB eq "CZy" && !-s "$CLrefDBD/MohCzy.tax"){
+				system "rm -f $CLrefDBD/MohCzy.tax $CLrefDBD/cazy_substrate_info.txt";
 				$DBcmd .= "cp $DBpath/MohCzy.tax $DBpath/cazy_substrate_info.txt $CLrefDBD\n";
 			}
 			if (($curDB eq "KGB" || $curDB eq "KGM" || $curDB eq "KGE") && !-s "$CLrefDBD/genes_ko.list"){
+				system "rm -f $CLrefDBD/genes_ko.list $CLrefDBD/kegg.tax.list";
 				$DBcmd .= "cp $DBpath/genes_ko.list $DBpath/kegg.tax.list $CLrefDBD\n";
 			}
 			if ($curDB eq "ABRc"){ 
+				system "rm -f $CLrefDBD/card*";
 				$DBcmd .= "cp $DBpath/card*.txt $CLrefDBD\n";
 			}
 		}
 		my $jN = "_DIDB$shrtDB$JNUM"; my $tmpCmd;
 #		die "$DBcmd";
 		if ($DBcmd ne ""){
-			($jN, $tmpCmd) = qsubSystem($logDir."DiamondDBprep$shrtDB.sh",$DBcmd,$ncoreDB,"20G",$jN,"","",1,\@General_Hosts,\%QSBopt);
+			($jN, $tmpCmd) = qsubSystem($logDir."DiamondDBprep$shrtDB.sh",$DBcmd,$ncoreDB,int(100/$ncoreDB)."G",$jN,"","",1,\@General_Hosts,\%QSBopt);
 			$globalDiamondDependence{$curDB} = $jN;
 		}
 		#die $DBcmd."\n";
@@ -2340,7 +2350,7 @@ sub seedUnzip2tmp(){
 	#die $rawReads."\n";
 	#DEBUG fix to reduce file sizes
 	#@fastap2 = ($fastap2[0]); @fastap1 = ($fastap1[0]);
-	if (@pa1 == 0 && @pas ==0 ){die"Can;t find files in $fastp\n";}
+	if (@pa1 == 0 && @pas ==0 ){die"Can;t find files in $fastp\nUsing search pattern: $smplPrefix$rawFileSrchStr1  $smplPrefix$rawFileSrchStr2\n";}
 	my $finishStone = "$finDest/rawRds/done.sto";
 	$tmpPath.="/rawRds/";
 	my $unzipcmd = "";
@@ -2388,8 +2398,8 @@ sub seedUnzip2tmp(){
 		if (!$presence || !-e $finishStone ){
 			$jobN = "_UZ$JNUM"; 
 			my $tmpSHDD = $QSBopt{tmpSpace};
+			#print "$unzipcmd\n";
 			$unzipcmd = "" if ($presence && -e $finishStone);
-			
 			$QSBopt{tmpSpace} = "150G"; #set option how much tmp space is required, and reset afterwards
 			($jobN, $tmpCmd) = qsubSystem($logDir."UNZP.sh",$unzipcmd,1,"20G",$jobN,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
 			#### 1 : UNZIP
@@ -2632,7 +2642,7 @@ sub mapReadsToRef{
 		#print "-e $finalDS[$k]/$outNms[$k]-smd.bam.coverage.gz || -e $mappDir/$outNms[$k]-smd.bam.coverage.gz";
 		if (!-e $tmpOut22){ $outputExists=0; last;}
 	}
-	#die "$outputExists\n";
+	#die "@outNms $outputExists\n";
 	if ($outputExists){
 		return ("","",\%params);
 	} 
@@ -2735,9 +2745,10 @@ sub mapReadsToRef{
 		}
 		#" -S $tmpOut21\n";
 		#$algCmd .= "rm -f $bwtIdx"."*\n";
+		#die "@subBams\n";
 		for (my $k=0;$k<@subBams;$k++){
 			$tmpOut22 = $tmpOut."/$outNms[$k].iniAlignment.bam";
-#			print $tmpOut22."\n";
+			print $tmpOut22."\n";
 			#if (-e $tmpOut22){ next;}
 			$bamFresh=1;
 			if (@pa1 > 1){
@@ -3284,7 +3295,7 @@ sub spadesAssembly(){
 	$cmd .= "$assStatScr $nodeTmp/scaffolds.fasta.filt > $nodeTmp/AssemblyStats.txt\n";
 
 	my ($cmdDB,$bwtIdx) = buildMapperIdx("$nodeTmp/scaffolds.fasta.filt",$nCores,0,$MapperProg);#$nCores);
-	$cmd .= $cmdDB unless($mateFlag); #doesn't need bowtie index
+	$cmd .= $cmdDB unless($mateFlag || !$map2Assembly); #doesn't need bowtie index
 	
 	#clean up
 	$cmd .= "\ngzip -r $nodeTmp/misc/\ngzip -r $nodeTmp/before_rr* $nodeTmp/*contigs.fa* $nodeTmp/*.fastg\n";
@@ -3314,7 +3325,8 @@ sub spadesAssembly(){
 	unless (-e "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/AssemblyStats.txt"){
 		#my $size_in_mb = (-s $fh) / (1024 * 1024);
 		my $tmpCmd="";
-		$jname = "_ASS$JNUM";#$givenJName;
+		$jname = "_A$JNUM";#$givenJName;
+		$QSBopt{useLongQueue} = 1;
 		if ($hostFilter || $SpadesAlwaysHDDnode){
 			my $tmpSHDD = $QSBopt{tmpSpace};
 			$QSBopt{tmpSpace} = $Spades_HDspace."G" unless ($Spades_HDspace =~ m/G$/); #set option how much tmp space is required, and reset afterwards
@@ -3323,6 +3335,7 @@ sub spadesAssembly(){
 		} else {
 			($jname,$tmpCmd) = qsubSystem($logDir."spaderun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
 		}
+		$QSBopt{useLongQueue} = 0;
 	} else {
 		print "Assembly still on tmp dir\n";
 	}

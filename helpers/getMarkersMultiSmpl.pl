@@ -295,7 +295,7 @@ sub buildTree(){
 	my $Ete = 0; #run ete or not?
 	system "mkdir -p $outD" unless (-d $outD);
 	$cogCats = "''" if ($cogCats eq "");
-	my $cmd = "$buildTreeScr $fnFna $aaFna $cogCats $outD $ncore $Ete $ntFrac > $outD/tree_build.log";
+	my $cmd = "$buildTreeScr -fna $fnFna -aa $aaFna -cats $cogCats -outD $outD -cores $ncore -useEte $Ete -NTfilt $ntFrac > $outD/tree_build.log";
 	#die $cmd;
 	print "$cmd\n";
 	if (system $cmd ) {"Failed $cmd\n";}

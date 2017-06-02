@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+#creates FMGids.txt file with all fna names from the marker genes
 use warnings;
 use strict;
 #./FMG_rwk.pl /g/scb/bork/hildebra/SNP/GNMass2_singl/alien-11-374-0/assemblies/metag/ContigStats/FMG/

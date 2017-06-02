@@ -6,51 +6,15 @@ use List::MoreUtils 'first_index';
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(convertMSA2NXS gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap 
-		readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
-		readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
-		readFasta writeFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median deNovo16S);
+our @EXPORT_OK = qw(gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
+		 readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
+		readFasta writeFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median);
 
 
 
 
 
 
-
-sub readFasta{
-	my $fil = $_[0];
-	my $cutHd=0;
-	my $sepChr= "\\s";
-	$cutHd = $_[1] if (@_ > 1);
-	$sepChr = $_[2] if (@_ > 2);
-	my %Hseq;
-	if (-z $fil){ return \%Hseq;}
-	my $FAS;
-	open($FAS,"<","$fil") || die ("Couldn't open FASTA file $fil\n");
-	#my $FAS = gzipopen($fil,"fasta file to readFasta",1);
-	my $temp; my $line; 
-	my $trHe =<$FAS>; chomp ($trHe);  $trHe = substr($trHe,1);
-	if ($cutHd) {$trHe =~ s/$sepChr.*//;}
-	while($line = <$FAS>){
-		chomp($line);
-		if ($line =~ m/^>/){
-			#finish old fas`
-			$Hseq{$trHe} = $temp; 
-			#prep new entry
-			
-			$trHe = substr($line,1);# $trHe =~ s/;size=\d+;.*//; 
-			if ($cutHd) {$trHe =~ s/$sepChr.*//;}
-			$trHe = "".$trHe; #just to ensure it's a string
-			$temp = "";
-			#die $trHe."\n$sepChr\n";
-			next;
-		}
-		$temp .= ($line);
-	}
-	$Hseq{$trHe} = $temp;
-	close ($FAS);
-	return \%Hseq;
-}
 
 
 
@@ -164,53 +128,6 @@ $text =~ s/(...)/"$convertor{uc $1}" || "?"/eg;
 $text =~ s/[^ACDEFGHIKLMNPQRSTVWY*]/X/g;
 #die $text;
 return $text;
-}
-
-
-
- sub deNovo16S{
-	#returns 1)hash with rDNAs and 2) name of best seq
-	my ($fasFile,$outfile) = @_;
-	die "Fasta $fasFile doesn't exist\n" unless (-e $fasFile);
-	my %ret; my $refSize = 1580;
-	print "Detecting de novo 16S\n";
-	
-	my $newGff = "$outfile.gff";
-	system "rm -f $newGff" if (-e$newGff);
-	my $rnaBin = getProgPaths("rnammer");
-	my $cmd = "$rnaBin -S bac -m ssu -gff $newGff < $fasFile";
-	system $cmd."\n";
-	#FP929038        RNAmmer-1.2     rRNA    507757  508732  1202.9  -       .       16s_rRNA
-	my $genoR = readFasta($fasFile,1); my %geno = %{$genoR};
-	#my @k = keys(%geno); die @k.join(" ",@k)."\n";
-	open II,"<",$newGff; my $gffcnt=0;
-	while(<II>){next if (/^#/ || length($_) < 1);my @spl = split(/\s+/);
-		#print $_;
-		my $newS = substr($geno{$spl[0]},$spl[3],$spl[4]-$spl[3]);
-		if ($spl[6] eq "-"){$newS = reverse_complement_IUPAC($newS);}
-		#die $newS;
-		$ret{$spl[0]."_rrn_".$gffcnt} = $newS;
-		$gffcnt++;
-	}
-	close II;
-	#check for new better 16S
-	my $bestV=100000;
-	my @head = keys(%ret);	my $best = 0; 	my $cnt =0;
-	if (@head == 0){
-		#die "Empty array\n$newGff\n\n$cmd\n";
-		print "Empty 16S array\n$newGff\n";
-		return (\%ret,"");
-	} else {
-		foreach my $hd (@head){
-			my $tmp = abs($refSize - length($ret{$hd}));
-			if ($tmp < $bestV){$bestV = $tmp; $best = $cnt;}
-			$cnt++;
-			#print $tmp."\n";
-		}
-	}
-	#print "16S ".$bestV."\n";
-	my %ret3 = ($head[$best],$ret{$head[$best]});
-	return (\%ret,$head[$best]);
 }
 
 
@@ -678,8 +595,8 @@ sub emptyQsubOpt{
 	my $MFdir = getProgPaths("MFLRDir");
 	my $xtraNodeCmds = getProgPaths("subXtraCmd",0);
 	$xtraNodeCmds = "" unless (defined $xtraNodeCmds);
-	my $longQ = "medium_priority"; my $shortQ = "medium_priority";
-	if ($qmode eq "slurm"){$shortQ = "1day"; $longQ="1month";}
+	my $longQ = "medium_priority"; my $shortq = "medium_priority";
+	IF ($qmode == "SLURM"){$shortq = "1day"; $longQ="1month";}
 	my %ret = (
 		rTag => randStr(3),
 		doSubmit => $doSubm,
@@ -712,7 +629,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	#my $jname = $tmpsh;
 	#$jname =~ s/.*\///g;$jname =~ s/\.sh$//g;
 	#\n#\$ -N $tmpsh
-	return("") if ($cmd eq "");
+	return("") if ($cmd = "");
 	my $LSF = 0;
 	my $qbin = "qsub";
 	my $xtra = "";
@@ -728,14 +645,15 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 
 	#die ($memory."\n");
 	my $queues = "\"".$optHR->{shortQueue}."\"";#"\"medium_priority\"";
-	$queues = "\"".$optHR->{longQueue}."\"" if ($optHR->{useLongQueue} ==1);#"\"medium_priority\"";
+	my $queues = "\"".$optHR->{longQueue}."\"" if ($optHR->{useLongQueue} ==1);#"\"medium_priority\"";
 	if ($memory > 250001){$queues = "\"scb\"";}
 	open O,">",$tmpsh or die "Can't open qsub bash script $tmpsh\n";
 
-	#die "$cmd\n";
-	#print "$memory   $queues\n";
+
+
 	#if (`hostname` !~ m/submaster/){
 	if ($qmode eq "slurm"){$LSF = 2;$qbin="sbatch";
+		$queues = "\"1day\"";
 		if ($memory > 250001){$queues = "\"bigmem\"";}
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
 		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH -n  $ncores\n#SBATCH -o $tmpsh.otxt\n";
@@ -877,33 +795,35 @@ sub writeFasta($ $){
 	close O;
 }
 
-sub convertMSA2NXS{
-	my $filename = $_[0];
-	my $outF = "";
-	$outF = $_[1] if (@_>1);
-	my $hr = readFasta($filename);
-	my %FNAs = %{$hr};
-	my @kk = keys %FNAs;
-	my $ostr="";
-	my $numtaxa = scalar(@kk);
-	my $maxlength = length($FNAs{$kk[0]}); #all seqs should be same length in MSA format Format datatype=dna missing=? gap=-;
-	$ostr = "#NEXUS\nBegin data;\nDimensions ntax=$numtaxa nchar=$maxlength;\nFormat datatype=dna missing=? gap=-;\nMatrix\n";
-
-	foreach my $k (@kk) {
-		my $len=length$FNAs{$k};
-		die "Error nexus format conversion: $len != $maxlength in $k\n" if ($len != $maxlength);
-		#if ($len<$maxlength) { my $add=$maxlength-$len; for (my $j=0; $j<$add; $j++) {$seqs[$i]=$seqs[$i].'-';}}
-		$ostr.= "\n$k\t$FNAs{$k}";
+sub readFasta{
+	my $fil = $_[0];
+	my $cutHd=0;
+	$cutHd = $_[1] if (@_ >= 1);
+	my %Hseq;
+	if (-z $fil){ return \%Hseq;}
+	my $FAS;
+	open($FAS,"<","$fil") || die ("Couldn't open FASTA file $fil\n");
+	#my $FAS = gzipopen($fil,"fasta file to readFasta",1);
+	my $temp; my $line; 
+	my $trHe =<$FAS>; chomp ($trHe);  $trHe = substr($trHe,1);
+	if ($cutHd) {$trHe =~ s/\s.*//;}
+	while($line = <$FAS>){
+		chomp($line);
+		if ($line =~ m/^>/){
+			#finish old fas`
+			$Hseq{$trHe} = $temp; 
+			#prep new entry
+			
+			$trHe = substr($line,1);# $trHe =~ s/;size=\d+;.*//; 
+			if ($cutHd) {$trHe =~ s/\s.*//;}
+			$temp = "";
+			#print $trHe."\n";
+			next;
+		}
+		$temp .= ($line);
 	}
-
-	$ostr .= "\n;\nend;";
-	if ($outF ne ""){
-		open O,">$outF" or die "Can't open nxs out file $outF";
-		print O $ostr;
-		close O;
-	}
-	return $ostr;
+	$Hseq{$trHe} = $temp;
+	close ($FAS);
+	return \%Hseq;
 }
-
-
  
