@@ -24,7 +24,8 @@ MATAFILER is a pipeline developed to
  along with the source code.  If not, see <http://www.gnu.org/licenses/>.
 
 
-##INSTALLATION
+## INSTALLATION
+
 MATAFILER can be downloaded directly from Github, using:
 ```
 git clone https://github.com/hildebra/MATAFILER.git
