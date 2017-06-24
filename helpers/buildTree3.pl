@@ -31,6 +31,8 @@ my $msapBin = getProgPaths("msaprobs");
 my $trimalBin = getProgPaths("trimal");
 my $pigzBin  = getProgPaths("pigz");
 my $trDist = getProgPaths("treeDistScr");
+my $gubbinsBin = "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.py";
+
 
 #die "TODO $trimalBin\n";
 #trimal -in /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/COG0185.faa -out /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/tst.fna -backtrans /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/inMSA0.fna -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon
@@ -44,7 +46,7 @@ my $ntCnt =0; my $bootStrap=0;
 my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn) = ("","","","",12,0,0.8,1,"_",1,0);
 my ($continue,$isAligned) = (0,0);#overwrite already existing files?
 my $outgroup="";
-my ($doGubbins,$doRAXML) = (0,1,1);
+my ($doGubbins,$doCFML,$doRAXML) = (0,0,1);
 
 die "no input args!\n" if (@ARGV == 0 );
 
@@ -66,9 +68,10 @@ GetOptions(
 	"bootstrap=i" => \$bootStrap,
 	"isAligned=i" => \$isAligned,
 	"runRAxML=i" => \$doRAXML,
+	"runClonalFrameML=i" => \$doCFML,
 	"runGubbins=i" => \$doGubbins,
 ) or die("Error in command line arguments\n");
-
+if ($doCFML && !$doRAXML){die "Need RaxML alignment, if Clonal fram is to be run..\n";}
 
 if ($aaFna eq "" ){	$calcSyn=0;$calcNonSyn=0;}
 if ($filt <1){$ntFrac=$filt; print "Using filter with $ntFrac fraction of nts\n";}
@@ -78,7 +81,7 @@ else {$ntCnt = $filt;}
 my $tmpD = $outD;
 system "mkdir -p $outD" unless (-d $outD);
 my $cmd =""; my %usedGeneNms;
-
+#die "$Ete\n";
 #------------------------------------------
 #sorting by COG, MSA & syn position extraction
 if (!$Ete){
@@ -233,11 +236,12 @@ if (!$Ete){
 	
 	#convert MSA to NEXUS
 	#convertMSA2NXS($multAli,"$multAli.nxs");
-	
+	my $phyloTree = "";
 	if ($doRAXML){
 		my $BStag = ""; if ($bootStrap>0){$BStag="_BS$bootStrap";}
 		runRaxML("$multAli.ph",$bootStrap,$outgroup,"$treeD/RXML_allsites$BStag.nwk",$ncore,$continue);
 		system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
+		$phyloTree = "$treeD/RXML_allsites$BStag.nwk";
 		if ($calcSyn){
 			runRaxML("$multAliSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_syn$BStag.nwk",$ncore,$continue) ;
 			system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
@@ -247,17 +251,29 @@ if (!$Ete){
 			system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
 		}
 	}
+	if ($doCFML){
+		my $outDG = "$outD/clonalFrameML/";
+		system "mkdir -p $outDG" unless (-d $outDG);
+		$outDG .= "CFML";
+		my $CFMLbin = "/g/bork3/home/hildebra/bin/ClonalFrameML/src/./ClonalFrameML";
+		my $cmd = "$CFMLbin $phyloTree $multAli $outDG\n";
+		die $cmd;
+	}
 	if ($doGubbins){
 		my $outDG = "$outD/gubbins/";
 		system "mkdir -p $outDG" unless (-d $outDG);
 		$outDG .= "GD";
-		my $cmdG = "source activate py3k\n";
-		$cmdG .= "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.py --filter_percentage 25  --tree_builder hybrid --prefix $outDG --threads $ncore $multAli";
-		if (0){$cmdG.=" --outgroup $outgroup";}
-		$cmdG.="\n";
-		$cmdG .= "source deactivate py3k\n";
-		system $cmdG;
-		print "Gubbins run finished\n";
+		if ($continue && -e $outDG.".final_tree.tre"&& -e $outDG.".summary_of_snp_distribution.vcf"){
+			print "Gubbins result already exists in output folder, run will be skipped\n";
+		} else {
+			my $cmdG = "source activate py3k\n";
+			$cmdG .= "$gubbinsBin --filter_percentage 50  --tree_builder hybrid --prefix $outDG --threads $ncore $multAli";
+			if (0){$cmdG.=" --outgroup $outgroup";}
+			$cmdG.="\n";
+			$cmdG .= "source deactivate py3k\n";
+			system $cmdG;
+			print "Gubbins run finished\n";
+		}
 	}
 
 	#phyml
@@ -283,6 +299,8 @@ if (!$Ete){
 	$cmd = "ete3 build -n $fnFna -a $aaFna -w clustalo_default-none-none-none  -m sptree_raxml_all --cpu $ncore -o $outD/tree --clearall --nt-switch 0.0 --noimg  --tools-dir /g/bork3/home/hildebra/bin/ete/ext_apps-latest"; #--no-seq-checks
 	$cmd .= " --cogs $cogCats" unless ($cogCats eq "");
 	print "Running tree analysis ..";
+	print $cmd."\n";
+	die;
 	system $cmd . "> $outD/tree/ETE.log";
 	print " Done.\n$outD/tree\n";
 }
@@ -389,7 +407,7 @@ sub convertMultAli2NT($ $ $){
 	
 	#$cmd = "$trimalBin -in $inMSA -out $outMSA -backtrans $NTs -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon\n";
 	$cmd = "$trimalBin -in $inMSA -out $outMSA -backtrans $NTs -keepheader -ignorestopcodon  -gt 0.1 -cons 60\n";
-	#die "$inMSA,$NTs,$outMSA\n";
+	#die "$cmd\n$inMSA,$NTs,$outMSA\n";
 	#my $hr1= readFasta($inMSA);
 	#my %MSA = %{$hr1};
 	#$hr1= readFasta($NTs);

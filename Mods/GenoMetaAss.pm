@@ -578,7 +578,6 @@ sub readMap{
 		
 		if ($EstCovCol >= 0){$ret{$curSmp}{DoEstCoverage} = $spl[$EstCovCol];} else {$ret{$curSmp}{DoEstCoverage} = 0;}
 		if ($AssGroupCol >= 0){
-			
 			my $curAG = $spl[$AssGroupCol];
 			$ret{$curSmp}{AssGroup} = $curAG ;
 			if (!exists($agBP{$curAG}{CntAimAss})){$agBP{$curAG}{CntAimAss}=0;}
@@ -586,8 +585,9 @@ sub readMap{
 			$altCurSmp = $curSmp."M".$agBP{$curAG}{CntAimAss};
 			$memberAGs{$curAG} = [] unless (exists $memberAGs{$curAG});
 			$trackAGs{$curAG} = $curSmp;  push(@{$memberAGs{$curAG}},$curSmp);
+			$agBP{$curAG}{prodRun} = "";
 			#print $agBP{$spl[$AssGroupCol]}{CntAimAss}. " :$spl[$AssGroupCol]\n" ;
-		} else {$ret{$curSmp}{AssGroup} = $Scnt; $agBP{$Scnt}{CntAimAss}=0;}
+		} else {$ret{$curSmp}{AssGroup} = $Scnt; $agBP{$Scnt}{CntAimAss}=0;$agBP{$Scnt}{prodRun} = "";}
 		if ($MapGroupCol >= 0){
 			my $curM = "M_".$spl[$MapGroupCol];
 			$ret{$curSmp}{MapGroup} = $curM;
@@ -775,14 +775,15 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	if ($LSF==2){#slurm
 		if ($optHR->{doSync} == 1){$qbin = "srun";}
 		if (length($waitJID) >3) {
-			my $idsstr= "squeue --name=".join(":",@jspl)." | awk '{if(NR>1)print}' | sed 's/\\s\\+/ /g' | cut -f2 -d' ' ";
-			$idsstr = `$idsstr`;
+			#my $idsstr= "squeue --name=".join(":",@jspl)." | awk '{if(NR>1)print}' | sed 's/\\s\\+/ /g' | cut -f2 -d' ' ";
+			#$idsstr = `$idsstr`;
 			#die $idsstr."\n";
-			@jspl = split(/\n/,$idsstr);
+			#@jspl = split(/\n/,$idsstr);
 			#die "@jspl\n";
-			$depSet=1;
-			
+			#$depSet=1;
+			for (@jspl) {s/$rTag//;}
 			$xtra .= "--dependency=afterok:".join(":",@jspl)." " if (@jspl > 0);
+			#print $xtra;
 		}
 		if ($jname ne ""){$xtra.="-J $rTag$jname ";}
 		#finish up
@@ -808,8 +809,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		}
 			#$waitJID =~ s/;/,/g;$xtra.="-hold_jid $waitJID ";}
 	}
-	if ($cwd ne ""){$xtra.="-cwd $cwd"; } 
-	my $qcm = "$qbin $xtra $tmpsh > /dev/null\n";
+	if ($cwd ne ""){if ($LSF){$xtra .= "--workdir $cwd";} else {$xtra.="-cwd $cwd"; } }
+	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}
 	print $LOGhandle $qcm."\n" unless ($LOGhandle eq "" || !defined($LOGhandle) );
@@ -817,7 +818,12 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	#if (@restrHosts > 0){die $qcm;}
 	if ($optHR->{doSubmit} != 0 && $immSubm){
 		print "SUB:$jname\t";
-		system $qcm;
+		my $ret = `$qcm`; 
+		if ($LSF == 2){#slurm get jobid
+			chomp $ret; $ret =~ m/(\d+)$/; #$ret = $1;
+			$jname=$1;
+		}
+		#die "$qcm\n$cmd\n$ret XX\n";
 		#if ($depSet){die "$qcm";}
 	}
 

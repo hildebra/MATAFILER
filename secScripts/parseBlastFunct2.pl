@@ -4,6 +4,8 @@
 use warnings;
 use strict;
 use FileHandle;
+use Data::Dumper;
+
 
 use Mods::TamocFunc qw(sortgzblast readTabbed readTabbed2 uniq);
 use Mods::GenoMetaAss qw(gzipwrite gzipopen);
@@ -251,43 +253,53 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 	#die;
 	
 	my @splSave;
+	my %wordv1; my %wordv2;
 	
 	while (1){
-		my %wordv1; my %wordv2;
+		my @splX;
 		while (my $line = <$I>){
 			chomp $line; 
-			my @spl = split (/\t/,$line);
-			my $query = $spl [0];
+			@splX = split (/\t/,$line);
+			my $query = $splX [0];
 			$query =~ s/\/\d$//;
-			
+			#print $query."\n";
 #			$lcnt++;
 			
 			if ($lastQ eq ""){$lastQ = $query;
 			} elsif ($lastQ ne $query){
-				$stopInMiddle=1;@splSave = @spl;last;
+				$lastQ = $query;
+				$stopInMiddle=1;last;
 			}
-			if (@spl > 10 ){ if ( $spl[0] =~ m/2$/){
-				$wordv2{$spl [1]} = \@spl;
-				} else {$wordv1{ $spl [1]} = \@spl;}
+			
+			if (@splX > 10 ){ if ( $splX[0] =~ m/\/2$/){
+				$wordv2{$splX [1]} = [@splX];
+				} else {$wordv1{ $splX [1]} = [@splX]; }
 			}
 
-#			push(@blRes,\@spl);
+#			push(@blRes,\@splX);
 		}
 		#1st combine scores
+		#if ($blRes[0]->[0] =~ m/_982/){print "@{$blRes[0]}\n@{$blRes[3]}\n".Dumper(\%wordv1).Dumper(\%wordv2);}
 		my $whX = combineBlasts(\%wordv1,\%wordv2);
 		#2nd: sort these, find best hit
 		#my $arBhit = bestBlHit($whX); #doesn't need this, this is done in the major routine
 		@blRes = values %{$whX};
+		#if (exists($wordv1{"GI:BAE78083.1"})){die @blRes."@{$blRes[0]}\n".Dumper(\%wordv1).Dumper(\%wordv2);} #[0]->[0] =~ m/_982/
+
 
 		#die @blRes."\n";
 		#print "Read Assignments..\n";
 		for (my $i=0; $i<@aminBLE ; $i++){
 			main($aminBLE[$i],$aminPID[$i],$i,$reportEggMapp);
 		}
-		undef @blRes;
-		push(@blRes,\@splSave);
+		undef @blRes; undef %wordv1;undef %wordv2;
+#		push(@blRes,\@splSave);
+		if (@splX > 10 ){ if ( $splX[0] =~ m/\/2$/){
+			$wordv2{$splX [1]} = [@splX];
+			} else {$wordv1{ $splX [1]} = [@splX];}#print "$splX[0] $splX[1]\n";}
+		}
 		if ($stopInMiddle==0){last;}
-		$lcnt=0;$lastQ="";$stopInMiddle=0;
+		$lcnt=0;$stopInMiddle=0;
 	}
 	close $I;
 	close $O2 if ($reportGeneCat);
@@ -554,21 +566,21 @@ sub main(){
 	for( ;$ii<@blRes;$ii++){
 		#print "@{$blRes[$ii]}\n";
 		my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
-		#print $eval."\n";
+		#print $Query."\n";
 		#sort by eval #changed from bestE -> bestScore
 		#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
 		#die "Can't find ABRc ID $Subject\n" if ($tabCats==5 && !exists($cardFull{$Subject}) );#|| $cardFull{$Subject}->[2] eq "");
+		if ($Query =~ m/_982/){
+			print "$Query\n$bitSc>=".($cardFull{$Subject}->[3])*($AlLen/$SbjLen)."\n ${$cardFull{$Subject}}[3]  $AlLen /  $SbjLen\n@{$cardFull{$Subject}}\n";
+		}
 		next if ($tabCats==5 && !exists($cardFull{$Subject}) );#expected to be missing non relevant 
-		#if ($Query eq "NZ_CP014348.1_194"){
-		#	print "$Query\n$bitSc>=".($cardFull{$Subject}->[3])*($AlLen/$SbjLen)."\n ${$cardFull{$Subject}}[3]  $AlLen /  $SbjLen\n@{$cardFull{$Subject}}\n";
-		#}
 		if ( ($eval <= $minBLE && $bitSc >= $minScore)
 					&& ($AlLen >= $minAlLen)
 					&& ($id >= $minPid)
 					&& ($quCovFrac == 0 || $AlLen > $SbjLen*$quCovFrac) 
 					&& (!$fndCat || $noHardCatCheck || exists $c2CAT{$Subject})
 					&& ($tabCats!=5 ||  $bitSc >= ($cardFull{$Subject}->[3]*$AlLen/$SbjLen)  )  #$eval <= ($cardE{$Subject}**(1/$Card_leniet)) ) #Card
-					#&& $Subject =~ m/^GI:/ #ABRc specific
+					#&& ($tabCats!=5 || $Subject =~ m/^GI:/ )#ABRc specific
 					) {
 					#now decide if the hit itself is actually better
 					
@@ -705,7 +717,7 @@ sub main(){
 			if (exists ($czySubs{$curCOG})){
 				@subs = @{$czySubs{$curCOG}};
 			} else {
-				print "missing cur subject $curCOG\n" ;
+				#print "missing cur subject $curCOG\n" ;
 			}
 			#print "@subs\n";
 			foreach my $cCt (@subs){

@@ -139,6 +139,7 @@ mrgMiTag_scr	[MFLRDir]/secScripts/miTagTaxTable.pl
 cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
 FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
 growth_scr	perl [MFLRDir]/helpers/growthRate.pl
+consCntupVCF_scr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/SNP/consFNA2vcf.pl
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt

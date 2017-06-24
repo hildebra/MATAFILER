@@ -82,6 +82,9 @@ if ($singlReads){
 	@allInFa = ($inD."reads_LSU.r1.fq",$inD."reads_LSU.r2.fq",$inD."reads_ITS.r1.fq",$inD."reads_ITS.r2.fq",$inD."reads_SSU.r1.fq",$inD."reads_SSU.r2.fq");
 }
 
+system "gunzip $inD/*.fq.gz"; #just in case things have been gzipped
+
+
 if (!$singlReads){
 	#pretty circular safety catch.. maybe remove later?
 	if (!-z $allInFa[2] && (-z $allInFa[0] ||  -z $allInFa[1])){#LSU obviously wrong
@@ -92,10 +95,11 @@ if (!$singlReads){
 	}
 
 	#all are empty (also wrong)
-	if (-z $inD."reads_LSU.r1.fq" && -z $inD."reads_LSU.r2.fq" && -z $inD."reads_ITS.r1.fq" && -z $inD."reads_ITS.r2.fq"
-				&& -z $inD."reads_SSU.r1.fq" && -z $inD."reads_SSU.r2.fq" &&
-				-z $inD."reads_LSU.r1.fq.gz" && -z $inD."reads_LSU.r2.fq.gz" && -z $inD."reads_ITS.r1.fq.gz" && -z $inD."reads_ITS.r2.fq.gz"
-				&& -z $inD."reads_SSU.r1.fq.gz" && -z $inD."reads_SSU.r2.fq.gz"){
+	if (-z $inD."reads_LSU.r1.fq" && -z $inD."reads_LSU.r2.fq" #&& -z $inD."reads_ITS.r1.fq" && -z $inD."reads_ITS.r2.fq"
+				&& -z $inD."reads_SSU.r1.fq" && -z $inD."reads_SSU.r2.fq" 
+				#&& -z $inD."reads_LSU.r1.fq.gz" && -z $inD."reads_LSU.r2.fq.gz" #&& -z $inD."reads_ITS.r1.fq.gz" && -z $inD."reads_ITS.r2.fq.gz"
+				#&& -z $inD."reads_SSU.r1.fq.gz" && -z $inD."reads_SSU.r2.fq.gz"
+				){
 		print "input seems completely wrong.. run has to be repeated\n";
 		system "rm -f $mergeD/*_pull.sto";
 		exit(11);
@@ -103,7 +107,7 @@ if (!$singlReads){
 }
 
 #all done already
-if (-e "$outdir/Assigned.sto" && -e "$outdir/LSU_ass.sto" && -e "$outdir/ITS_ass.sto" && -e "$outdir/SSU_ass.sto"){
+if (-e "$outdir/Assigned.sto" && -e "$outdir/LSU_ass.sto" && -e "$outdir/SSU_ass.sto"){ #&& -e "$outdir/ITS_ass.sto" 
 	print "All assigned already\n";
 	exit (0);
 }
@@ -111,8 +115,8 @@ if (-e "$outdir/Assigned.sto" && -e "$outdir/LSU_ass.sto" && -e "$outdir/ITS_ass
 
 
 #------------- LSU - SSU - ITS ------------------
-my @tags=("ITS","SSU","LSU");
-for (my $i=0;$i<3;$i++){
+my @tags=("SSU","LSU");#"ITS",
+for (my $i=0;$i<@tags;$i++){
 	$curStone = "$outdir/$tags[$i]_ass.sto";
 	unless (-e $curStone && -e "$outdir/$tags[$i]riboRun_bl.hiera.txt"){
 		my @dbfa; my @dbtax;
@@ -148,10 +152,14 @@ for (my $i=0;$i<3;$i++){
 #die();
 #cleanup
 system "rm -r $tmpD" if ($tmpD ne "");
+
 if ($inputOK){
 	print "$outdir/Assigned.sto";
 	system "touch $outdir/Assigned.sto";
 	system "gzip -q ".join (" ",@allInFa);
+	#and more clean ups..
+	system "rm -rf $mergeD";
+	#system "gzip $inD/*.fq";
 	exit(0);
 }
 print "Finished\n";
@@ -391,13 +399,13 @@ sub runBlastLCA(){
 	#merging of interleave results
 	if ($doInter){
 		$LCcmd .= "$LCAbin -i ". join(",",@taxouts_inter) . " -r ".join(",",@DBtaxa)." -o $hof2 -LCAfrac 0.8 -showHitRead\n";
-		$LCcmd.= "cat $hof2 >> $hof1; rm $hof2;";
+		$LCcmd.= "tail -n+2 $hof2 >> $hof1; rm $hof2;"; #remove header from LCA
 	}
 	
 	#die $LCcmd."\n";
 	systemW $LCcmd;
 	system "rm -f @taxouts @taxouts_inter" ; #die();
-	system "rm -f $queryO"."__U* $interLeaveO"."__U*";
+	system "rm -f $queryO"."__U* $interLeaveO*";#"."__U*";
 }
 
 #file operations on paired end files
