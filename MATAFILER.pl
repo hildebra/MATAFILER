@@ -53,7 +53,7 @@ sub d2metaDist;
 sub metphlanMapping;sub mergeMP2Table;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
-#bjobs | grep 'Cons' | cut -f1 -d' ' | xargs -t -i bkill {}
+#bjobs | grep 'SDM' | cut -f1 -d' ' | xargs -t -i bkill {}
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
@@ -253,6 +253,7 @@ GetOptions(
 	"reParseFunct=i" => \$redoDiamondParse,
 	"reProfileFunct=i" => \$rewriteDiamond,
 	"diamondCores=i" => \$dia_Cores,
+	"diaParseEvals=s" => \$diaEVal,
 	"diamondDBs=s" => \$reqDiaDB,#NOG,MOH,ABR,ABRc,ACL,KGM,CZy
 	#ribo profiling
 	"profileRibosome=i" => \$DoRibofind,
@@ -268,7 +269,7 @@ GetOptions(
 
   );
  
- #die "$redo2ndMapping\n";
+# die "$DoAssembly\n";
  # ------------------------------------------ options post processing ------------------------------------------
 die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G"unless($MappingMem =~ m/G$/);
@@ -694,6 +695,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	
 	
 	my $boolScndMappingOK = 0; my $iix =0;
+	my $boolScndCoverageOK = 1;
 	if ($rewrite2ndMap){ 
 		foreach my $bwt2outDTT (@bwt2outD){
 			my $expectedMapCovGZ = "$bwt2outDTT/$bwt2ndMapNmds[$iix]"."_".$SmplName."-0-smd.bam.coverage.gz";
@@ -702,16 +704,25 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	}
 	foreach my $bwt2outDTT (@bwt2outD){
 		my $expectedMapCovGZ = "$bwt2outDTT/$bwt2ndMapNmds[$iix]"."_".$SmplName."-0-smd.bam.coverage.gz";
+		my $expectedMapBam = "$bwt2outDTT/$bwt2ndMapNmds[$iix]"."_".$SmplName."-0-smd.bam";
 		$iix++;
 		
 		#print $expectedMapCovGZ."\n";
-		if ( -e $expectedMapCovGZ && $MappingGo){
+		if ( -e $expectedMapCovGZ && -e $expectedMapBam && $MappingGo  ){
 			$boolScndMappingOK=1;
 		}else{
-			$boolScndMappingOK=0; last;
+			$boolScndMappingOK=0; $boolScndCoverageOK=0;
+			#be clean
+			system "rm -f $expectedMapBam*";
+			last;
 		}
+		if ($mapModeCovDo && (!-e $expectedMapCovGZ.".median.percontig" || !-e $expectedMapCovGZ.".percontig"|| !-e $expectedMapCovGZ.".pergene")){
+			$boolScndCoverageOK=0;
+			system "rm -f $expectedMapCovGZ*";
+		}
+
 	}
-	$boolScndMappingOK = 1 if (@bwt2outD == 0 );#|| !$MappingGo);	
+	if (@bwt2outD == 0 ){$boolScndMappingOK = 1 ; $boolScndCoverageOK=1;}#|| !$MappingGo);	
 	#die $boolScndMappingOK."\n$boolAssemblyOK\n";
 	
 	#Kraken flag
@@ -794,7 +805,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			} else {$statStr.=$curSmpl."\t$dir2rd\t".$curStats."\n"; $statStr5.=$curSmpl."\t$dir2rd\t".$curStats5."\n";}
 		}
 		#die "$boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
-		if ($boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
+		if ($boolScndCoverageOK && $boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
 			#free some scratch
 			system "rm -rf $GlbTmpPath/rawRds" if ($DoFreeGlbTmp);
 			system "rm -rf $GlbTmpPath" if ($rmScratchTmp );
@@ -851,7 +862,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	
 	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && $dowstreamAnalysisFlag );
 				;
-#die "$assemblyFlag\n$seqCleanFlag\n";
+	#die "$assemblyFlag\t$seqCleanFlag\t$boolScndMappingOK\n";
 	my $calcUnzip=0;
 	$calcUnzip=1 if ($seqCleanFlag  || $mapAssFlag || !$boolScndMappingOK); #in these cases I need raw reads anyways..
 	#die "$calcUnzip = $seqCleanFlag  || $mapAssFlag || !$boolScndMappingOK\n";
@@ -865,6 +876,14 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#has this sample extra reads (e.g. long reads?)
 	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken\n";
 	#die "$curDir\n";
+	my $stall4unzip=1;
+	if ($stall4unzip){
+		if (0){
+			while(scalar(split(/\n/,`bjobs | grep _UZ`)) > 60){print "W4UZ\n";sleep(60);}
+		} else {
+			while(scalar(split(/\n/,`squeue -u hildebra | grep _UZ`)) > 80){print "W4UZ\n";sleep(60);}
+		}
+	}
 	my ($jdep,$cfp1ar,$cfp2ar,$cfpsar,$WT,$rawFiles, $mmpuNum, $libInfoRef, $jdepUZ) = 
 		seedUnzip2tmp($curDir,$map{$curSmpl}{prefix},$map{$curSmpl}{SupportReads},$curUnzipDep,$nodeSpTmpD,
 		$GlbTmpPath,$waitTime,$importMocat,$AsGrps{$cMapGrp}{CntMap},$calcUnzip);
@@ -1066,7 +1085,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	
 	#------------   secondary mapping -----------------
 	#print "@bwt2outD && $MappingGo && !$boolScndMappingOK\n";
-	if (@bwt2outD>0 && $MappingGo && !$boolScndMappingOK){#map reads to specific tar
+	if (@bwt2outD>0 && $MappingGo && (!$boolScndMappingOK || !$boolScndCoverageOK) ){#map reads to specific tar
 		#collate strings..
 		my @mapOutXS;my @bamBaseNameS;
 		for (my $i=0;$i<@bwt2outD; $i++){
@@ -1109,16 +1128,18 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			if ($map2CtgsY ne ""){$sortBamCnt++;}
 			#call abundance on newly made genes
 			#prevDeps being gff file
-			if ($mapModeCovDo){
-				if ($map2CtgsY eq ""){
-					my $empty = calcCoverage("$bwt2outD[$i]/"."$bamBaseNameS[$i]-smd.bam.coverage.gz",$DBbtRefGFF[$i] ,
-						$samplReadLength,$SmplName,$map2CtgsY.";$prevDeps") ;
-				} else {
+			if ($mapModeCovDo && !$boolScndCoverageOK){
+				if ($delaySubmCmdY eq "1"){
 					$map2CtgsY = calcCoverage("$mapOutX/"."$bamBaseNameS[$i]-smd.bam.coverage.gz",$DBbtRefGFF[$i] ,
 						$samplReadLength,$SmplName,$map2CtgsY.";$prevDeps") ;
 					push(@{$AsGrps{$cMapGrp}{MapCopiesNoDel}},$mapOutX."/*",$bwt2outD[$i]);
+				} else {
+#					die "$bwt2outD[$i]/"."$bamBaseNameS[$i]-smd.bam.coverage.gz\nxx\n";
+					my $empty = calcCoverage("$bwt2outD[$i]/"."$bamBaseNameS[$i]-smd.bam.coverage.gz",$DBbtRefGFF[$i] ,
+						$samplReadLength,$SmplName,$map2CtgsY.";$prevDeps") ;
 				}
-			} elsif ($map2CtgsY ne ""){#check if files need to be copied..
+				#die "ASD\n";
+			} elsif ($delaySubmCmdY eq "1"){#check if files need to be copied..
 				push(@{$AsGrps{$cMapGrp}{MapCopiesNoDel}},$mapOutX."/*",$bwt2outD[$i]);
 			}
 			$AsGrps{$cMapGrp}{MapDeps} .= $map2CtgsY.";";
@@ -1617,7 +1638,8 @@ sub IsDiaRunFinished($){
 		if ($rewriteDiamond ){system "rm -f $curOutDir/diamond/dia.$term.blast*" ;$pD=1; $cD=1;}
 		#die "$rewriteDiamond\n";
 #print "$curOutDir/diamond/dia.$term.blast.gz\n";
-		if ((-z "$curOutDir/diamond/dia.$term.blast.gz" && -z "$curOutDir/diamond/dia.$term.blast.srt.gz")){$cD = 0; }#system "rm $curOutDir/diamond/dia.$term.blas*.gz";}
+		#die "$curOutDir/diamond/dia.$term.blast.gz\n$curOutDir/diamond/dia.$term.blast.srt.gz";
+		if ((-e "$curOutDir/diamond/dia.$term.blast.gz" || -e "$curOutDir/diamond/dia.$term.blast.srt.gz")){$cD = 0; }#system "rm $curOutDir/diamond/dia.$term.blas*.gz";}
 		$pD = 1 if (!-e "$curOutDir/diamond/dia.$term.blast.srt.gz.stone");#  <- last version always requires .srt.gz
 	}
 	#die "$cD, $pD\n";
@@ -1837,10 +1859,11 @@ sub calcCoverage(){
 	my ($cov,$gff,$RL,$cstNme,$jobd) = @_;
 	my $jobName = ""; $QSBopt{LocationCheckStrg}=""; my $tmpCmd="";
 	my $cmd = "$readCov_Bin $cov $gff $RL";
-	if (!-s $cov.".pergene" ){
+	if (!-s $cov.".pergene" || !-s $cov.".percontig" || !-s $cov.".median.percontig" ){
 		$jobName = "_COV$JNUM";
 		$jobName = "$cstNme"."_$JNUM" if ($cstNme ne "");
-		($jobName,$tmpCmd) = qsubSystem($logDir."COV$cstNme.sh",$cmd,1,"20G",$jobName,$jobd,0,1,[],\%QSBopt);
+		#die "$cmd\n";
+		($jobName,$tmpCmd) = qsubSystem($logDir."COV$cstNme.sh",$cmd,1,"20G",$jobName,$jobd,"",1,[],\%QSBopt);
 		#print $logDir."ContigStats.sh\n";
 	} else {
 		$jobName = $jobd;
@@ -2261,7 +2284,7 @@ sub sdmClean(){
 
 	if ( ($presence==0 || $assInputFlaw==1 )&& $runThis){
 		$jobName = "_SDM$JNUM"; my $tmpCmd;
-		($jobName, $tmpCmd) = qsubSystem($logDir."sdmReadCleaner.sh",$cmd,1,"1G",$jobName,$jobd.";".$jdep,"",1,\@General_Hosts,\%QSBopt);
+		($jobName, $tmpCmd) = qsubSystem($logDir."sdmReadCleaner.sh",$cmd,1,"20G",$jobName,$jobd.";".$jdep,"",1,\@General_Hosts,\%QSBopt);
 	}
 	
 	return (\@ret1,\@ret2,\@sret,$matAr,$jobName);
@@ -2347,7 +2370,7 @@ sub seedUnzip2tmp(){
 				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir(DIR);
 			}
 			#print readdir(DIR);
-			@pas = sort ( grep { /$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
+			@pas = sort ( grep { /$smplPrefix$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 			#die "$rawFileSrchStrSingl\n@pas\n@pa1\n";
 			my %h;
 			@h{(@pa1,@pa2)} = undef;
@@ -2439,6 +2462,7 @@ sub seedUnzip2tmp(){
 	}
 	for (my $i=0; $i<@pas; $i++){
 		my $pp = $fastp;
+		#print "$libInfo[$i] eq $xtraRdsTech\n";
 		$pp = $fastp2 if ($libInfo[$i] eq $xtraRdsTech);
 		my ($tmpCmd,$newF) = complexGunzCpMv($pp,$pas[$i],$tmpPath,$finDest."/rawRds/");
 		$unzipcmd .= $tmpCmd."\n";
@@ -2661,11 +2685,17 @@ sub jgi_depth_cmd_depr($){
 
 sub check_map_done{
 	my ($doCram, $finalD, $baseN, $mappDir) = @_;
+	
+	#my $aa = (stat "$finalD/$baseN-smd.bam")[7];
+	#die "$finalD/$baseN-smd.bam "."$aa\n";
+
+
 	if ($doCram && (-e "$finalD/$baseN-smd.cram.sto" && -s "$finalD/$baseN-smd.bam.coverage.gz"  ) ){#&& !$params{bamIsNew} ) ){
 		return (1);
 	} elsif (!$doCram && -e "$finalD/$baseN-smd.bam" && -s "$finalD/$baseN-smd.bam.coverage.gz" ){#&& !$params{bamIsNew}){
 		return (1);
 	}
+	
 	if ( -e "$mappDir/$baseN-smd.bam.coverage.gz" && (-e "$mappDir/$baseN-smd.bam" || -e "$mappDir/$baseN-smd.cram") ){# && !$params{bamIsNew}){ #already stored in mapping dir, still needs to be copied
 		#die "$mappDir/$baseN-smd.bam.coverage.gz";
 		return (2);
@@ -2735,6 +2765,7 @@ sub mapReadsToRef{
 
 		next if ($outstat);#-e "$finalDS[$k]/$outNms[$k]-smd.bam.coverage.gz" );#|| -e "$mappDir[$k]/$outNms[$k]-smd.bam.coverage.gz");
 		#print "-e $finalDS[$k]/$outNms[$k]-smd.bam.coverage.gz || -e $mappDir/$outNms[$k]-smd.bam.coverage.gz";
+		if (-e $tmpOut22[$k] && -s $tmpOut22[$k] < 100){unlink $tmpOut22[$k];}
 		if (!-e $tmpOut22[$k]){ $outputExistsNEx++; }
 	}
 	#die "@outNms \n$outputExistsNEx\n";
@@ -2921,6 +2952,7 @@ sub mapReadsToRef{
 sub bamDepth{
 	my ($dirsHr,  #   $mappDir,$tmpOut,$nodeTmp,$finalD,#dirs to work in
 			$outName,$REF,$jDep,$doCram,$mapparhr) = @_;
+	#die "bamdep\n";
 	my %params = %{$mapparhr};
 	my ($isSorted , $bamFresh,$is2ndMap) =($params{sortedbam},$params{bamIsNew},$params{is2ndMap});
 	#recreate base pars from map2tar sub
@@ -2938,6 +2970,7 @@ sub bamDepth{
 	
 	#check if already done
 	my $outstat = check_map_done($doCram, $finalD, $baseN, $mappDir);
+	#die "$outstat";
 	if ($outstat==1){return ("","");
 	}elsif ($outstat==2){return ("","1");}
 	#die "$mappDir/$baseN-smd.bam.coverage.gz\n$finalD/$baseN-smd.bam.coverage.gz\n" ;#if (-e "$finalD/$baseN-smd.bam.coverage.gz");
@@ -2989,6 +3022,7 @@ sub bamDepth{
 		$covCmd = "$bedCovBin -ibam $nxtBAM -bg > $nxtBAM.coverage\n";
 		$covCmd .= "rm -f $nxtBAM.coverage.gz\n$pigzBin -p $numCore $nxtBAM.coverage\n";
 	}
+	#die "$covCmd\n";
 	
 	#jgi depth profile - not required, different call to metabat
 	$covCmd .= jgi_depth_cmd($nxtBAM,$nxtBAM,95);

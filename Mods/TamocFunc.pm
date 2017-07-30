@@ -7,7 +7,7 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(runRaxML sortgzblast uniq getE100 getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
+our @EXPORT_OK = qw( sortgzblast uniq getE100 getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 

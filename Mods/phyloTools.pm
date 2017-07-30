@@ -202,7 +202,8 @@ sub runRaxML{
 	print "Calculating tree distance matrix from tree..\n";
 	my $outDist = $outTree; $outDist =~ s/\.[^\.]+$/\.dist/;
 	#system "rm -f $raxD/*all"; 
-	system  "$trDist $outTree > $outDist\n";
+	#this perl script has some errors!!
+	#system  "$trDist $outTree > $outDist\n";
 #	system "mv $raxD/RAxML_distances.all $outDist";
 
 	

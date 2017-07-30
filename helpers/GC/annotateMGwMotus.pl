@@ -67,7 +67,7 @@ open I,"<$SpecID/progenomes.specIv2_2";
 while (<I>){next if (m/^#/);chomp; my @xx = split /\t/;$specIid{$xx[1]} = $xx[0];$xx[1]=~m/^(\d+)\./; $specItax{$xx[0]}=$1;}
 close I;
 my %specItaxM; #real matrix with tax levels
-
+#die "$specItax{specI_v2_Cluster1309}\n";
 my $specIfullTax = createAreadSpecItax(\%specItax,"$SpecID/specI.tax2");
 
 #assign each COG separately
@@ -485,6 +485,7 @@ sub read_matrix($){
 sub specImatrix($$){
 	my ($oF,$hr) = @_;
 	my %sTax = %{$hr};
+	#print "@{$sTax{specI_v2_Cluster34}}\n";
 	open O,">$oF";
 	my @bkgrnd; my @dblCh;
 	foreach my $gid (keys %FMGmatrix){
@@ -493,7 +494,7 @@ sub specImatrix($$){
 		next if (exists ($gene2specI{$gid}));
 		for (my $j=0;$j<scalar(@{$FMGmatrix{ $gid }});$j++){$bkgrnd[$j] +=  ${$FMGmatrix{ $gid }}[$j] / 40;}
 	}
-	
+	#print "@{$specIprofiles{specI_v2_Cluster34}}\n";
 	
 	print O "SpecI\t".join ("\t",@{$FMGmatrix{ header }})."\n";
 	#print O "SUM\t\t".join ("\t",@dblCh)."\n";
@@ -512,17 +513,24 @@ sub specImatrix($$){
 	#calculating higher level abundance matrix
 	my $oFx = $oF; $oFx =~ s/\.[^\.]*$//;
 	my @taxLs = ("superkingdom","phylum","class","order","family","genus","species");
+	#print "@{$specIprofiles{specI_v2_Cluster34}}\n";
 	for (my $t=0;$t<@taxLs;$t++){
 		#sum up to hi lvl
 		my %thisMap;
 		foreach my $si (keys %specIprofiles){
+			print "$si    @{$sTax{$si}}\n" if (@{$sTax{$si}} == 0);
 			my $clvl = join (";",@{$sTax{$si}}[0 .. $t]);
+			
+			#if ($clvl eq "Bacteria;Proteobacteria;Gammaproteobacteria;Enterobacterales;Enterobacteriaceae;Escherichia;Escherichia albertii"){
+				#print "$si\n@{$specIprofiles{ $si }}\n";
+			#}
+			
 			if (exists($thisMap{$clvl})){
 				for (my $kl=0;$kl<scalar(@{$specIprofiles{ $si }});$kl++){
 					${$thisMap{$clvl}}[$kl] += ${$specIprofiles{ $si }}[$kl];
 				}
 			} else {
-				$thisMap{$clvl} =\@{$specIprofiles{ $si }}
+				$thisMap{$clvl} = [@{$specIprofiles{ $si }}];
 			}
 		}
 		open O,">$oFx.$taxLs[$t]";
@@ -533,6 +541,7 @@ sub specImatrix($$){
 		}
 		close O;
 	}
+	#print "@{$specIprofiles{specI_v2_Cluster34}}\n";
 
 }
 sub nonZero($){
@@ -558,7 +567,7 @@ sub createAreadSpecItax{
 	my %sNTID = %{$hr1};
 	my %ret; my $cnt = -1;
 	if (-e $file){
-	open I,"<$file";
+		open I,"<$file";
 		while (my $l = <I>){
 			$cnt++;
 			chomp $l; my @spl = split /\t/,$l;
@@ -566,28 +575,34 @@ sub createAreadSpecItax{
 			my $id = shift @spl;
 			$ret{$id} = \@spl;
 		}
+		close I;
 	}
-	close I;
+	#print "$ret{specI_v2_Cluster1309}\n";
 	my @taxids; my @spids;
 	foreach my $k (keys %sNTID){
 		next if (exists($ret{$k}));
 		#jaimes ete prog
+		#print "$k\n";
 		push (@taxids,$sNTID{$k});
 		push (@spids,$k);
 
 	}
 	#die "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
-	my $cmd = "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
-	my $tret= `$cmd`;
-	my @newT = split /\n/,$tret;
-	if (@newT > 0){
-		open O,">>$file";
-		for (my $i=0;$i<@newT;$i++){
-			my @spl = split /\t/,$newT[$i]; shift @spl;
-			print O "$spids[$i]\t".join("\t",@spl)."\n";
+	if (@taxids>0){
+		print "Detecting ".@taxids." new taxids\n";
+		my $cmd = "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
+		my $tret= `$cmd`;
+		my @newT = split /\n/,$tret;
+		if (@newT > 0){
+			open O,">>$file";
+			for (my $i=0;$i<@newT;$i++){
+				my @spl = split /\t/,$newT[$i]; shift @spl;
+				print O "$spids[$i]\t".join("\t",@spl)."\n";
+			}
+			close O;
 		}
-		close O;
 	}
+	#die "@{$ret{specI_v2_Cluster34}}\n";
 	return (\%ret);
 }
 

@@ -7,7 +7,7 @@ use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(convertMSA2NXS gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap 
-		readMapS renameFastHD findQsubSys qsubSystem emptyQsubOpt 
+		readMapS renameFastHD findQsubSys emptyQsubOpt qsubSystem
 		readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
 		readFasta writeFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median deNovo16S);
 
@@ -739,7 +739,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		if ($memory > 250001){$queues = "\"bigmem\"";}
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
 		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH -n  $ncores\n#SBATCH -o $tmpsh.otxt\n";
-		print O "#SBATCH --tmp=$tmpSpace\n#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n";
+		print O "#SBATCH --tmp=$tmpSpace\n#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
 		print O "#SBATCH -p $queues\n";
 		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
 		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
@@ -761,10 +761,10 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	}
 	#set abortion on program fails
 	print O "set -e\n";
+	print O "ulimit -c 0;\n";
 	#any xtra commands (like module load perl?)
 	print O "$xtraNodeCmds\n";
 	#prevent core dump files
-	print O "ulimit -c 0\n";
 	#file location check availability
 	print O $optHR->{LocationCheckStrg};
 
@@ -809,7 +809,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		}
 			#$waitJID =~ s/;/,/g;$xtra.="-hold_jid $waitJID ";}
 	}
-	if ($cwd ne ""){if ($LSF){$xtra .= "--workdir $cwd";} else {$xtra.="-cwd $cwd"; } }
+	if ($cwd ne ""){if ($LSF==2){$xtra .= "--workdir $cwd";} else {$xtra.="-cwd $cwd"; } }
 	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}

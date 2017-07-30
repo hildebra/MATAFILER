@@ -59,7 +59,7 @@ GetOptions(
 	"i=s"      => \$blInf,
 	"DB=s"      => \$DBmode,
 	"mode=i"      => \$mode,#0=normal, 1=normal and print per gene anno, 2=print extended per gene annotation, no summary,3=file check 4=remove outputfile
-	"eval=f"      => \$minBLE,
+	"eval=s"      => \$minBLE,
 	"minBitScore=f" => \$minScore,
 	"minAlignLen=i"      => \$minAlLen,
 	"minPercSbjCov=f"      => \$quCovFrac,
@@ -330,6 +330,7 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 } elsif ($mode==3) { #only checks for presence of run
 	for (my $i=0; $i<@aminBLE ; $i++){
 		my $pathXtra = "/CNT_".$aminBLE[$i]."/";
+		print "$i  $aminBLE[$i]\n";
 		unless(check_files($DBmode."parse",$inP.$pathXtra,$aminBLE[$i])){exit(3);}
 	}
 } elsif ($mode==4) { #removes run
@@ -889,7 +890,7 @@ sub combineBlasts($ $){
 	my %ret;
 	
 	my @allKs = uniq ( keys %bl1, keys %bl2); #
-	#die "@allKs\n";
+	#print "@allKs\n";
 	foreach my $k (@allKs){
 		my $ex1 = exists ($bl1{$k});
 		unless ($ex1 && exists ($bl2{$k}) ){
@@ -897,12 +898,13 @@ sub combineBlasts($ $){
 			} else { $ret{$k} = $bl2{$k};}
 			next;
 		}
+		die "$k" unless (exists $bl2{$k});
+		my @hit1 = @{$bl1{$k}};
+		my @hit2 = @{$bl2{$k}};
 		#pair
 		#print "pair";
 		$k =~ s/\/\d$/\/12/;
-		$ret{$k} = $bl1{$k};
-		my @hit1 = @{$bl1{$k}};
-		my @hit2 = @{$bl2{$k}};
+		$ret{$k} = \@hit1;
 		
 		my @sbss1 = sort{ $a <=> $b }(($hit1[8],$hit1[9]));
 		my @sbss2 = sort{ $a <=> $b }($hit2[8],$hit2[9]);

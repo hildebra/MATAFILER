@@ -19,6 +19,7 @@ use Getopt::Long qw( GetOptions );
 sub convertMultAli2NT;
 sub mergeMSAs;
 sub synPosOnly;
+sub calcDisPos;#gets only the dissimilar positions of an MSA, as well as %id similarity
 
 my $doPhym= 0;
 
@@ -237,18 +238,45 @@ if (!$Ete){
 	#convert MSA to NEXUS
 	#convertMSA2NXS($multAli,"$multAli.nxs");
 	my $phyloTree = "";
+	if ($doGubbins){
+		my $outDG = "$outD/gubbins/"; 
+		system "mkdir -p $outDG" unless (-d $outDG);
+		$outDG .= "GD";
+		if ($continue && -e $outDG.".final_tree.tre"&& -e $outDG.".summary_of_snp_distribution.vcf"){
+			print "Gubbins result already exists in output folder, run will be skipped\n";
+		} else {
+			system "rm -rf $outDG\n";
+			my $cmdG = "source activate py3k\n";
+			$cmdG .= "$gubbinsBin --filter_percentage 50  --tree_builder hybrid --prefix $outDG --threads $ncore $multAli";
+			if (0){$cmdG.=" --outgroup $outgroup";}
+			$cmdG.="\n";
+			$cmdG .= "source deactivate py3k\n";
+			systemW $cmdG;
+			#die $cmdG."\n";
+			print "Gubbins run finished\n";
+		}
+	}
+
+#distamce matrix, this is fast
+	#system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
+	calcDisPos($multAli,"$outD/MSA/percID.txt");
+	if ($calcSyn){
+	#		system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
+		calcDisPos($multAliSyn,"$outD/MSA/percID_syn.txt");
+	}
+	if ($calcNonSyn){
+		#system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
+		calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt");
+	}
 	if ($doRAXML){
 		my $BStag = ""; if ($bootStrap>0){$BStag="_BS$bootStrap";}
 		runRaxML("$multAli.ph",$bootStrap,$outgroup,"$treeD/RXML_allsites$BStag.nwk",$ncore,$continue);
-		system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
 		$phyloTree = "$treeD/RXML_allsites$BStag.nwk";
 		if ($calcSyn){
 			runRaxML("$multAliSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_syn$BStag.nwk",$ncore,$continue) ;
-			system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
 		}
 		if ($calcNonSyn){
 			runRaxML("$multAliNonSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_nonsyn$BStag.nwk",$ncore,$continue);
-			system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
 		}
 	}
 	if ($doCFML){
@@ -258,22 +286,6 @@ if (!$Ete){
 		my $CFMLbin = "/g/bork3/home/hildebra/bin/ClonalFrameML/src/./ClonalFrameML";
 		my $cmd = "$CFMLbin $phyloTree $multAli $outDG\n";
 		die $cmd;
-	}
-	if ($doGubbins){
-		my $outDG = "$outD/gubbins/";
-		system "mkdir -p $outDG" unless (-d $outDG);
-		$outDG .= "GD";
-		if ($continue && -e $outDG.".final_tree.tre"&& -e $outDG.".summary_of_snp_distribution.vcf"){
-			print "Gubbins result already exists in output folder, run will be skipped\n";
-		} else {
-			my $cmdG = "source activate py3k\n";
-			$cmdG .= "$gubbinsBin --filter_percentage 50  --tree_builder hybrid --prefix $outDG --threads $ncore $multAli";
-			if (0){$cmdG.=" --outgroup $outgroup";}
-			$cmdG.="\n";
-			$cmdG .= "source deactivate py3k\n";
-			system $cmdG;
-			print "Gubbins run finished\n";
-		}
 	}
 
 	#phyml
@@ -325,7 +337,68 @@ exit(0);
 
 
 
-
+sub calcDisPos($ $){
+	my ($MSA,$opID) = @_;
+	my $kr = readFasta($MSA);
+	my %MS = %{$kr};
+	my %diffArs;my %perID;
+	foreach my $k1 (keys %MS){
+		$MS{$k1} = uc ($MS{$k1});
+	}
+	foreach my $k1 (keys %MS){
+		my $ss1 = $MS{$k1};
+		foreach my $k2 (keys %MS){
+			next if ($k2 eq $k1);
+			my $ss2 = $MS{$k2};
+			my $mask = $ss1 ^ $ss2;
+			my $diff=0;
+			my$N2=($ss2 =~ tr/[-]//);$N2+=($ss2 =~ tr/[N]//);
+			my$N1=($ss1 =~ tr/[-]//);$N1+=($ss1 =~ tr/[N]//);
+			while ($mask =~ /[^\0]/g) {
+				my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
+				if ($s1 eq "N" ||$s1 eq "-"){
+					$N2++;next;
+				}
+				if ($s2 eq "N" ||$s2 eq "-" ){#missing data, position doesn't matter
+					$N1++;next;
+				}
+				$diffArs{$-[0]}=1;
+				$diff++;
+				#print "$s1-$s2  $-[0]  $- \n";
+			}
+			my $nonDiff = ($mask =~ tr/[\0]//);
+			$nonDiff -= $N1;
+			$perID{$k1}{$k2}= $nonDiff/($diff+$nonDiff)*100;
+		}
+	}
+	open O,">$opID" or die "Cant open out perc ID file $opID\n";
+	my @smpls = keys %MS;
+	print O "percID\t".join("\t",@smpls)."";
+	foreach my $k1 (@smpls){
+		print O "\n$k1\t";
+		foreach my $k2 (@smpls){
+			if ($k1 eq $k2){print O "\t100";
+			} else {
+				print O "\t".$perID{$k1}{$k2};
+			}
+		}
+	}
+	close O;
+	my @NTdiffs = sort {$a <=> $b} (keys %diffArs);
+	#die "Cant open out perc ID file $opID\n";
+	my $MSAredF = $MSA; $MSAredF =~ s/\.[^\.]+$//;$MSAredF.=".reduced.fna";
+	open O,">$MSAredF" or die "Can't open reduced MSA file $MSAredF\n";
+	foreach my $k1 (@smpls){
+		my $seq1 = $MS{$k1};
+		my $seq = "";
+		foreach my $i (@NTdiffs){
+			$seq.=substr($seq1,$i,1);
+		}
+		print O ">$k1\n$seq\n";
+	}
+	close O;
+	#die "done\n";
+}
 
 sub mergeMSAs($ $ $ $){
 	my ($MSAsAr,$samplesHr,$multAliF,$del) = @_;

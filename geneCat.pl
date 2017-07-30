@@ -9,7 +9,8 @@
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/MM_at_v3.txt,/g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/GNM3_ABR 1 95
 #for Jure ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/JureTest 1 95
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/simus2.txt /g/scb/bork/hildebra/SNP/GCs/SimuB 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_sm.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
-#ex ./geneCat.pl /g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map,/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map,/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt /g/scb/bork/hildebra/SNP/GCs/SoilCatv2b3 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
+#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/soil_ex.map,/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map,/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map,/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt /g/scb/bork/hildebra/SNP/GCs/SoilCatv3 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
+#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/ 1 95
 #faa generation from gene  catalog 
 #ex ./geneCat.pl ? /g/bork1/hildebra/SNP/GC/T2_GNM3_ABR protExtract 
 #./geneCat.pl ? /g/scb/bork/hildebra/SNP/GNMass2_singl/ 1 95
@@ -38,7 +39,7 @@ sub writeMG_COGs;
 
 #.27: added external genes support
 #.28: gene length filter
-my $version = 0.29;
+my $version = 0.30;
 
 die "Not enough Args\n" if (@ARGV < 2);
 my $baseOut = $ARGV[1];#"/g/scb/bork/hildebra/SNP/GNMass/";
@@ -54,11 +55,11 @@ $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $ext
 my $justCDhit = 0;
 my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
-my $doSubmit = 1; my $qsubNow = 1;
-my $doFMGseparation = 1; #cluster FMGs separately?
+my $doSubmit = 0; my $qsubNow = 0;
+my $doFMGseparation = 0; #cluster FMGs separately?
 my $doGeneMatrix =0; #in case of SOIL I really don't need to have a gene abudance matrix / sample
 $baseOut.="/" unless ($baseOut =~ m/\/$/);
-
+my $toLclustering=1;
 
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
 my $cdhitBin = getProgPaths("cdhit");#/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
@@ -140,7 +141,7 @@ my $numCor = 40; my $totMem = 200; #in G
 my %map; my %AsGrps; my @samples;
 my $bucketCnt = 0; my $cnt = 0;
 my @bucketDirs = ();
-
+my $bdir = $OutD."B$bucketCnt/";#dir where to write the output files..
 my $QSBoptHR = emptyQsubOpt($doSubmit,"");
 
 #$defaultsCDH = "-d 0 -c 0.$cdhID -g 0 -T $numCor -M ".int(($totMem+30)*1024) if (@ARGV>3);
@@ -165,7 +166,7 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	exit(0);
 } else { #start building new gene cat
 	#die $mapF."\n";
-	my ($hr,$hr2) = readMapS($mapF);
+	my ($hr,$hr2) = readMapS($mapF,1);
 	%map = %{$hr};
 	@samples = @{$map{smpl_order}};
 	%AsGrps = %{$hr2};
@@ -203,6 +204,18 @@ open O,">$OutD/LOGandSUB/GCmaps.ori"; print O join ",",@maps; close O;
 #die();
 if ($BIG==0){	$numCor = 24; $totMem = 30; }
 
+system "mkdir -p $bdir";
+
+open my $OC,">$bdir/compl.fna" or die "Can't open $bdir/compl.fna\n"; 
+open my $O5,">$bdir"."5Pcompl.fna";
+open my $O3,">$bdir"."3Pcompl.fna";
+open my $OI,">$bdir"."incompl.fna";
+if ($toLclustering){#no length sorting, just write directly
+	print "Direct output to file\n";
+} else {
+	close $O3;close $OC;close $O5; close $OI;
+
+}
 
 
 my @skippedSmpls; my %uniqueSampleNames; my $doubleSmplWarnString = "";
@@ -227,7 +240,7 @@ foreach my $smpl(@samples){
 	my $SmplName = $map{$smpl}{SmplID};
 	#$dir2rd = "/g/scb/bork/hildebra/SNP/SimuL/sample-0/";
 	my $metaGD = "$dir2rd/assemblies/metag/";
-	if (!-e "$metaGD/longReads.fasta.filt.sto"){$metaGD = `cat $dir2rd/assemblies/metag/assembly.txt`; chomp $metaGD;}
+	if (!-e "$metaGD/longReads.fasta.filt.sto" && !-e "$metaGD/scaffolds.fasta.filt"){$metaGD = `cat $dir2rd/assemblies/metag/assembly.txt`; chomp $metaGD;}
 	my $inFMGd = "$metaGD/ContigStats/FMG/";
 	#print "\n$metaGD\n";
 	#print "$dir2rd/assemblies/metag/scaffolds.fasta.filt\n";
@@ -282,13 +295,34 @@ foreach my $smpl(@samples){
 		if (exists $curFMGs{$hd} && $doFMGseparation){
 			$allFMGs{$curFMGs{$hd}}{$hd} = $fnas{$hd}; $scnts[4] ++;
 		} elsif ($1==0 && $2==0){ #complete genes
-			push(@OCOMPL,$shrtHd."\n".$fnas{$hd}."\n"); $scnts[0] ++;
+			if ($toLclustering){#no length sorting
+				print $OC $shrtHd."\n".$fnas{$hd}."\n";
+			} else {
+				push(@OCOMPL,$shrtHd."\n".$fnas{$hd}."\n"); 
+			}
+
+			$scnts[0] ++;
 		} elsif ($1==0 && $2==1){ #3' complete
-			push(@O3P,$shrtHd."\n".$fnas{$hd}."\n");$scnts[1] ++;
+			if ($toLclustering){#no length sorting
+				print $O3 $shrtHd."\n".$fnas{$hd}."\n";
+			} else {
+				push(@O3P,$shrtHd."\n".$fnas{$hd}."\n");
+			}
+			$scnts[1] ++;
 		} elsif ($1==1 && $2==0){ #5' complete
-			push(@O5P, $shrtHd."\n".$fnas{$hd}."\n");$scnts[2] ++;
+			if ($toLclustering){#no length sorting
+				print $O5 $shrtHd."\n".$fnas{$hd}."\n";
+			} else {
+				push(@O5P, $shrtHd."\n".$fnas{$hd}."\n");
+			}
+			$scnts[2] ++;
 		} else { #gene fragments, just map
-			push(@OINC, $shrtHd."\n".$fnas{$hd}."\n");$scnts[3] ++;
+			if ($toLclustering){#no length sorting
+				print $OI $shrtHd."\n".$fnas{$hd}."\n";
+			} else {
+				push(@OINC, $shrtHd."\n".$fnas{$hd}."\n");
+			}
+			$scnts[3] ++;
 		}
 	}
 	my $totCnt = $scnts[0] + $scnts[1] + $scnts[2] + $scnts[3] ;
@@ -334,7 +368,12 @@ if ($justCDhit==0 && $extraRdsFNA ne ""){
 		my $shrtHd = $hd ;	$shrtHd =~ m/(\S+)\s/; $shrtHd = $1;
 		#
 		#just assume that every gene is complete
-		push(@OCOMPL,$shrtHd."\n".$fnas{$hd}."\n"); $xcnts ++;
+		if ($toLclustering){#no length sorting
+			print $OC $shrtHd."\n".$fnas{$hd}."\n";
+		} else {
+			push(@OCOMPL,$shrtHd."\n".$fnas{$hd}."\n"); 
+		}
+		$xcnts ++;
 	}
 	print "Added $xcnts genes from external source\nSkipped $tooShrtCnt Genes (too short $minGeneL)\n";
 	print QLOG "Added $xcnts genes from external source\n";
@@ -342,7 +381,6 @@ if ($justCDhit==0 && $extraRdsFNA ne ""){
 
 #die();
 print "\n\n--skipped: ".join(",",@skippedSmpls)."\n" if (@skippedSmpls > 0);
-my $bdir = $OutD."B$bucketCnt/";
 my %FMGfileList;
 if ($justCDhit==0){
 	writeBucket(\@OCOMPL,\@O3P,\@O5P,\@OINC,$bdir,$bucketCnt);
@@ -370,6 +408,9 @@ if ($justCDhit==0){
 #big step
 submCDHIT($bdir,$bucketCnt,$OutD,$map{outDir},\%FMGfileList);#,$baseOut);
 if ($justCDhit==0){	close QLOG;}
+if ($toLclustering){#no length sorting, just write directly
+	close $O3;close $OC;close $O5; close $OI;
+}
 
 print "FInished\n";
 exit(0);
@@ -782,13 +823,21 @@ sub submCDHIT($ $ $ $ $){
 }
 sub writeBucket(){
 	my ($OCOMPLar,$O3Par,$O5Par,$OINCar,$bdir,$bnum) = @_;
+	if ($toLclustering){return;}
 	systemW("mkdir -p $bdir");
 	my @OCOMPL = @{$OCOMPLar}; my @O3P = @{$O3Par};  my @O5P = @{$O5Par}; my @OINC = @{$OINCar}; 
 	if (@OCOMPL ==0){die "no genes found!";}
-	open O,">$bdir"."compl.fna"; foreach(sort {length $b <=> length $a} @OCOMPL ){print O $_;} close O;
-	open O,">$bdir"."5Pcompl.fna"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O;
-	open O,">$bdir"."3Pcompl.fna"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O;
-	open O,">$bdir"."incompl.fna";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;
+	if ($toLclustering){#no length sorting
+		#open O,">$bdir"."compl.fna"; foreach( @OCOMPL ){print O $_;} close O;
+		#open O,">$bdir"."5Pcompl.fna"; foreach( @O3P ){print O $_;} close O;
+		#open O,">$bdir"."3Pcompl.fna"; foreach( @O5P ){print O $_;} close O;
+		#open O,">$bdir"."incompl.fna";foreach( @OINC ){print O $_;} close O;
+	} else {
+		open O,">$bdir"."compl.fna"; foreach(sort {length $b <=> length $a} @OCOMPL ){print O $_;} close O;
+		open O,">$bdir"."5Pcompl.fna"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O;
+		open O,">$bdir"."3Pcompl.fna"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O;
+		open O,">$bdir"."incompl.fna";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;
+	}
 }
 sub readFasta($){
   my ($fil) = @_;
