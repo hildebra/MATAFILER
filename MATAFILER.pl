@@ -51,6 +51,7 @@ sub nopareil; sub calcCoverage;
 sub prepKraken;sub krakHSap; sub krakenTaxEst;
 sub d2metaDist;
 sub metphlanMapping;sub mergeMP2Table;
+sub genoSize;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
 #bjobs | grep 'SDM' | cut -f1 -d' ' | xargs -t -i bkill {}
@@ -82,7 +83,7 @@ my $nodeTmpDirBase = "/tmp/MATAFILER/";
 #dirs from config file--------------------------
 $sharedTmpDirP = getProgPaths("globalTmpDir",0);
 $nodeTmpDirBase = getProgPaths("nodeTmpDir",0);
-
+#die "$nodeTmpDirBase\n";
 my $baseDir = ""; my $baseOut = "";
 my $mapF = ""; my $baseID = "";
 #my $krkFiltBin = "/g/scb/bork/hildebra/DB/kraken/./kraken-filter";
@@ -116,6 +117,7 @@ my $jgiDepthBin = getProgPaths("jgiDepth");#"/g/bork3/home/hildebra/bin/metabat/
 my $bedCovBin = getProgPaths("bedCov");#"/g/bork5/hildebra/bin/bedtools2-2.21.0/bin/genomeCoverageBed";
 my $srtMRNA_path = getProgPaths("srtMRNA_path");
 my $ITSDBfa = getProgPaths("ITSdbFA");
+my $lambdaIdxBin = getProgPaths("lambdaIdx");		
 
 #local MATAFILER scripts --------------------------
 my $cLSUSSUscript = getProgPaths("cLSUSSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/catchLSUSSU.pl";
@@ -184,6 +186,7 @@ my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??
 my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
 my $MappingMem = "3G";
 my $oldStylFolders=0; #0=smpl name as out folder; 1=inputdir as out foler (legacy)
+my $DoGenoSize=0;
 
 #----------- map all reads to a specific reference - options ---------
 my $prevDeps= "";my $mapModeActive=0; my $mapModeCovDo=1;#get the coverage per gene etc
@@ -263,6 +266,7 @@ GetOptions(
 	#other tax profilers..
 	"profileMetaphlan2=i"=> \$DoMetaPhlan,
 	"profileKraken=i"=> \$DoKraken,
+	"estGenoSize=i" => \$DoGenoSize,
 	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
 	#D2s distance
 	"calcInterMGdistance=i" => \$DoCalcD2s,
@@ -738,6 +742,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	} else {$KrakTaxFailCnts++;}
 	
 	#system "rm -f $curOutDir/ribos//ltsLCA/LSU_ass.sto $curOutDir/ribos//ltsLCA/Assigned.sto"; fix for new LSU assignments
+	my $calcGenoSize=0; $calcGenoSize=1 if ($DoGenoSize && 	!-e "$curOutDir/MicroCens/MC.0.result");
 	my $calcRibofind = 0; my $calcRiboAssign = 0;
 	$calcRibofind = 1 if ($DoRibofind && (!-e "$curOutDir/ribos//SSU_pull.sto"|| !-e "$curOutDir/ribos//LSU_pull.sto" || ($doRiboAssembl && !-e "$curOutDir/ribos/Ass/allAss.sto" ))); #!-e "$curOutDir/ribos//ITS_pull.sto"|| 
 	$calcRiboAssign = 1 if ($DoRibofind && ( #!-e "$curOutDir/ribos//ltsLCA/ITS_ass.sto"||  #ITS no longer required.. unreliable imo
@@ -805,7 +810,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			} else {$statStr.=$curSmpl."\t$dir2rd\t".$curStats."\n"; $statStr5.=$curSmpl."\t$dir2rd\t".$curStats5."\n";}
 		}
 		#die "$boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
-		if ($boolScndCoverageOK && $boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
+		if ($boolScndCoverageOK && $boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcRiboAssign && !$calcGenoSize && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
 			#free some scratch
 			system "rm -rf $GlbTmpPath/rawRds" if ($DoFreeGlbTmp);
 			system "rm -rf $GlbTmpPath" if ($rmScratchTmp );
@@ -857,7 +862,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $assemblyFlag = 0; $assemblyFlag = 1 if (!-s $finAssLoc && $DoAssembly);
 	my $mapAssFlag = 0; $mapAssFlag = 1 if ($map2Assembly && !-e "$finalMapDir/$SmplName-smd.bam.coverage.gz" && $assemblyFlag );
 	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$curSmpl}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
-	my $dowstreamAnalysisFlag = 0; $dowstreamAnalysisFlag=1 if ( ($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
+	my $dowstreamAnalysisFlag = 0; 
+	$dowstreamAnalysisFlag=1 if ( ($scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcGenoSize || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
 	#die "$dowstreamAnalysisFlag  $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan\n";
 	
 	my $seqCleanFlag = 0; $seqCleanFlag =1 if (!-e "$GlbTmpPath/seqClean/filterDone.stone" && $dowstreamAnalysisFlag );
@@ -877,9 +883,9 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die "$assemblyFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken\n";
 	#die "$curDir\n";
 	my $stall4unzip=1;
-	if ($stall4unzip){
-		if (0){
-			while(scalar(split(/\n/,`bjobs | grep _UZ`)) > 60){print "W4UZ\n";sleep(60);}
+	if ($stall4unzip &&$doSubmit){
+		if (1){
+			while(scalar(split(/\n/,`bjobs | grep _UZ`)) > 80){print "W4UZ\n";sleep(60);}
 		} else {
 			while(scalar(split(/\n/,`squeue -u hildebra | grep _UZ`)) > 80){print "W4UZ\n";sleep(60);}
 		}
@@ -980,6 +986,10 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		
 		#debug
 		next;
+	}
+	if ($calcGenoSize){#use microbeCensus to get avg genome size
+		my $gsJdep = genoSize($arp1,$arp2,$singAr,$mergRdsHr,$curOutDir."MicroCens/",$mergJbN.";".$sdmjN);
+		$AsGrps{$cAssGrp}{readDeps} .= ";$gsJdep";
 	}
 	
 	#kraken (estimate taxa abundance
@@ -1550,44 +1560,52 @@ sub detectRibo(){
 			#"/g/bork3/home/hildebra/dev/lotus//DB//UNITE/sh_refs_qiime_ver7_99_02.03.2015.fasta", "/g/bork3/home/hildebra/dev/lotus//DB//UNITE/sh_taxonomy_qiime_ver7_99_02.03.2015.txt",
 #			"/g/bork3/home/hildebra/DB/MarkerG/PR2/gb203_pr2_all_10_28_99p.fasta*", "/g/bork3/home/hildebra/DB/MarkerG/PR2/PR2_taxonomy.txt");
 		#check first if the lambda DB was already built
-		my $lambdaIdxBin = getProgPaths("lambdaIdx");		
 		for (my $kk=0;$kk<@LCAdbs; $kk+=2){
 			my $DB = $LCAdbs[$kk];
 			die "wrong DB checked for index built:$DB\n" if ($DB =~ m/\.tax$/);
-			if (!-f $DB.".dna5.fm.sa.val"  ) {
+#			if (!-f $DB.".dna5.fm.sa.val"  ) { #old lambda 1.0x style
+			if (!-f $DB.".lambda/index.lf.drp"  ) { #new 1.9x style
 				print "Building LAMBDA index anew (may take up to an hour)..\n";
 				$DBcores = 12;
 				$DBcmd .= "$lambdaIdxBin -p blastn -t $DBcores -d $DB\n";
+				#die "$DBcmd\n";
 			}
 		}
 		#print "$DBrna2/SLV_128_LSU.tax || !-e $DBrna2/gb203_pr2_all_10_28_99p.fasta  $DBrna2/ITS_comb.fa.dna5.fm.sa.val\n";
 		if (!-d $DBrna2 || !-e $DBrna2."/SLV_128_LSU.tax" || !-e "$DBrna2/gb203_pr2_all_10_28_99p.fasta" 
-				|| !-e "$DBrna2/ITS_comb.fa.dna5.fm.sa.val" ){
+				|| !-e "$DBrna2/ITS_comb.fa.lambda/index.lf.drp" ){
 			$DBcmd .= "mkdir -p $DBrna2\n" if (!-d $DBrna2);
-			$DBcmd.= "cp ". join("* ",@LCAdbs) . "* $DBrna2";
+			$DBcmd.= "cp -r ". join("* ",@LCAdbs) . "* $DBrna2";
 		}
 		my $jN = "_RRDB$JNUM"; my $tmpCmd;
 		#die $DBcmd."$DBrna/ITS_comb.idx.kmer_0.dat";
 		if ($DBcmd ne ""){
 			#die $DBcmd."\n";
-			($jN, $tmpCmd) = qsubSystem($logDir."RiboDBprep.sh",$DBcmd,$DBcores,"20G",$jN,"","",1,\@General_Hosts,\%QSBopt);
+			($jN, $tmpCmd) = qsubSystem($logDir."RiboDBprep.sh",$DBcmd,$DBcores,"10G",$jN,"","",1,\@General_Hosts,\%QSBopt);
 			$globalRiboDependence{DBcp} = $jN;
 		}
 	}
-#	die;
+	#die;
 	
 	#first detect LSU/SSU/ITS in metag
 	my $tmpDY = "$tmpP/SMRNA/";
 	my $cmd = "\n\n";
 	if ($readsRpairs){
-		$cmd .= "$cLSUSSUscript '".join(";",@re1)."' '". join(";",@re2)."' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
+		$cmd .= "$cLSUSSUscript '".join(";",@re1)."' '". join(";",@re2)."' ";
+		if (@singl>0){
+			$cmd .= "'".join(";",@singl) . "' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
+		} else {
+			$cmd .="'-1' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
+		}
 	} else {
-		$cmd .= "$cLSUSSUscript '".join(";",@singl)."' '-1' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
+		$cmd .= "$cLSUSSUscript '".join(";",@singl)."' '-1' '-1' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
 	}
 	#this part assigns tax
 	my $tmpDX = "$tmpP/LCA/";
 	my $numCoreL = $numCore2+3 ;
-	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL $DBrna2 $tmpDX $readsRpairs\n\n";
+	my $readConfig =$readsRpairs;
+	$readConfig=2 if (@singl>0 && $readsRpairs);
+	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL $DBrna2 $tmpDX $readConfig\n\n";
 	#die $cmd2."\n";
 	my $jobName="";
 	my $Scmd = "";
@@ -2347,16 +2365,17 @@ sub seedUnzip2tmp(){
 	my $fastp2 = ""; my $xtraRdsTech = "";
 	$xtrMapStr = "" if (!defined $xtrMapStr) ;
 	if ( $xtrMapStr ne ""){
+		die "XX$xtrMapStr\n";
 		my @spl = split(/:/,   $map{$samples[$JNUM]}{"SupportReads"}   );
 		$xtraRdsTech = $spl[0].$libNum;
 		$fastp2 = $spl[1];
 		#die $fastp2."\n".$xtraRdsTech."\n";
 	}
-	
+	#die "$fastp\n";
 #$fastp = "/g/bork1/coelho/DD_DeCaF/eggnog-simulations/simulated-samples/sample-0/";
-
+	if ($fastp eq "") { print "No primary dir.. \n"; }
 	#if ($fastp ne "") {print "Looking for fq.gz in ".$fastp;} else { print "No primary dir.. "; }
-	if ($fastp2 ne ""){ print " and $fastp2";}
+	#if ($fastp2 ne ""){ print " and $fastp2";}
 	#print "\n";
 	#die "$fastp\n";
 	my @pa1; my @pa2; my @pas; my @paX1; my @paX2;
@@ -2370,12 +2389,14 @@ sub seedUnzip2tmp(){
 				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir(DIR);
 			}
 			#print readdir(DIR);
-			@pas = sort ( grep { /$smplPrefix$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
-			#die "$rawFileSrchStrSingl\n@pas\n@pa1\n";
-			my %h;
-			@h{(@pa1,@pa2)} = undef;
-			@pas = grep {not exists $h{$_}} @pas;
-			#die "@pas\n@pa1\n";
+			if ($rawFileSrchStrSingl ne ""){
+				@pas = sort ( grep { /$smplPrefix$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
+				#die "$rawFileSrchStrSingl\n@pas\n@pa1\n";
+				my %h;
+				@h{(@pa1,@pa2)} = undef;
+				@pas = grep {not exists $h{$_}} @pas;
+				#die "@pas\n@pa1\n";
+			}
 		} else {
 			$fastp .= $map{mocatFiltPath}; 
 			opendir(DIR, $fastp) or die "$!\n$fastp\n";;	
@@ -2398,7 +2419,7 @@ sub seedUnzip2tmp(){
 		if (@pa1 != 1){die "still too many file: $fastp\n @pa1\n@pa2\n";}
 	}
 	my @libInfo = ("lib$libNum") x int @pa1;
-	if (@pa1==0 && @pas!=0){#case of just single read in metag
+	if (@pa1==0 && @pas!=0 || @pas > @pa1){#case of just single read in metag
 		@libInfo = ("lib$libNum") x int @pas;
 	}
 	if ($fastp2 ne ""){
@@ -2460,6 +2481,7 @@ sub seedUnzip2tmp(){
 		$unzipcmd .= $tmpCmd."\n";
 		$pa2[$i] = $newF;
 	}
+	#die "@pas\n";
 	for (my $i=0; $i<@pas; $i++){
 		my $pp = $fastp;
 		#print "$libInfo[$i] eq $xtraRdsTech\n";
@@ -2475,7 +2497,7 @@ sub seedUnzip2tmp(){
 	my $jobN = "";
 	my $jobNUZ = $jobN;
 	
-	
+	#die "X";
 	#die $unzipcmd."\n";
 	#print "  HH ".-s $testf2 < -s $testf1." FF \n";
 	my $tmpCmd;
@@ -2595,6 +2617,20 @@ sub krakHSap($ $ $ $ $){
 	return $jobN;
 }
 
+sub genoSize(){
+	my ($arp1,$arp2,$ars,$mergRdsHr,$oD,$jdep) = @_;
+	my @pa1 = @{$arp1}; my @pa2 = @{$arp2}; my @pas = @{$ars};
+	my $cmd = "mkdir -p $oD\n";
+	my $microCensBin = getProgPaths("microCens");
+	for (my $i=0;$i<@pa1;$i++){
+		$cmd .= "$microCensBin -t 2 $pa1[$i],$pa2[$i] $oD/MC.$i.result\n";
+	}
+#	die $cmd;
+	my $jobName = "_GS$JNUM"; my $tmpCmd;
+	
+	($jobName,$tmpCmd) = qsubSystem($logDir."MicroCens.sh",$cmd,2,"40G",$jobName,$jdep,"",1,\@General_Hosts,\%QSBopt);
+	return $jobName;
+}
 sub krakenTaxEst(){
 	my ($arp1,$arp2, $ars, $outD, $tmpD,$name,$jobd) = @_;
 	my @pa1 = @{$arp1}; my @pa2 = @{$arp2}; my @pas = @{$ars};
@@ -2634,8 +2670,8 @@ sub krakenTaxEst(){
 	#TODO: 1: make table; 2: copy to outD
 	$cmd .= "\n\n";
 	for (my $j=0;$j< @thrs;$j++){
-	$cmd .= "cat $tmpD/krak_$thrs[$j]"."_*.out > $tmpD/allkrak$thrs[$j].out\n";
-	$cmd .= "$krakCnts1 $tmpD/allkrak$thrs[$j].out $outD/krak.$thrs[$j].cnt.tax\n";
+		$cmd .= "cat $tmpD/krak_$thrs[$j]"."_*.out > $tmpD/allkrak$thrs[$j].out\n";
+		$cmd .= "$krakCnts1 $tmpD/allkrak$thrs[$j].out $outD/krak.$thrs[$j].cnt.tax\n";
 	}
 
 	$cmd .= "touch $krakStone\n";
@@ -3142,8 +3178,17 @@ sub smplStats(){
 	
 		#seq filter stats  /LOGandSUB/sdm/filter.log
 	$filStats = "";
+	my $MaxLengthHistBased=0;
+	if (-e "$inD/LOGandSUB/sdm/filter_lenHist.txt"){
+		$filStats = `cat $inD/LOGandSUB/sdm/filter_lenHist.txt` ;
+		my @tmpSpl = split(/\n/,$filStats);
+		$tmpSpl[$#tmpSpl]=~m/^(\d+)\s/; my $MaxLengthHistBased= $1;
+	}
+	#tmp deactivate(might still be a bug in some old sdm version):
+	#$MaxLengthHistBased=0;
+	#die "$MaxLengthHistBased\n";
+	$filStats = "";
 	$filStats = `cat $inD/LOGandSUB/sdm/filter.log` if (-e "$inD/LOGandSUB/sdm/filter.log");
-	
 	if (!$readsRpairs && $filStats =~ m/Reads processed: ([0-9,]+)/){#single end format
 		my $totRds =  remComma($1);
 		$filStats =~ m/Rejected: ([0-9,]+)\n/;
@@ -3152,13 +3197,13 @@ sub smplStats(){
 		$filStats =~ m/Accepted: ([0-9,]+) \(\d+/;
 		my $Accepted1 =  remComma($1);my $Accepted2 =  0;
 		my $Singl1 =  0;my $Singl2 =  0;
-		$filStats =~ m/- Seq Length :\s*\d+.*\/(\d+.*)\/\d+.*\n/;
-		my $AvgLen = $1;
+		$filStats =~ m/- Seq Length :\s*\d+.*\/(\d+.*)\/(\d+.*)\n/;
+		my $AvgLen = $1; my $MaxLength=$2; if ($MaxLengthHistBased > $MaxLength){$MaxLength = $MaxLengthHistBased;}
 		$filStats =~ m/- Quality :\s*\d+.*\/(\d+.*)\/\d+.*\n/;
 		my $AvgQual = $1;
 		$filStats =~ m/- Accum. Error (\d+\.\d+)\n/;
 		my $accErr = $1;
-		$outStr .= "$totRds\t$Rejected1\t$Rejected2\t$Accepted1\t$Accepted2\t$Singl1\t$Singl2\t$AvgLen\t$AvgQual\t$accErr\t";
+		$outStr .= "$totRds\t$Rejected1\t$Rejected2\t$Accepted1\t$Accepted2\t$Singl1\t$Singl2\t$AvgLen\t$MaxLength\t$AvgQual\t$accErr\t";
 	}elsif ($readsRpairs && $filStats =~ m/Reads processed: ([0-9,]+); ([0-9,]+) \(pa/)
 			{ #only do this if newest format
 		my $totRds =  remComma($1);
@@ -3171,18 +3216,20 @@ sub smplStats(){
 		$filStats =~ m/Singletons among these: ([0-9,]+); ([0-9,]+)\n/;
 		my $Singl1 =  remComma($1);my $Singl2 =  remComma($2);
 		
-		$filStats =~ m/- Seq Length :\s*\d+.*\/(\d+.*)\/\d+.*\n/;
-		my $AvgLen = $1;
+		$filStats =~ m/- Seq Length :\s*\d+.*\/(\d+.*)\/(\d+.*)\n/;
+		my $AvgLen = $1; my $MaxLength=$2;if ($MaxLengthHistBased > $MaxLength){$MaxLength = $MaxLengthHistBased;}
+#		$filStats =~ m/- Seq Length :\s*\d+.*\/(\d+.*)\/\d+.*\n/;
+#		my $AvgLen = $1;
 		$filStats =~ m/- Quality :\s*\d+.*\/(\d+.*)\/\d+.*\n/;
 		my $AvgQual = $1;
 		$filStats =~ m/- Accum. Error (\d+\.\d+)\n/;
 		my $accErr = $1;
-		$outStr .= "$totRds\t$Rejected1\t$Rejected2\t$Accepted1\t$Accepted2\t$Singl1\t$Singl2\t$AvgLen\t$AvgQual\t$accErr\t";
+		$outStr .= "$totRds\t$Rejected1\t$Rejected2\t$Accepted1\t$Accepted2\t$Singl1\t$Singl2\t$AvgLen\t$MaxLength\t$AvgQual\t$accErr\t";
 		
 	} else {
-		$outStr .= "\t" x 10;
+		$outStr .= "\t" x 11;
 	}
-	$outStrDesc .= "totRds\tRejected1\tRejected2\tAccepted1\tAccepted2\tSingl1\tSingl2\tAvgLen\tAvgQual\taccErr\t";
+	$outStrDesc .= "totRds\tRejected1\tRejected2\tAccepted1\tAccepted2\tSingl1\tSingl2\tAvgSeqLen\tMaxSeqLength\tAvgSeqQual\taccErr\t";
 	#check for flash merged reads
 	if (-e "$inD/LOGandSUB/flashMrg.sh.otxt"){
 		$filStats = `cat $inD/LOGandSUB/flashMrg.sh.otxt`;
@@ -3192,6 +3239,15 @@ sub smplStats(){
 		$outStr .= "\t" x 2;
 	}
 	$outStrDesc .= "Merged\tNotMerged\t";
+#geno size estimate
+	if (-e "$inD/MicroCens/MC.0.result"){
+		$filStats = `cat $inD/MicroCens/MC.0.result`;
+		if ($filStats =~ m/average_genome_size:	([\d\.]+)/){$outStr.="$1\t";} else {$outStr.="?\t";}
+		if ($filStats =~ m/genome_equivalents:	([\d\.]+)/){$outStr.="$1\t";} else {$outStr.="?\t";}
+	} else {
+		$outStr .= "\t" x 2;
+	}
+	$outStrDesc .= "AvgGenomeSizeEst\tTotalGenomesEst\t";
 	
 	
 	#check if corrected dir still exists..

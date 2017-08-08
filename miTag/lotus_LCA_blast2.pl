@@ -38,19 +38,19 @@ $inD .= "/" unless ($inD =~ m/\/$/);
 #dir to store LCA
 my $outdir = $inD."ltsLCA/";
 #dir to store merged reads in
-my $mergeD = $inD."flashMerge/";
 my $SmplID = $ARGV[1];#Name of the Sample
 my $BlastCores = $ARGV[2]; #parrallel execution
-my $tmpD = ""; #tmp dir for faster I/O
+my $tmpD = "$outdir/tmp/"; #tmp dir for faster I/O
 if (@ARGV > 4){
 	$tmpD = $ARGV[4] ;
 	system "rm -rf $tmpD;mkdir -p $tmpD";
 }
-my $singlReads=0;
+my $mergeD = $tmpD."flashMerge/";
+my $readsRpairs=0;
 if (@ARGV > 5){
-	$singlReads = !$ARGV[5];
+	$readsRpairs = $ARGV[5];
 }
-#die "$singlReads\n";
+#die "$readsRpairs\n";
 my $DBdir = $ARGV[3];
 
 #datbases
@@ -75,9 +75,9 @@ system "mkdir -p $outdir" unless (-e $outdir);
 my $blMode = 2; #2=lambda,1=Blast,3=sortmeRNA
 my $inputOK=1; #flag
 my $curStone = ""; #flag file for each subpart (SSU,LSU,ITS)
-my @allInFa;
-if ($singlReads){
-	@allInFa = ($inD."reads_LSU.fq",$inD."reads_ITS.fq",$inD."reads_SSU.fq");
+my @allInFa;my @allSingleIn= ($inD."reads_LSU.fq",$inD."reads_ITS.fq",$inD."reads_SSU.fq");
+if ($readsRpairs ==0){
+	@allInFa = @allSingleIn;
 } else {
 	@allInFa = ($inD."reads_LSU.r1.fq",$inD."reads_LSU.r2.fq",$inD."reads_ITS.r1.fq",$inD."reads_ITS.r2.fq",$inD."reads_SSU.r1.fq",$inD."reads_SSU.r2.fq");
 }
@@ -85,12 +85,12 @@ if ($singlReads){
 system "gunzip $inD/*.fq.gz"; #just in case things have been gzipped
 
 
-if (!$singlReads){
+if ($readsRpairs){
 	#pretty circular safety catch.. maybe remove later?
-	if (!-z $allInFa[2] && (-z $allInFa[0] ||  -z $allInFa[1])){#LSU obviously wrong
+	if (!-z $allInFa[4] && (-z $allInFa[0] ||  -z $allInFa[1])){#LSU obviously wrong
 		system "rm -f $inD/LSU_pull.sto $outdir/LSU_ass.sto";
 	}
-	if (!-z $allInFa[2] && (-z $allInFa[4] || -z $allInFa[5])){#SSU obviously wrong
+	if (!-z $allInFa[0] && (-z $allInFa[4] || -z $allInFa[5])){#SSU obviously wrong
 		system "rm -f $inD/SSU_pull.sto $outdir/SSU_ass.sto";
 	}
 
@@ -109,6 +109,7 @@ if (!$singlReads){
 #all done already
 if (-e "$outdir/Assigned.sto" && -e "$outdir/LSU_ass.sto" && -e "$outdir/SSU_ass.sto"){ #&& -e "$outdir/ITS_ass.sto" 
 	print "All assigned already\n";
+	system "rm -rf $tmpD" if ($tmpD ne "");
 	exit (0);
 }
 
@@ -128,17 +129,19 @@ for (my $i=0;$i<@tags;$i++){
 		
 		#merge
 		my $go=1;
-		if (!$singlReads){
+		#die "XX$readsRpairs\nXX";
+		if ($readsRpairs>0){
 			$go = flashed($inD."reads_$tags[$i].r1.fq",$inD."reads_$tags[$i].r2.fq",$mergeD,$tags[$i],$inD); 
+			
 			if ($go==1){
 				#sim search & LCA
-				runBlastLCA($mergeD.$tags[$i],\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
+				runBlastLCA($mergeD.$tags[$i],$inD."reads_$tags[$i].fq",\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
 				
 			} elsif($go==2) {$inputOK=0;print"Problem with $tags[$i] primary input; run needs to be repeated";}
-		} else {#single reads, also have specific input fmt
+		} elsif($readsRpairs==0 ) {#single reads, also have specific input fmt
 			my $inFilX = $inD."reads_$tags[$i].fq";
 			$inFilX = $inD."reads_$tags[$i].fq.gz" if (-e $inD."reads_$tags[$i].fq.gz" && !-e $inFilX);
-			runBlastLCA($inFilX,\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
+			runBlastLCA($inFilX,"",\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
 			#$inD."reads_$tags[$i].fq"
 		}
 		system "touch $curStone";
@@ -151,12 +154,14 @@ for (my $i=0;$i<@tags;$i++){
 
 #die();
 #cleanup
-system "rm -r $tmpD" if ($tmpD ne "");
+system "rm -rf $tmpD" if ($tmpD ne "");
 
 if ($inputOK){
 	print "$outdir/Assigned.sto";
 	system "touch $outdir/Assigned.sto";
+	unlink(@allInFa,@allSingleIn);
 	system "gzip -q ".join (" ",@allInFa);
+	
 	#and more clean ups..
 	system "rm -rf $mergeD";
 	#system "gzip $inD/*.fq";
@@ -180,26 +185,29 @@ sub flashed($ $ $ $ $){
 	}
 	if (-z $r1 && -z $r2){return 0;}
 	print "running flash..\n";
+	#die "$flashBin\n";
 	my $mergCmd = "$flashBin -M 200 -o $outT -d $outD -t $BlastCores $r1 $r2";
 	if (system $mergCmd){
 		print "\n$mergCmd\nfailed\n";
 		system "rm -f $primD/$outT"."_pull.sto";
-		return 2;
+		return 3;
 	}# or 
 	return 1;
 }
 
-sub fastq2fna($){
-	my ($in) = @_;
+sub fastq2fna($ $){
+	my ($in,$doDel) = @_;
 	#deactivate, since lambda can just read fq...
-	return $in;
+	#reactivate for merging of reads
+	#return $in;
 	print $in."\n";
 	my $out = $in;
-	$out =~ s/f[ast]?q$/fna/;
-	open I,"<$in" or die "Input fastq file not available";
+	$out =~ s/\.fastq$/\.fna/;
+	$out =~ s/\.fq$/\.fna/;
+	open I,"<$in" or die "Input fastq file $in not available";
 	my $l = <I>; close I; if ($l =~ m/^>/){return $out;}
 	system "cat $in | paste - - - - | sed 's/^@/>/g'| cut -f1-2 | tr '\\t' '\\n' > $out";
-	#die $out;
+	system "rm $in" if ($doDel && $in ne $out);#;;mv $out $in";
 	return $out;
 }
 
@@ -254,11 +262,12 @@ sub findUnassigned($ $ $ ){
 #main routine that does sim search & starts the LCA
 sub runBlastLCA(){
 
-	my ($queryO,$DBar,$DBtaxar,$id,$doblast,$SmplID,$MKname,$go) =@_;
+	my ($queryO,$queryXtrSingl,$DBar,$DBtaxar,$id,$doblast,$SmplID,$MKname,$go) =@_;
 	my $taxblastf_base = $outdir."$id";
 	if ($tmpD ne ""){
 		$taxblastf_base = $tmpD."$id";
 	}
+	#die "$queryXtrSingl\n";
 	my $doInter=1; my $doQuery=1; #fine control of what subparts to do..
 	my $r1 = $queryO; my $r2 = $queryO;
 	my $interLeaveO = "";
@@ -271,23 +280,30 @@ sub runBlastLCA(){
 		return;
 	}
 
-	if ($singlReads){
+	if (!$readsRpairs){
 		die "can't find single read input file: $queryO\n" unless (-e $queryO);
-		$queryO = fastq2fna($queryO);
+		#$queryO = fastq2fna($queryO);
 		#die "$queryO\n";
 	}elsif ($queryO !~ m/\.fna$/){#merged fastq that need to be processed
 		$queryO .= ".extendedFrags.fastq";
 		$r1 .= ".notCombined_1.fastq";
 		$r2 .= ".notCombined_2.fastq";
-		$interLeaveO = $outdir."inter$id.fna";
+		$interLeaveO = $tmpD."inter$id.fna";
 		#print $r1." V\n";
-		$r1 = fastq2fna($r1); $r2 = fastq2fna($r2); $queryO = fastq2fna($queryO);
-
+		#$r1 = fastq2fna($r1); $r2 = fastq2fna($r2); $queryO = fastq2fna($queryO);
+		
 		merge($r1,$r2,$interLeaveO) if ($doInter);
+		#die "$queryXtrSingl\n";
+		if ($readsRpairs==2 && -e $queryXtrSingl){
+			print "attaching single reads to interleave";
+			$queryXtrSingl = fastq2fna($queryXtrSingl,0);
+			system "cat $queryXtrSingl >> $interLeaveO \nrm $queryXtrSingl";
+			}
 	} else {
 		print "no interLeaveO\n";
 		$doInter=0;
 	}
+	#die "YY\n";
 	if (-z $interLeaveO){print "No interleaved files $id\n";$doInter=0;}
 	if (-z $queryO){print "No merged files $id\n";$doQuery=0;}
 	#my $BlastCores = 20;
@@ -338,27 +354,31 @@ sub runBlastLCA(){
 			}
 		} elsif ($doblast==2){
 			$simName = "lambda";
-			if (!-f $DB.".dna5.fm.sa.val"  ) {
+			if (0 && !-f $DB.".dna5.fm.sa.val"  ) { #don't do this at all from nodes
 				print "Building LAMBDA index anew (may take up to an hour)..\n";
 				my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
 				if (system($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
+			} elsif (!-d "$DB.lambda" || !-f "$DB.lambda/index.lf.drp"){
+				die "Can not find required lambda index dir at $DB.lambda\n";
 			}
 			print "Starting LAMBDA similarity search..\n";
 			my $tmptaxblastf = "$outdir/tax.m8";
 			$tmptaxblastf = "$tmpD/tax.m8" unless ($tmpD eq "");
 			my $cmd = "";
 			$cmd = "";
+			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 16 -sd 1 -b 5 -pd on ";
 			if ($doQuery && $contQuery){
-				$cmd .= "$lambdaBin -t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 16 -sd 1 -b 5 -pd on -q $query -d $DB -o $taxblastf\n";
+				$cmd .= "$lambdaBin $defLopt -q $query -i $DB.lambda -o $taxblastf\n";
 			}
 			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
 			if ($doInter && $contInter){
-				$cmd .= "$lambdaBin -t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 16 -sd 1 -b 5 -pd on -q $interLeave -d $DB -o $taxblastf2\n";
+				$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";
 				#$cmd .= "\nmv $tmptaxblastf $taxblastf2\n";
 				#unless ( -e $taxblastf2){	
 				print "Running blast on interleaved files\n";
 			}
 			#die "$doQuery && $contQuery\n$cmd\n";
+			print "\n\n$cmd\n\n";
 			system($cmd);
 			#} else {	print "Blast output $taxblastf2 does exist\n";}}
 			#system $cmd ;#or die "\n$cmd\n failed\n";
@@ -411,21 +431,33 @@ sub runBlastLCA(){
 #file operations on paired end files
 sub merge($ $ $){
 	my ($r1,$r2,$interleave) = @_;
+	#die "$interleave\n";
+	$r2 = fastq2fna($r2,1);
+	$r1 = fastq2fna($r1,1); 
 	print "Interleaving 2 files..\n";
-	open I1,"<$r1" or die "1   $r1\n".$!;open I2,"<$r2"or die "2   $r2\n".$!;open O,">$interleave"or die "interl   ".$!;
+	open I1,"<$r1" or die "1   $r1\n".$!;open I2,"<$r2"or die "2   $r2\n".$!;
+	open O,">$interleave"or die "interl   ".$!;
 	my $line1=<I1>;my $line2=<I2>; $line2="";#read header & get rid of it..
+	$line1=~s/\/1$//;
 	while(1){
+	#die "TOGO\n";
+		#print "X";
 		my $tmp="";
-		while ($tmp !~ m/^>/){chomp $tmp;$line1.=$tmp;$tmp=<I1>; last unless defined $tmp;}
-		#print $line1."\n";
-		print O $line1; if (defined $tmp ){chomp $tmp; $line1 = $tmp."\n"; }
+		while ($tmp !~ m/^>/){chomp $tmp; $line1.=$tmp;$tmp=<I1>; 
+			unless( defined $tmp){print "OO";last;}
+			if ($tmp =~m/^@/){die "Input to merge routine is fastq:$r1\n..aborting\n";}
+		}
+		
+		print O $line1; if (defined $tmp ){chomp $tmp; $tmp=~s/\/1$//; $line1 = $tmp."\n"; }
 		$tmp=""; 
-		while ($tmp !~ m/^>/){chomp $tmp; $line2.=$tmp;$tmp=<I2>;last unless defined $tmp;}
+		while ($tmp !~ m/^>/){ chomp $tmp; $line2.=$tmp;$tmp=<I2>; unless (defined $tmp){print "hi";last;}}
+		#print $line2."\n";
 		#get one more line to get rid of header:
 		print O reverse_complement_IUPAC($line2)."\n"; $line2 = "";#$tmp;
-		last unless defined $tmp;
+		unless (defined $tmp){print "LL";last;}
 	}
 	close O; close I1; close I2;
+	#die "$r1 $r2 $interleave\n"
 #	my $mergeScript = "/g/bork5/hildebra/bin/sortmerna-2.0/scripts/merge-paired-reads.sh";
 #	system "bash $mergeScript $r1 $r2 $interLeave";
 

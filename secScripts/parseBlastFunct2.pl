@@ -370,11 +370,17 @@ sub splitandadd($ $ $){
 	}
 }
 
-sub writeHashTbl($ $){
-	my ($outF,$hr) = @_;
+sub writeHashTbl($ $ $){
+	my ($outF,$hr,$doSortNum) = @_;
 	my %hs = %{$hr};
+	if (keys %hs == 0){return;}
 	open OH,">$outF" or die "Can't open hash out file $outF\n";
-	my @kk = sort { $hs{$b} <=> $hs{$a} } keys(%hs);
+	my @kk;
+	if ($doSortNum){
+		@kk = sort { $hs{$b} <=> $hs{$a} } keys(%hs);
+	} else {
+		@kk =  keys(%hs);
+	}
 	foreach my $k (@kk){
 		print OH "$k\t$hs{$k}\n";
 	}
@@ -384,6 +390,7 @@ sub writeHashTbl($ $){
 sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 	if (!$reportEggMapp){return;}
 	my ($outD) = @_;
+	print "EggNOG mapper module..\n";
 	die "too many evals chosen" if (@aminBLE > 1 ); #fix that only one eval will be printed...
 	my @keys1 = keys %emFiles;
 	my $tmpEM = "$tmpD/EMcomb$DBmode.table";
@@ -393,26 +400,27 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 	foreach my $kk (@keys1){
 		push (@emFilesDel,$emFiles{$kk});
 		system "cat $emFiles{$kk} >> $tmpEM;";
-		system "echo 'split_falk_EM_123\t634498.mru_0149\t0\t1000\n' >> $tmpEM";
+		system "echo 'split_falk_EM_123\t634498.mru_0149\t0\t1000' >> $tmpEM";
 		die "$kk entry in emFilesFinal doesn't exist\n" unless (exists($emFilesFinal{$kk}));
 		system "rm -f $emFiles{$kk}";
 		#last;
 	}
 	my $oFil = "$tmpD/combEM$DBmode.res"; $oFil =~ s/table//;
-	my $cmd = "rm $oFil.1* \n";
-	$cmd .= "$emBin -d none --cpu $ncore --no_search --temp_dir $tmpD --no_file_comments --override --no_refine --annotate_hits_table $tmpEM -o $oFil.1\n" ;
-	system "$cmd\n";
+	my $cmd = "rm -f $oFil.1 $oFil.2* \n";
+	my $KOoutF = "$outD/KOfromEggNogMapper.txt";
 	#$print $cmd."\n";
+	my %KOperGene;
 	if (-e "/g/bork1/huerta/_soft/eggnog-mapper-bigg/emapper.py" && $KOfromNOG){
-		$cmd = "/g/bork1/huerta/_soft/eggnog-mapper-bigg/emapper.py --big /g/bork1/huerta/_shared/kegg77_to_egggnog.m8.emapper_table 95 9 -d none -o $oFil.2 --annotate_hits_table $tmpEM";
+		$cmd = "/g/bork1/huerta/_soft/eggnog-mapper-bigg/emapper.py --big /g/bork1/huerta/_shared/kegg77_to_egggnog.m8.emapper_table 95 9 -d none -o $oFil.1 --annotate_hits_table $tmpEM";
 		print $cmd."\n";
-		system $cmd;
-		
+	} else {
+		$cmd .= "$emBin -d none --cpu $ncore --no_search --temp_dir $tmpD --no_file_comments --override --no_refine --annotate_hits_table $tmpEM -o $oFil.1\n" ;
 	}
+	system $cmd ;#unless (-e "$oFil.1.emapper.annotations");
 	
 	#objects to count on higher level
-	my %GOs; my %Kmaps; my %COGcats;
-	my $ofCnt = 0;
+	my %GOs; my %Kmaps; my %COGcats; my %KOs;
+	my $ofCnt = 0; my $taxLvlCnt=0;
 	#die "@keys1  ".@keys1."\n";
 	open O,">$emFilesFinal{$keys1[$ofCnt]}";
 	print O "#QueryID\tNOG\tNOGcat\tNOGdescr\tKEGGmap\tGOterms\n";
@@ -421,11 +429,17 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 		if ($lin =~ m/^#/){next;
 		} elsif ($lin =~ m/^split_falk_EM_123\t/){ #split signal to go to next tax lvl
 			close O; 
-			
 			#write out countups in higher levels
-			writeHashTbl($outD."eggNogM_GO.txt",\%GOs) if (keys(%GOs)>=1);
-			writeHashTbl($outD."eggNogM_KEGG_map.txt",\%Kmaps) if (keys(%Kmaps)>=1);
-			writeHashTbl($outD."eggNogM_COG_cats.txt",\%COGcats) if (keys(%COGcats)>=1);
+			$emFiles{$taxLvlCnt} =~ m/.emap.([^\.]+).table/;
+			$taxLvlCnt++;
+			my $taxS  = $1;
+			writeHashTbl($outD."eggNogM_${taxS}_GO.txt",\%GOs,1) if (keys(%GOs)>=1);
+			writeHashTbl($outD."eggNogM_${taxS}_KEGG_map.txt",\%Kmaps,1) if (keys(%Kmaps)>=1);
+			writeHashTbl($outD."eggNogM_${taxS}_COG_cats.txt",\%COGcats,1) if (keys(%COGcats)>=1);
+			writeHashTbl($outD."eggNogM_${taxS}_KO.txt",\%KOs,1) if (keys(%KOs)>=1);
+			if ($KOfromNOG && keys %KOperGene > 0){
+				writeHashTbl($outD."eggNogM_${taxS}_perGene_KO.txt",\%KOperGene,0);
+			}
 			print "$ofCnt $keys1[$ofCnt] $emFilesFinal{$keys1[$ofCnt]}\n";
 			open O,">$emFilesFinal{$keys1[$ofCnt]}" or die "Can't open $emFilesFinal{$keys1[$ofCnt]}\n";
 			$ofCnt++;
@@ -434,7 +448,14 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 		chomp $lin;
 		my @spl = split /\t/,$lin;
 		my $oStr = "$spl[0]\t";
-		my  $Ccat = $spl[10];$Ccat = "" if (!defined $Ccat);
+		my $KOterm = "";
+		if ($KOfromNOG && defined $spl[12]){
+			my $KOtmp = $spl[12]; $KOtmp =~ s/ko://g;
+			$KOperGene{$spl[0]} = $KOtmp;
+			$KOterm = $spl[12] ;
+		}
+
+		my $Ccat = $spl[10];$Ccat = "" if (!defined $Ccat);
 		my $Cdef = $spl[11];$Cdef = "" if (!defined $Cdef);
 		my $Kmap = $spl[6]; $Kmap = "" if (!defined $Kmap);
 		my $GOterm = $spl[5];$GOterm = "" if (!defined $GOterm);
@@ -451,6 +472,7 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 		}
 		#print "$GOterm , $Kmap , $Ccat\n";
 		splitandadd(\%GOs,$GOterm,0);
+		splitandadd(\%KOs,$KOterm,0);
 		splitandadd(\%Kmaps,$Kmap,1);
 		splitandadd(\%COGcats,$Ccat,1);
 		$oStr.= "\t$Cdef\t$Ccat\t$Kmap\t$GOterm\n";
@@ -571,9 +593,9 @@ sub main(){
 		#sort by eval #changed from bestE -> bestScore
 		#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
 		#die "Can't find ABRc ID $Subject\n" if ($tabCats==5 && !exists($cardFull{$Subject}) );#|| $cardFull{$Subject}->[2] eq "");
-		if ($Query =~ m/_982/){
-			print "$Query\n$bitSc>=".($cardFull{$Subject}->[3])*($AlLen/$SbjLen)."\n ${$cardFull{$Subject}}[3]  $AlLen /  $SbjLen\n@{$cardFull{$Subject}}\n";
-		}
+#		if ($Query =~ m/_982/){
+#			print "$Query\n$bitSc>=".($cardFull{$Subject}->[3])*($AlLen/$SbjLen)."\n ${$cardFull{$Subject}}[3]  $AlLen /  $SbjLen\n@{$cardFull{$Subject}}\n";
+#		}
 		next if ($tabCats==5 && !exists($cardFull{$Subject}) );#expected to be missing non relevant 
 		if ( ($eval <= $minBLE && $bitSc >= $minScore)
 					&& ($AlLen >= $minAlLen)

@@ -11,14 +11,14 @@ sub smrnaRunCmd; sub outfileCpy;
 
 
 #my $tmpP = "/g/scb/bork/hildebra/data2/Soil_finland/tmp_16s/";
-my $tmpP = $ARGV[2];
-my $alignPath = $ARGV[3];
-my $threads = $ARGV[4];
-my $smpN = $ARGV[5];
-my $doRiboAssembl = $ARGV[6];
-my $path2DB = $ARGV[7];
+my $tmpP = $ARGV[3];
+my $alignPath = $ARGV[4];
+my $threads = $ARGV[5];
+my $smpN = $ARGV[6];
+my $doRiboAssembl = $ARGV[7];
+my $path2DB = $ARGV[8];
 
-if (@ARGV<7){die "Not enough input arguments!!\n";}
+if (@ARGV<8){die "Not enough input arguments!!\n";}
 
 #my $smrPath = "/g/bork5/hildebra/bin/sortmerna-2.0/";
 my $smrPath = getProgPaths("srtMRNA_path");
@@ -45,12 +45,14 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	#preparation of reads
 	my @r1i = split(";",$ARGV[0]); my $r1="$tmpP/read1.tmp.fq";
 	my @r2i = split(";",$ARGV[1]); my $r2="$tmpP/read2.tmp.fq";
+	my @rSi = split(";",$ARGV[2]); my $rS="$tmpP/readSingl.tmp.fq";
 	if ($r2i[0] eq "-1"){$singlMode=1;}
+	if ($rSi[0] eq "-1"){$rS="";}
 	#die $singlMode."\n";
 	#die "$r1i[0]\n";
 	my $interLeave = "$tmpP/interleave.fq";
 	system "rm -f $r1 $r2 $interLeave";
-	if (!$singlMode){
+	if ($r2i[0] ne "-1"){
 		print "File prep stage 1\n";
 		for (my $i=0;$i<@r1i;$i++){
 			# merge the files & prepare
@@ -67,10 +69,11 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 		system "paste -d '\n' $r1 $r2 | tr '\t' '\n' > $interLeave";# bash $mergeScript $r1 $r2 $interLeave";
 		system "rm -f $r1" ;#if ($r1i ne $r1);
 		system "rm -f $r2" ;#if ($r2i ne $r2);
-	} else {
-		for (my $i=0;$i<@r1i;$i++){
-			if ($r1i[$i] =~ m/\.gz$/){system "gunzip -c $r1i[$i] >>$interLeave";}
-			else {system "cat $r1i[$i] >>$interLeave";}
+	} 
+	if ($rS ne ""){
+		for (my $i=0;$i<@rSi;$i++){
+			if ($rSi[$i] =~ m/\.gz$/){system "gunzip -c $rSi[$i] >>$rS";}
+			else {system "cat $rSi[$i] >>$rS";}
 		}
 	}
 	#die "File prep complete\n";
@@ -87,11 +90,12 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	#unless (system $cmd. "--ref $refDBits") {die "Failed\n$cmd\n";}
 
 	my $curStone = "$alignPath/ITS_pull.sto";
-	unless (-e $curStone){
+	unless (-e $curStone){ #ITS seems to be in general unreliable (too diverse?)
 		
 		if (-e "$path2DB/$ITSDBfa" && -e "$path2DB/$ITSDBidx"){
 			my $ltag = "reads_ITS";
-			my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBits,$interLeave,$alignPath);print $runner."\n";
+			my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBits,$interLeave,$alignPath,$singlMode);print $runner."\n";
+			$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBssu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
 			if (system $runner) {print "Error in $runner\n"; exit(90);}#unless (system $runner) {die "Failed\n$runner\n";}
 			#renameFastqCnts($alignPath."/reads_ITS.r1.fq",$smpN."__ITS"); renameFastqCnts($alignPath."/reads_ITS.r2.fq",$smpN."__ITS");
 			outfileCpy($tmpP."/$ltag",$alignPath);
@@ -105,8 +109,9 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	$curStone = "$alignPath/SSU_pull.sto";
 	unless (-e $curStone){
 		my $ltag = "reads_SSU";
-		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBssu,$interLeave,$alignPath);#print $runner."\n";
-		
+		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBssu,$interLeave,$alignPath,$singlMode);#print $runner."\n";
+		$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBssu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
+		#die "$runner\n\n";
 		if (system $runner) {print "Error in $runner\n"; exit(88);}#unless (system $runner) {die "Failed\n$runner\n";}
 		outfileCpy($tmpP."/$ltag",$alignPath);
 		system "rm -f $ltslcaP/SSU_ass.sto" if (-e " $ltslcaP/SSU_ass.sto");
@@ -117,7 +122,8 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	$curStone = "$alignPath/LSU_pull.sto";
 	unless (-e $curStone){
 		my $ltag = "reads_LSU";
-		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBlsu,$interLeave,$alignPath);
+		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBlsu,$interLeave,$alignPath,$singlMode);
+		$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBlsu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
 		print $runner."\n";
 		system "rm -f $ltslcaP/LSU_ass.sto" if (-e " $ltslcaP/LSU_ass.sto");
 		if (system $runner) {print "Error in $runner\n"; exit(89);}#unless (system $runner) {die "Failed\n$runner\n";}
@@ -161,14 +167,14 @@ if ($doRiboAssembl && (!-d $outP."/Ass_ITS" || !-e $outP."/Ass_ITS/scaffolds.fas
  exit(0);
 
 
-sub smrnaRunCmd( $ $ $ $){
-	my ($outFile,$refDB,$interLeave,$finD) = @_;
+sub smrnaRunCmd( $ $ $ $ $){
+	my ($outFile,$refDB,$interLeave,$finD, $isSingl) = @_;
 	my $cmd = "set -e\n$smrnaBin --best 1 --reads $interLeave ";
-	my $pairOpt = ""; if (!$singlMode){$pairOpt = "--paired_in ";}
-	$cmd .= "--blast 1 -a $threads -e 0.1 --log $pairOpt  --fastx --aligned '$outFile' "; #-m 9000 
-	$cmd .= "--ref '$refDB'\n";
-	$cmd .= "rm -f $outFile.r*\n";
-	if (!$singlMode){
+	my $pairOpt = ""; 
+	if (!$isSingl){$pairOpt = "--paired_in ";}
+	$cmd .= "--blast 1 -a $threads -e 0.1 --log $pairOpt  --fastx --aligned '$outFile' --ref '$refDB'\n";
+	if (!$isSingl){
+		$cmd .= "rm -f $outFile.r*\n";
 		$cmd .= "$unmergeScript $outFile.fq $outFile.r1.fq $outFile.r2.fq\n";#rm -f $outFile.fq";
 	}
 	#die $cmd;
@@ -177,15 +183,10 @@ sub smrnaRunCmd( $ $ $ $){
 
 sub outfileCpy($ $){
 	my ($outF,$finD) = @_;
-	
-	if ($singlMode){
-		#die "$outF , $finD\n";
-		if (-e "$outF.fq"){system "mv $outF.fq $finD";} #else {system "touch $outF.fq";}
-	} else {
-		system "rm -f $outF.fq";
-		if (-e "$outF.r1.fq"){system "mv $outF.r1.fq $finD";} #else {system "touch $outF.r1.fq";}
-		if (-e "$outF.r2.fq"){system "mv $outF.r2.fq $finD";} #else {system "touch $outF.r2.fq";}
-	}
+	if (-e "$outF.fq"){system "mv $outF.fq $finD";} #else {system "touch $outF.fq";}
+	#system "rm -f $outF.fq";
+	if (-e "$outF.r1.fq"){system "mv $outF.r1.fq $finD";} #else {system "touch $outF.r1.fq";}
+	if (-e "$outF.r2.fq"){system "mv $outF.r2.fq $finD";} #else {system "touch $outF.r2.fq";}
 	print "Moved file to $finD\n";
 }
 

@@ -342,6 +342,7 @@ sub calcDisPos($ $){
 	my $kr = readFasta($MSA);
 	my %MS = %{$kr};
 	my %diffArs;my %perID;
+	print "Calculating distance matrix..\n";
 	foreach my $k1 (keys %MS){
 		$MS{$k1} = uc ($MS{$k1});
 	}
@@ -397,6 +398,7 @@ sub calcDisPos($ $){
 		print O ">$k1\n$seq\n";
 	}
 	close O;
+	print "Dont calculating Distance matrix\n";
 	#die "done\n";
 }
 

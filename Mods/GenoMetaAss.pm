@@ -533,6 +533,7 @@ sub readMap{
 		}
 		my @spl = split(/\t/);
 		if ($cnt == 0){
+			#die "@spl\n";
 			$dirCol = first_index { /Path/i } @spl;
 			$smplCol = first_index { /#SmplID/ } @spl;
 			$SeqTech = first_index { /SeqTech/ } @spl;
@@ -559,7 +560,7 @@ sub readMap{
 		$ret{$curSmp}{dir} = $cdir;#this one should stay without a tag
 		$ret{$curSmp}{rddir} = $dir2dirs.$cdir;
 		$ret{$curSmp}{rddir} .="/" unless ($ret{$curSmp}{rddir} =~ m/\/$/);
-		#die "$ret{$curSmp}{rddir} $dirCol $cdir\n";
+		#die "$ret{$curSmp}{rddir} $dirCol $cdir $curSmp\n $smplCol $dirCol\n";
 		if ($SmplPrefixCol>=0){$cdir2 = $spl[$SmplPrefixCol];; $ret{$curSmp}{prefix} = $cdir2;} else {$ret{$curSmp}{prefix} = "";}
 		$cdir2.="/" unless ($cdir2 =~ m/\/$/);
 		if ($folderStrClassical){
@@ -572,6 +573,7 @@ sub readMap{
 		$ret{$curSmp}{mapFinSmpl} = $curSmp;
 		$ret{$curSmp}{assFinSmpl} = $curSmp;
 		if ($SeqTech >= 0) {$ret{$curSmp}{SeqTech} = $spl[$SeqTech]; } else {$ret{$curSmp}{SeqTech} = "";}
+		#die "$SupRdsCol\t@spl\n$spl[$SupRdsCol]\n";
 		if ($SupRdsCol >= 0 && $SupRdsCol < @spl) { if(length($spl[$SupRdsCol]) > 0 && $spl[$SupRdsCol] !~ m/\/$/) {$spl[$SupRdsCol].="/";} $ret{$curSmp}{SupportReads} = $spl[$SupRdsCol]; } else {$ret{$curSmp}{SupportReads} = "";}
 		if ($rLenCol >= 0){$ret{$curSmp}{readLength} = $spl[$rLenCol];} else {$ret{$curSmp}{readLength} = 0;}
 		if ($ExcludeAssemble >= 0){$ret{$curSmp}{ExcludeAssem} = $spl[$ExcludeAssemble];} else {$ret{$curSmp}{ExcludeAssem} = 0;}
