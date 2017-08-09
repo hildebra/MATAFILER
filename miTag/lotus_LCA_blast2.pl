@@ -43,7 +43,9 @@ my $BlastCores = $ARGV[2]; #parrallel execution
 my $tmpD = "$outdir/tmp/"; #tmp dir for faster I/O
 if (@ARGV > 4){
 	$tmpD = $ARGV[4] ;
-	system "rm -rf $tmpD;mkdir -p $tmpD";
+	if ($tmpD ne ""){
+		system "rm -rf $tmpD;mkdir -p $tmpD";
+	}
 }
 my $mergeD = $tmpD."flashMerge/";
 my $readsRpairs=0;
@@ -85,7 +87,7 @@ if ($readsRpairs ==0){
 system "gunzip $inD/*.fq.gz"; #just in case things have been gzipped
 
 
-if ($readsRpairs){
+if ($readsRpairs==1){
 	#pretty circular safety catch.. maybe remove later?
 	if (!-z $allInFa[4] && (-z $allInFa[0] ||  -z $allInFa[1])){#LSU obviously wrong
 		system "rm -f $inD/LSU_pull.sto $outdir/LSU_ass.sto";
@@ -130,17 +132,20 @@ for (my $i=0;$i<@tags;$i++){
 		#merge
 		my $go=1;
 		#die "XX$readsRpairs\nXX";
+		my $inFilX = $inD."reads_$tags[$i].fq";
+		$inFilX = $inD."reads_$tags[$i].fq.gz" if (-e $inD."reads_$tags[$i].fq.gz" && !-e $inFilX);
 		if ($readsRpairs>0){
+		#die "X";
 			$go = flashed($inD."reads_$tags[$i].r1.fq",$inD."reads_$tags[$i].r2.fq",$mergeD,$tags[$i],$inD); 
-			
-			if ($go==1){
+			if ($go==3 && !-z $inFilX){
+				$readsRpairs=0; 
+				#die "ASLK\n";
+			}elsif ($go==1){
 				#sim search & LCA
 				runBlastLCA($mergeD.$tags[$i],$inD."reads_$tags[$i].fq",\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
-				
 			} elsif($go==2) {$inputOK=0;print"Problem with $tags[$i] primary input; run needs to be repeated";}
-		} elsif($readsRpairs==0 ) {#single reads, also have specific input fmt
-			my $inFilX = $inD."reads_$tags[$i].fq";
-			$inFilX = $inD."reads_$tags[$i].fq.gz" if (-e $inD."reads_$tags[$i].fq.gz" && !-e $inFilX);
+		} 
+		if($readsRpairs==0 ) {#single reads, also have specific input fmt
 			runBlastLCA($inFilX,"",\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
 			#$inD."reads_$tags[$i].fq"
 		}
@@ -159,8 +164,8 @@ system "rm -rf $tmpD" if ($tmpD ne "");
 if ($inputOK){
 	print "$outdir/Assigned.sto";
 	system "touch $outdir/Assigned.sto";
+	#system "gzip -q ".join (" ",@allInFa);
 	unlink(@allInFa,@allSingleIn);
-	system "gzip -q ".join (" ",@allInFa);
 	
 	#and more clean ups..
 	system "rm -rf $mergeD";
@@ -176,6 +181,7 @@ sub flashed($ $ $ $ $){
 	my ($r1,$r2,$outD,$outT,$primD) = @_;
 	if ( -e $r2.".gz"){system "rm -f $r2; gunzip $r2.gz";}
 	if ( -e $r1.".gz"){system "rm -f $r1; gunzip $r1.gz";}
+	if (-z $r1 && -z $r2){return 3;}
 	if (    !-e $r2 || !-e $r1 || (-z $r1 && !-z $r2) || (!-z $r1 && -z $r2) 
 	||  (`wc -l $r1 | cut -f1 -d' '` != `wc -l $r2 | cut -f1 -d' '` ) ){
 		print "Empty input $r1\n";
@@ -206,7 +212,7 @@ sub fastq2fna($ $){
 	$out =~ s/\.fq$/\.fna/;
 	open I,"<$in" or die "Input fastq file $in not available";
 	my $l = <I>; close I; if ($l =~ m/^>/){return $out;}
-	system "cat $in | paste - - - - | sed 's/^@/>/g'| cut -f1-2 | tr '\\t' '\\n' > $out";
+	systemW "cat $in | paste - - - - | sed 's/^@/>/g'| cut -f1-2 | tr '\\t' '\\n' > $out";
 	system "rm $in" if ($doDel && $in ne $out);#;;mv $out $in";
 	return $out;
 }
@@ -297,7 +303,7 @@ sub runBlastLCA(){
 		if ($readsRpairs==2 && -e $queryXtrSingl){
 			print "attaching single reads to interleave";
 			$queryXtrSingl = fastq2fna($queryXtrSingl,0);
-			system "cat $queryXtrSingl >> $interLeaveO \nrm $queryXtrSingl";
+			systemW "cat $queryXtrSingl >> $interLeaveO \nrm $queryXtrSingl";
 			}
 	} else {
 		print "no interLeaveO\n";
@@ -337,7 +343,7 @@ sub runBlastLCA(){
 			my $mkBldbBin = "/g/bork5/hildebra/dev/lotus//bin//ncbi-blast-2.2.29+/bin/makeblastdb";
 			my $blastBin = "/g/bork5/hildebra/dev/lotus//bin//ncbi-blast-2.2.29+/bin/blastn";
 			my $cmd = "$mkBldbBin -in $DB -dbtype 'nucl'\n";
-			unless (-f $DB.".nhr"){	system($cmd);}
+			unless (-f $DB.".nhr"){	systemW($cmd);}
 			my $strand = "both";
 			#-perc_identity 75
 			$cmd = "";
@@ -345,11 +351,11 @@ sub runBlastLCA(){
 				$cmd .= "$blastBin -query $query -db $DB -out $taxblastf -outfmt 6 -max_target_seqs 50 -evalue 0.1 -num_threads $BlastCores -strand $strand \n"; #-strand plus both minus
 			}
 			unless ( -e $taxblastf){	print "Running blast on combined files\n";
-				system($cmd);
+				systemW($cmd);
 			} else {	print "Blast output $taxblastf does exist\n";}
 			if ($doInter){
 				$cmd .= "$blastBin -query $interLeave -db $DB -out $taxblastf2 -outfmt 6 -max_target_seqs 50 -evalue 0.1 -num_threads $BlastCores -strand $strand \n"; #-strand plus both minus
-				unless ( -e $taxblastf2){	print "Running blast on interleaved files\n";system($cmd);
+				unless ( -e $taxblastf2){	print "Running blast on interleaved files\n";systemW($cmd);
 				} else {	print "Blast output $taxblastf2 does exist\n";}
 			}
 		} elsif ($doblast==2){
@@ -357,7 +363,7 @@ sub runBlastLCA(){
 			if (0 && !-f $DB.".dna5.fm.sa.val"  ) { #don't do this at all from nodes
 				print "Building LAMBDA index anew (may take up to an hour)..\n";
 				my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
-				if (system($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
+				if (systemW($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
 			} elsif (!-d "$DB.lambda" || !-f "$DB.lambda/index.lf.drp"){
 				die "Can not find required lambda index dir at $DB.lambda\n";
 			}
@@ -379,22 +385,22 @@ sub runBlastLCA(){
 			}
 			#die "$doQuery && $contQuery\n$cmd\n";
 			print "\n\n$cmd\n\n";
-			system($cmd);
+			systemW($cmd);
 			#} else {	print "Blast output $taxblastf2 does exist\n";}}
-			#system $cmd ;#or die "\n$cmd\n failed\n";
+			#systemW $cmd ;#or die "\n$cmd\n failed\n";
 		} elsif ($doblast==3) {
 			$simName = "smRNA";
 			my $smrnaBin = "$srtMRNA_path/sortmerna";
 			my $smrnaMkDB = "$srtMRNA_path/indexdb_rna";
 			my $refDB = "$DB,$DB.sidx";
-			unless (-e "$DB.sidx.stats"){	print "making DB..";system "$smrnaMkDB --ref $refDB";	print " done\n";}
+			unless (-e "$DB.sidx.stats"){	print "making DB..";systemW "$smrnaMkDB --ref $refDB";	print " done\n";}
 			#die $outdir."inter$id.fna\n";
 			print "Running sortmerna merge\n";
 			my $cmd = "$smrnaBin --best 50 --reads $interLeave ";
 			$cmd .= "--blast 1 -a 20 -e 0.1 -m 10000 --paired_in --fastx --aligned $taxblastf.i ";
 			$cmd .= "--ref $refDB\n";
 			print "$taxblastf.i\n";
-			system $cmd;
+			systemW $cmd;
 			print "Running sortmerna\n";
 			$cmd = "";
 			if ($doQuery && $contQuery){
@@ -402,7 +408,7 @@ sub runBlastLCA(){
 				$cmd .= "--blast 1 -a 20 -e 0.1 -m 10000 --aligned $taxblastf ";
 				$cmd .= "--ref $refDB\n";
 			}
-			system $cmd;
+			systemW $cmd;
 			$taxblastf.=".blast";
 			print "done sortmeRNA assignment\n";
 		}

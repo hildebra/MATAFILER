@@ -161,7 +161,7 @@ my $rmScratchTmp=0;#Default; extremely important option as this adds a lot of ov
 my $humanFilter = 1; #use kraken to filter out human reads
 my $DoMetaPhlan = 0; my $metaPhl2FailCnts=0; #non-asembly based tax + functional assignments
 my $DoRibofind = 0; my $doRiboAssembl = 0; my $RedoRiboFind = 0; my $riboFindFailCnts=0; #ITS/SSU/LSU detection
-my $RedoRiboAssign = 0;
+my $RedoRiboAssign = 0; my $checkRiboNonEmpty=0;
 my $DoBinning = 1;
 my $doReadMerge = 0;
 my $DoAssembly = 1;  my $SpadesAlwaysHDDnode = 1;my $spadesBayHam = 0; my $useSDM = 2;my $spadesMisMatCor = 0; my $redoAssembly =0 ;
@@ -263,6 +263,7 @@ GetOptions(
 	"riobsomalAssembly=i"  => \$doRiboAssembl,
 	"reProfileRibosome=i" => \$RedoRiboFind ,  
 	"reRibosomeLCA=i"=> \$RedoRiboAssign,
+	"thoroughCheckRiboFinish=i" => \$checkRiboNonEmpty,
 	#other tax profilers..
 	"profileMetaphlan2=i"=> \$DoMetaPhlan,
 	"profileKraken=i"=> \$DoKraken,
@@ -747,15 +748,29 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	$calcRibofind = 1 if ($DoRibofind && (!-e "$curOutDir/ribos//SSU_pull.sto"|| !-e "$curOutDir/ribos//LSU_pull.sto" || ($doRiboAssembl && !-e "$curOutDir/ribos/Ass/allAss.sto" ))); #!-e "$curOutDir/ribos//ITS_pull.sto"|| 
 	$calcRiboAssign = 1 if ($DoRibofind && ( #!-e "$curOutDir/ribos//ltsLCA/ITS_ass.sto"||  #ITS no longer required.. unreliable imo
 			!-e "$curOutDir/ribos//ltsLCA/Assigned.sto" || !-e "$curOutDir/ribos//ltsLCA/LSU_ass.sto" || !-e "$curOutDir/ribos//ltsLCA/SSU_ass.sto") );
+		
+		
+	
 	#die "$calcRibofind $calcRiboAssign\n";
 	if ($calcRibofind){
 		#system "rm -r $curOutDir/ribos";
 		$riboFindFailCnts ++ ;
-	} elsif ($DoRibofind &&!$calcRiboAssign) { #copy files to central dir for postprocessing..
+	} elsif ($DoRibofind && !$calcRiboAssign) { #copy files to central dir for postprocessing..
 		my @RFtags = ("SSU","LSU");#"ITS",
 		foreach my $RFtag (@RFtags){
 			system "mkdir -p $dir_RibFind/$RFtag/" unless (-d "$dir_RibFind/$RFtag/"); #system "mkdir -p $dir_RibFind/SSU/" unless (-d "$dir_RibFind/SSU/"); system "mkdir -p $dir_RibFind/LSU/" unless (-d "$dir_RibFind/LSU/");
 			my $fromCp = "$curOutDir/ribos/ltsLCA/${RFtag}riboRun_bl.hiera.txt"; my $toCpy = "$dir_RibFind/$RFtag/$SmplName.$RFtag.hiera.txt";
+			if ($checkRiboNonEmpty){
+				#pretty hard check
+				my $numLines=0;
+				if (-e "$fromCp.gz"){$numLines = `zcat $fromCp.gz | wc -l`;
+				} else {$numLines = `wc -l $fromCp`;} $numLines =~ /(\d+)/; $numLines=$1;
+				#die $numLines."\n";
+				if ($numLines<=1){$calcRiboAssign=1;$calcRibofind=1;
+					
+					system "rm $curOutDir/ribos//ltsLCA/*.sto $curOutDir/ribos/*.sto";last;
+				}
+			}
 			if (!-e $toCpy  || ( (-e $toCpy  || -e "$toCpy.gz" ) && -e $fromCp && -s $fromCp != -s $toCpy)){
 				if (-e "$fromCp.gz"){
 					system "zcat $fromCp.gz > $toCpy" ;

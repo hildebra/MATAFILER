@@ -740,7 +740,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	if ($qmode eq "slurm"){$LSF = 2;$qbin="sbatch";
 		if ($memory > 250001){$queues = "\"bigmem\"";}
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
-		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH -n  $ncores\n#SBATCH -o $tmpsh.otxt\n";
+		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH --cpus-per-task  $ncores\n#SBATCH -o $tmpsh.otxt\n"; #\n#SBATCH -n  $ncores
 		print O "#SBATCH --tmp=$tmpSpace\n#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
 		print O "#SBATCH -p $queues\n";
 		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
