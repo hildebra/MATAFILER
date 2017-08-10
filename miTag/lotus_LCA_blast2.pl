@@ -431,7 +431,8 @@ sub runBlastLCA(){
 	#die $LCcmd."\n";
 	systemW $LCcmd;
 	system "rm -f @taxouts @taxouts_inter" ; #die();
-	system "rm -f $queryO"."__U* $interLeaveO*";#"."__U*";
+	system "rm -f $queryO"."__U* ";#"."__U*";
+	system "rm -f $interLeaveO*" if ($interLeaveO ne "");
 }
 
 #file operations on paired end files

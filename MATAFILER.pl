@@ -748,7 +748,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	$calcRibofind = 1 if ($DoRibofind && (!-e "$curOutDir/ribos//SSU_pull.sto"|| !-e "$curOutDir/ribos//LSU_pull.sto" || ($doRiboAssembl && !-e "$curOutDir/ribos/Ass/allAss.sto" ))); #!-e "$curOutDir/ribos//ITS_pull.sto"|| 
 	$calcRiboAssign = 1 if ($DoRibofind && ( #!-e "$curOutDir/ribos//ltsLCA/ITS_ass.sto"||  #ITS no longer required.. unreliable imo
 			!-e "$curOutDir/ribos//ltsLCA/Assigned.sto" || !-e "$curOutDir/ribos//ltsLCA/LSU_ass.sto" || !-e "$curOutDir/ribos//ltsLCA/SSU_ass.sto") );
-		
+	if ($calcRiboAssign) {$calcRibofind=1;}
 		
 	
 	#die "$calcRibofind $calcRiboAssign\n";
@@ -767,8 +767,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 				} else {$numLines = `wc -l $fromCp`;} $numLines =~ /(\d+)/; $numLines=$1;
 				#die $numLines."\n";
 				if ($numLines<=1){$calcRiboAssign=1;$calcRibofind=1;
-					
-					system "rm $curOutDir/ribos//ltsLCA/*.sto $curOutDir/ribos/*.sto";last;
+					system "rm -r $curOutDir/ribos//ltsLCA $curOutDir/ribos/*.sto ";last;
 				}
 			}
 			if (!-e $toCpy  || ( (-e $toCpy  || -e "$toCpy.gz" ) && -e $fromCp && -s $fromCp != -s $toCpy)){
@@ -1617,7 +1616,7 @@ sub detectRibo(){
 	}
 	#this part assigns tax
 	my $tmpDX = "$tmpP/LCA/";
-	my $numCoreL = $numCore2+3 ;
+	my $numCoreL = $numCore2 ;
 	my $readConfig =$readsRpairs;
 	$readConfig=2 if (@singl>0 && $readsRpairs);
 	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL $DBrna2 $tmpDX $readConfig\n\n";

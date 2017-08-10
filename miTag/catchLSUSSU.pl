@@ -39,7 +39,7 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 		exit(0);
 	}
 } else  { #unpack reads 
-	system "rm -fr $tmpP" if (-d $tmpP);
+	system "rm -fr $tmpP" if (-d $tmpP && $tmpP ne "");
 	system "mkdir -p $tmpP";
 	system "mkdir -p $alignPath";
 	#preparation of reads
@@ -136,7 +136,7 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 
 }
 
-system "rm -fr $tmpP";
+system "rm -fr $tmpP" if ($tmpP ne "" && -d $tmpP);
 
 #ribo assemblies.. difficult as high chance for chimeras.. maybe switch assembler later?
 my $outP = $alignPath;
