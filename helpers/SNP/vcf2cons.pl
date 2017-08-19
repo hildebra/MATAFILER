@@ -5,6 +5,12 @@ use warnings;
 sub v2q_post_process;
 my $indelWin=5; 
 
+my $line1tmp = <>;
+my $statfile="";
+if ($line1tmp =~ m/#depthStat (\S+)/){
+	$statfile = $1;
+}
+
 my %het = (AC=>'M', AG=>'R', AT=>'W', CA=>'M', CG=>'S', CT=>'Y',
              GA=>'R', GC=>'S', GT=>'K', TA=>'W', TC=>'Y', TG=>'K');
 my ($last_chr, $seq, $qual, $last_pos, @gaps, @spos);
@@ -14,6 +20,8 @@ my $bcnts=0; my $ccnts =0;
 my $lbcnts=0; my $lccnts =0;
 my $lcnt=0;
 my $chromL=0;
+#depth related stats
+my %depthStat;
 while (<>) {
    $lcnt++;
    next if (/^#/);
@@ -40,9 +48,9 @@ while (<>) {
       #$qual .= '!' x ($t[1] - $last_pos - 1);
     }
     die("[vcf2cons] unsorted input\n$t[1] - $last_pos\non line $lcnt\n") if ($t[1] - $last_pos < 0);
-    if (length($t[3]) == 1 && $t[7] !~ /INDEL/ && $t[4] =~ /^([A-Za-z.])(,[A-Za-z])*$/) { # a SNP or reference
-      my ($ref, $alt) = ($t[3], $1);
-      my ($b, $q);
+	if (length($t[3]) == 1 && $t[7] !~ /INDEL/ && $t[4] =~ /^([A-Za-z.])(,[A-Za-z])*$/) { # a SNP or reference
+	  my ($ref, $alt) = ($t[3], $1);
+	  my ($b, $q);
 	  $q=0;
 	  $b = $ref;
       #die "@t\n$alt  $ref\n";
@@ -57,7 +65,7 @@ while (<>) {
     #    $b = $het{"$ref$alt"};
     #    $b ||= 'N';
     #  }
-	  my $dep=1;
+	  my $dep=0;
 	  if ($t[7] =~ /DP=(\d+)/){$dep= $1;}
 	  
 	  if ($dep<=1){$b = "N";}
@@ -67,25 +75,26 @@ while (<>) {
 	  
 	  if ($t[7] =~ /AF=(-?\d[\.\d+]?)/){
 		$q = $1;
-		if ($q > 0.51 && $alt ne '.' ){
-			if ( $dep>1 ) { $b = $alt;$ccnts++; $lccnts++;push(@spos,$t[1]);}
+		if ($q > 0.501 && $alt ne '.' ){
+			if ( $dep>1 ) { 
+				#this is an alternate allele
+				$b = $alt;$ccnts++; $lccnts++;push(@spos,$t[1]);
+				$depthStat{$dep}{alt}++;$depthStat{$dep}{norm}--;
+			}
 		}
 	  }
-	  
+	  $depthStat{$dep}{norm}++;
 	  #die "$q $b\n";
       $b = lc($b);
       $b = uc($b) if (($t[7] =~ /QA=(\d+)/ && $1 >= $_Q && $1 >= $_d && $1 <= $_D) );
-	  
-	  
-	  
-      $seq .= $b;
+     $seq .= $b;
 	  #die "yes";
       #$q = int($q + 33 + .499);
       #$q = chr($q <= 126? $q : 126);
       #$qual .= $q;
 	  $bcnts++;$lbcnts++; 
     } elsif ($t[4] ne '.') { # an INDEL
-	die "@t\n";
+	  die "@t\n";
       push(@gaps, [$t[1], length($t[3])]);
     }
 	#print "$last_pos\n ";
@@ -99,7 +108,35 @@ if ($last_pos > length ($seq)){
 	$seq .= 'n' x ($ext);
 }
 &v2q_post_process($last_chr, \$seq, \$qual, \@gaps, $indelWin,$lbcnts,$lccnts,\@spos) if ($lcnt>0);
-print STDERR "$bcnts $ccnts\n";
+#print STDERR "$bcnts $ccnts\n";
+#print depth stat instead
+my $dsStr=""; my @cumSum;
+my @deps = sort {$a <=> $b} keys %depthStat;
+for (my $i=0; $i<$#deps;$i++){
+	if (exists($depthStat{$i}){
+		push (@cumSum,$#cumSum+$depthStat{$i}{norm}+$depthStat{$i}{alt});
+	} else {
+		push(@cumSum,$#cumSum);
+	}
+}
+die "@cumSum\n";
+foreach my $dep (@deps){
+	$dsStr .= $dep."\t";
+	if (exists($depthStat{$dep}{alt})){
+		$dsStr.=$depthStat{$dep}{alt}."\t";
+	} else{
+		$dsStr .= "0\t";
+	}
+	if (exists($depthStat{$dep}{norm})){
+		$dsStr.=$depthStat{$dep}{norm}."\n";
+	} else{
+		$dsStr .= "0\n";
+	}
+	
+}
+print STDERR $dsStr;
+
+
 exit;
   
 sub v2q_post_process {
@@ -114,6 +151,6 @@ sub v2q_post_process {
     substr($$seq, $beg, $end - $beg) = lc(substr($$seq, $beg, $end - $beg));
   }
   
-  print "\>$chr COV=$reports REPL=$replaces POS=".join(",",@pos)."\n$$seq\n"; #&v2q_print_str($seq);
+  print ">$chr COV=$reports REPL=$replaces POS=".join(",",@pos)."\n$$seq\n"; #&v2q_print_str($seq);
   #print "+\n"; &v2q_print_str($qual);
 }

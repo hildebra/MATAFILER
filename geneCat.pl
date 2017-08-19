@@ -23,6 +23,7 @@ use File::Basename;
 use Cwd; use English;
 use Mods::GenoMetaAss qw( readMapS qsubSystem emptyQsubOpt systemW readGFF);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
+use Mods::TamocFunc qw(attachProteins);
 
 sub readSam; sub readCDHITCls;sub readFasta; 
 sub writeBucket; sub submCDHIT;
@@ -454,27 +455,6 @@ sub cleanUpGC(){#not used any longer
 }
 
 
-sub attachProteins($ $ $ $){#"$basD/tmp.txt",$protF){
-	my ($inT,$prF,$protIn,$hr) = @_;
-	my %gene2num = %{$hr};
-	#the old way
-	#systemW("cat $basD/tmp.txt | xargs samtools faidx $protIn  >> $prF");
-	die "Protein file does not exist: $protIn\n" unless (-e $protIn);
-	my $protStore = `cat $inT | xargs $samBin faidx $protIn`;
-	#die length($protStore)."\n";
-	my @prots = split />/,$protStore;
-	open O,">>$prF";
-	foreach my $pr (@prots){
-		#1 identify protein
-		next if (length($pr) <= 1);
-		my @spl = split /\n/,$pr;
-		unless(exists($gene2num{$spl[0]})){die "can not identify $spl[0] gene in index file while rewritign prot names\n$protIn\n";}
-		#print "$gene2num{$spl[0]}\n $pr\n";
-		$spl[0] = ">".$gene2num{$spl[0]};
-		print O join("\n",@spl)."\n";
-	}
-	close O;
-}
 sub readGeneIdx($){
 	my ($in) = @_;
 	my %ret;
@@ -490,6 +470,7 @@ sub readGeneIdx($){
 	print "Gene Index read\n";
 	return (\%ret);
 }
+#simply rewrites original fasta names to counts used in my genecats
 sub rewriteFastaHdIdx($ $){
 	my ($inf,$hr) = @_;
 	my %gene2num = %{$hr};
@@ -553,8 +534,14 @@ sub protExtract{
 				}
 				print $curSmpl." $cnt\n";
 				#if (!exists($map{$curSmpl}) || !exists($map{$curSmpl}{wrdir}) ){die "$curSmpl not in mapping file\n";}
-				my $metaGD = `cat $map{$curSmpl}{wrdir}/assemblies/metag/assembly.txt`; chomp $metaGD;
+				my $metaGD = "$map{$curSmpl}{wrdir}/assemblies/metag/";
 				my $protIn = $metaGD."/".$path2aa;
+				if ( -e "$metaGD/assembly.txt"){
+					$metaGD = `cat $metaGD/assembly.txt`; chomp $metaGD;
+					$protIn = $metaGD."/".$path2aa;
+				}
+#				my $metaGD = `cat $map{$curSmpl}{wrdir}/assemblies/metag/assembly.txt`; chomp $metaGD;
+#				my $protIn = $metaGD."/".$path2aa;
 				#unless (-e $protIn){$protIn = $map{$curSmpl}{wrdir}."/"."assemblies/metag/genePred/proteins.faa.shrtHD.faa";}
 				die "prot file $protIn doesnt exits\n" unless (-e $protIn);
 				open O,">$inD/tmp.txt";print O $ctchStr;close O;
@@ -574,8 +561,14 @@ sub protExtract{
 	unless (exists ($map{$curSmpl})){$curSmpl = $map{altNms}{$curSmpl} if (exists ($map{altNms}{$curSmpl}));}
 	unless (exists ($map{$curSmpl})){$ctchStrXtr .= $ctchStr; #prob extra protein
 	}else{	
-		my $metaGD = `cat $map{$curSmpl}{wrdir}/assemblies/metag/assembly.txt`; chomp $metaGD;
+		my $metaGD = "$map{$curSmpl}{wrdir}/assemblies/metag/";
 		my $protIn = $metaGD."/".$path2aa;
+		if ( -e "$metaGD/assembly.txt"){
+			$metaGD = `cat $metaGD/assembly.txt`; chomp $metaGD;
+			$protIn = $metaGD."/".$path2aa;
+		}
+#		my $metaGD = `cat $map{$curSmpl}{wrdir}/assemblies/metag/assembly.txt`; chomp $metaGD;
+#		my $protIn = $metaGD."/".$path2aa;
 		open O,">$inD/tmp.txt";print O $ctchStr;close O;
 		attachProteins("$inD/tmp.txt",$protF,$protIn,$geneIdxH);
 	}

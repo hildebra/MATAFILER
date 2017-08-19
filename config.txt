@@ -11,6 +11,7 @@ subXtraCmd
 #	programs / DBs	ESSENTIAL
 samtools	[MFLRDir]/bin/samtools
 spades	/g/bork3/home/hildebra/bin/Spades/SPAdes-3.10.1-Linux/bin/spades.py
+megahit	/g/bork3/home/hildebra/bin/megahit_v1.1.2_LINUX_CPUONLY_x86_64-bin/megahit
 bwt2	[MFLRDir]/bin/bowtie2
 bwa	/g/bork3/home/hildebra/bin/bwa/./bwa
 prodigal	[MFLRDir]/bin/prodigal

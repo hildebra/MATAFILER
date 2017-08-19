@@ -1,5 +1,6 @@
 # MATAFILER
-Authors:  
+
+Author:  
 Falk Hildebrand <Falk.Hildebrand@gmail.com>
 
 MATAFILER is a pipeline developed to 

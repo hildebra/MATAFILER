@@ -5,7 +5,7 @@ use strict;
 #TAMOC programs related to IO to other programs, program paths .. not real subroutines that do anything
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(inputFmtSpades jgi_depth_cmd createGapFillopt getProgPaths buildMapperIdx);
+our @EXPORT_OK = qw(inputFmtSpades inputFmtMegahit jgi_depth_cmd createGapFillopt getProgPaths buildMapperIdx);
 
 
 sub getProgPaths{
@@ -115,6 +115,21 @@ sub inputFmtSpades($ $ $ $){
 		print O "\n     ]\n";
 		close O;
 		$sprds = " --dataset $logDir/spadesInput.yaml";
+	}
+	return $sprds;
+ }
+
+ sub inputFmtMegahit($ $ $ $){
+	my ($p1ar,$p2ar,$singlAr,$logDir) = @_;
+	my @p1 = @{$p1ar}; my @p2 = @{$p2ar};
+	my @singl = @{$singlAr};
+	if (@p1 != @p2){print "Unequal paired read array lengths arrays for Spades\n"; exit(2);}
+	my $sprds = "";
+	if (@p1 > 0){ 
+		$sprds .= "-1 ".join(",",@p1) . " -2 ".join(",",@p2)." ";
+	}
+	if (@singl > 0){
+		$sprds .= "-r ".join(",",@singl);
 	}
 	return $sprds;
  }

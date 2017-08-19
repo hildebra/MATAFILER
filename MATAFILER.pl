@@ -19,7 +19,7 @@ use POSIX;
 use Getopt::Long qw( GetOptions );
 
 use Mods::GenoMetaAss qw(readMap qsubSystem emptyQsubOpt findQsubSys readFastHD prefix_find);
-use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades createGapFillopt  buildMapperIdx);
+use Mods::IO_Tamoc_progs qw(getProgPaths jgi_depth_cmd inputFmtSpades inputFmtMegahit createGapFillopt  buildMapperIdx);
 use Mods::TamocFunc qw (getSpecificDBpaths);
 
 #use Mods::TamocFunc qw(runDiamond);
@@ -94,6 +94,7 @@ my $metPhl2Bin = getProgPaths("metPhl2");#"/g/bork3/home/hildebra/bin/metaphlan2
 my $metPhl2Merge = getProgPaths("metPhl2Merge");#"/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py";
 #my $spadesBin = "/g/bork5/hildebra/bin/SPAdes-3.7.0-dev-Linux/bin/spades.py";
 my $spadesBin = getProgPaths("spades");#"/g/bork3/home/hildebra/bin/SPAdes-3.7.1-Linux/bin/spades.py";
+my $megahitBin = getProgPaths("megahit");
 #my $usBin = getProgPaths("usearch");#"/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh";
 my $bwt2Bin = getProgPaths("bwt2");#"/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2";
 my $bwaBin = getProgPaths("bwa");#"/g/bork3/home/hildebra/bin/bwa-0.7.12/bwa";
@@ -179,9 +180,9 @@ my $DoFreeGlbTmp = 0; my $defaultReadLength = 100;
 my $maxReqDiaDB = 6; #max number of databases supported by METAFILER
 my $reqDiaDB = "";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
 #program configuration
-my $Spades_Cores=48; my $Spades_Memory = 200; #in GB
+my $Assembly_Cores=48; my $Assembly_Memory = 200; #in GB
 my $Spades_HDspace = 100; #required space in GB
-my $Spades_Kmers = "27,33,55,71";
+my $Assembly_Kmers = "27,33,55,71";
 my $bwt_Cores = 12; my $map_DoConsensus = 1; my $doRmDup = 1; #mapping cores; ??? ; remove Dups (can be costly if many ref seqs present)
 my $diaEVal = "0.0000001"; my $dia_Cores = 16; my $krakenCores = 9;
 my $MappingMem = "3G";
@@ -230,9 +231,9 @@ GetOptions(
 	"minReadLength=i" => \$tmpSdmminSL,
 	"maxReadLength=i" => \$tmpSdmmaxSL,
 	#assembly related
-	"spadesCores=i" => \$Spades_Cores,
-	"spadesMemory=i" => \$Spades_Memory, #in GB
-	"spadesKmers=s" => \$Spades_Kmers, #comma delimited list
+	"spadesCores=i" => \$Assembly_Cores,
+	"spadesMemory=i" => \$Assembly_Memory, #in GB
+	"spadesKmers=s" => \$Assembly_Kmers, #comma delimited list
 	"binSpeciesMG=i" => \$DoBinning,
 	"reAssembleMG=i" => \$redoAssembly,
 	"assembleMG=i" => \$DoAssembly,
@@ -279,7 +280,7 @@ GetOptions(
 die "No mapping file provided (-map)\b" if ($mapF eq "");
 $MappingMem .= "G"unless($MappingMem =~ m/G$/);
 if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
-$Spades_Kmers = "-k $Spades_Kmers" unless ($Spades_Kmers =~ m/^-k/);
+$Assembly_Kmers = "-k $Assembly_Kmers" unless ($Assembly_Kmers =~ m/^-k/);
 $sdm_opt{minSeqLength}=$tmpSdmminSL if ($tmpSdmminSL > 0);
 $sdm_opt{maxSeqLength}=$tmpSdmmaxSL if ($tmpSdmmaxSL > 0);
 $remove_reads_tmpDir = 1 if ($DoFreeGlbTmp || $rmScratchTmp);
@@ -364,7 +365,12 @@ if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 #in this case primary focus is on mapping and not on assemblies
 	if ($ARGV[0] eq "map2DB"){$mapModeCovDo=0;$mapModeDecoyDo=0;}
 	my @refDB1 = split(/,/,$refDBall);
-	my @bwt2Name1 = split(/,/,$bwt2NameAll);
+	my @bwt2Name1;
+	if (defined $bwt2NameAll){
+		@bwt2Name1 = split(/,/,$bwt2NameAll) ;
+	} elsif ($ARGV[0] eq "map2DB"){
+		@bwt2Name1 = ("refDB");
+	}
 	my @refDB;my @bwt2Name ;
 	for (my $i=0;$i<@refDB1;$i++){
 		my @sfiles = glob($refDB1[$i]);
@@ -412,7 +418,7 @@ if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 		#die "$bwt2outDl/$1\n";
 		system "mkdir -p $bwt2outDl/LOGandSUB" unless (-d "$bwt2outDl/LOGandSUB");
 		system "cp $refDB[$i] $bwt2outDl" if ($mapModeCovDo && !-e "$bwt2outDl/$1");
-		my $bwtDBcore = 20; my $largeDB = 1;
+		my $bwtDBcore = 30; my $largeDB = 1;
 		my ($cmd,$DBbtRef) = buildMapperIdx($refDB[$i],$bwtDBcore,$largeDB,$MapperProg) ;
 		$DBbtRef =~ s/\.bw2$//;
 		$DBbtRef =~ m/.*\/([^\/]+)$/;
@@ -1039,8 +1045,14 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			#print $AsGrps{$cAssGrp}{AssemblJobName}."\n";		die "@{$AsGrps{$cAssGrp}{FilterSeq1}}"."\n";
 			my $hostFilter = 0;
 			$hostFilter = 1 if ($AsGrps{$cAssGrp}{CntAimAss} > 3);#reset required HDD space
-			my $tmpN = spadesAssembly( \%AsGrps,$cAssGrp,"$nodeSpTmpD/ass",$metagAssDir,$spadesBayHam ,
-				$shortAssembly, $SmplNameX,$hostFilter,$scaffoldFlag) ;
+			my $tmpN ="";
+			if ($DoAssembly == 1){
+				$tmpN = spadesAssembly( \%AsGrps,$cAssGrp,"$nodeSpTmpD/ass",$metagAssDir,$spadesBayHam ,
+					$shortAssembly, $SmplNameX,$hostFilter,$scaffoldFlag) ;
+			}elsif($DoAssembly == 2){
+				$tmpN = megahitAssembly( \%AsGrps,$cAssGrp,"$nodeSpTmpD/ass",$metagAssDir,$spadesBayHam ,
+					$shortAssembly, $SmplNameX,$hostFilter,$scaffoldFlag) ;
+			}
 
 			#if mates available, do them here
 
@@ -1505,7 +1517,7 @@ sub postSubmQsub(){#("$logDir/MultiMapper.sh",$AsGrps{$cAssGrp}{PostAssemblCmd},
 sub detectRibo(){
 	my ($ar1,$ar2,$sar,$tmpP,$outP,$jobd,$SMPN,$glbTmpDDB) = @_;
 	my $numCore = 12;
-	my $numCore2 = 12;
+	my $numCore2 = 32;
 
 	
 	my @re1 = @{$ar1}; my @re2 = @{$ar2}; my @singl = @{$sar};
@@ -1645,7 +1657,9 @@ sub detectRibo(){
 		if (!-e "$outP//ltsLCA/LSUriboRun_bl.hiera.txt" || !-e "$outP//ltsLCA/SSUriboRun_bl.hiera.txt" || !$allLCAstones ){ #|| !-e "$outP//ltsLCA/ITSriboRun_bl.hiera.txt" 
 			$jobd=$jobName; $mem="3G";
 			$jobd .= ";".$globalRiboDependence{DBcp} unless ($globalRiboDependence{DBcp} eq "alreadyCopied");
+			$QSBopt{useLongQueue} = 1;
 			($jobName, $tmpCmd) = qsubSystem($logDir."RiboLCA.sh",$cmd2,$numCore2,$mem,"_RA$JNUM",$jobName,"",1,[],\%QSBopt);
+			$QSBopt{useLongQueue} = 0;
 		}
 	}
 	return $jobName;
@@ -3473,19 +3487,19 @@ sub spadesAssembly(){
 	my $singlAr = $AsGrps{$cAssGrpX}{FilterSeqS};
 	my $jDepe = $AsGrps{$cAssGrpX}{SeqClnDeps};
 	#print all samples used 
-	my $nCores = $Spades_Cores;#6
+	my $nCores = $Assembly_Cores;#6
 	my $noTmpOnNode = 0; #prevent usage of tmp space on node
 	if ($noTmpOnNode){
 		$nodeTmp = $finalOut;
 	}
  	my $cmd = "rm -rf $nodeTmp\nmkdir -p $nodeTmp\nmkdir -p $finalOut\n\n";
 	$cmd .= "\necho '". $AsGrps{$cAssGrpX}{AssemblSmplDirs}. "' > $nodeTmp/smpls_used.txt\n\n";
-	my $defTotMem = $Spades_Memory;#60;
+	my $defTotMem = $Assembly_Memory;#60;
 	my $defMem = ($defTotMem/$nCores);
 	$defTotMem = $defMem * $nCores; #total really available mem (in GB)
 
 	$cmd .= $spadesBin;
-	my $K = $Spades_Kmers ;
+	my $K = $Assembly_Kmers ;
 	#insert single reads
 	my $errStep = "";
 	$errStep = "--only-assembler " if ($doClean == 0);
@@ -3522,7 +3536,7 @@ sub spadesAssembly(){
 	$cmd .= $cmdDB unless($mateFlag || !$map2Assembly); #doesn't need bowtie index
 	
 	#clean up
-	$cmd .= "\n $pigzBin -p $nCores -r $nodeTmp/misc/\n $pigzBin -p $nCores -r $nodeTmp/before_rr* $nodeTmp/*contigs.fa* $nodeTmp/*.fastg\n";
+	$cmd .= "\n $pigzBin -p $nCores -r $nodeTmp/scaffolds.fasta $nodeTmp/misc/\n $pigzBin -p $nCores -r $nodeTmp/assembly_graph.gfa  $nodeTmp/contigs.paths $nodeTmp/before_rr* $nodeTmp/*contigs.fa* $nodeTmp/*.fastg\n";
 	$cmd .=  "rm -rf $nodeTmp/corrected\n";
 	unless ($noTmpOnNode){
 		$cmd .=  "mkdir -p $finalOut\ncp -r $nodeTmp/* $finalOut\n" ;
@@ -3558,6 +3572,96 @@ sub spadesAssembly(){
 			$QSBopt{tmpSpace} = $tmpSHDD;
 		} else {
 			($jname,$tmpCmd) = qsubSystem($logDir."spaderun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
+		}
+		$QSBopt{useLongQueue} = 0;
+	} else {
+		print "Assembly still on tmp dir\n";
+	}
+	#die("SPADE\n");
+	return ($jname);
+}
+
+
+
+sub megahitAssembly(){
+	my ($asHr,$cAssGrpX,$nodeTmp,$finalOut,$doClean,$helpAssembl,$smplName,$hostFilter,$libInfoRef,$mateFlag) = @_;
+	
+	my $p1ar = $AsGrps{$cAssGrpX}{FilterSeq1};
+	my $p2ar = $AsGrps{$cAssGrpX}{FilterSeq2};
+	my $singlAr = $AsGrps{$cAssGrpX}{FilterSeqS};
+	my $jDepe = $AsGrps{$cAssGrpX}{SeqClnDeps};
+	#print all samples used 
+	my $nCores = $Assembly_Cores;#6
+	my $noTmpOnNode = 0; #prevent usage of tmp space on node
+	if ($noTmpOnNode){
+		$nodeTmp = $finalOut;
+	}
+ 	my $cmd = "rm -rf $nodeTmp\nmkdir -p $nodeTmp\nmkdir -p $finalOut\n\n";
+	$cmd .= "\necho '". $AsGrps{$cAssGrpX}{AssemblSmplDirs}. "' > $nodeTmp/smpls_used.txt\n\n";
+	my $defTotMem = $Assembly_Memory;#60;
+	my $defMem = ($defTotMem/$nCores);
+	$defTotMem = $defMem * $nCores; #total really available mem (in GB)
+
+	my $K = $Assembly_Kmers ;
+	$K =~ s/-k //;
+	#insert single reads
+	my $numInLibs = scalar @{$p1ar};
+	my $sprds = inputFmtMegahit($p1ar,$p2ar,$singlAr,$logDir);
+	$cmd .= $megahitBin;
+	$cmd .= " --k-list $K $sprds -t $nCores -m $defTotMem --out-prefix megaAss ";
+	if ($helpAssembl ne ""){
+		$cmd .= "--untrusted-contigs $helpAssembl ";
+	}
+	$cmd .= "-o $nodeTmp --tmp-dir $nodeTmp/tmp/ \n";
+	#from here could as well be separate 1 core job
+	#cleanup assembly
+	$cmd .= "\nrm -fr $nodeTmp/tmp \nmv $nodeTmp/megaAss.contigs.fa $nodeTmp/scaffolds.fasta";
+	#dual size filter
+	$cmd .= "$renameCtgScr $nodeTmp/scaffolds.fasta $smplName\n";
+	$cmd .= "$sizFiltScr $nodeTmp/scaffolds.fasta 400 200\n";
+	
+	if ($JNUM > 1 && $helpAssembl ne ""){
+		#cluster short reads using CD-HIT, replaces scaffolds.fasta.filt2 file
+		my $secAss = $nodeTmp."secondary_shorts/";
+		system("mkdir -p $secAss");
+		$cmd .= "cat $nodeTmp/scaffolds.fasta >> $nodeTmp/scaffolds.fasta2\n";
+		$cmd .= $spadesBin." -s $nodeTmp/scaffolds.fasta2 --only-assembler -m 1000 -t $nCores $K -o $secAss\n";
+		#cleanup
+		$cmd .= "cp  $secAss/contigs.fasta $nodeTmp/scaffolds.fasta2\nrm -f -r $secAss\n";
+	}
+	$cmd .= "$assStatScr -scaff_size 500 $nodeTmp/scaffolds.fasta > $nodeTmp/AssemblyStats.500.txt\n";
+	$cmd .= "$assStatScr $nodeTmp/scaffolds.fasta > $nodeTmp/AssemblyStats.ini.txt\n";
+	$cmd .= "$assStatScr $nodeTmp/scaffolds.fasta.filt > $nodeTmp/AssemblyStats.txt\n";
+
+	my ($cmdDB,$bwtIdx) = buildMapperIdx("$nodeTmp/scaffolds.fasta.filt",$nCores,0,$MapperProg);#$nCores);
+	$cmd .= $cmdDB unless($mateFlag || !$map2Assembly); #doesn't need bowtie index
+	
+	#clean up
+	$cmd .= "\n $pigzBin -p $nCores $nodeTmp/scaffolds.fasta\n";
+	unless ($noTmpOnNode){
+		$cmd .=  "mkdir -p $finalOut\ncp -r $nodeTmp/* $finalOut\n" ;
+		$cmd .= "rm -rf $nodeTmp\n";
+	}
+	my $jname = "";
+	
+#	if (-e $logDir."megahitrun.sh.otxt"){	#check for out of mem
+#	}
+	$cmd .= "echo \"MAX MEM ".$defTotMem."G\"";
+	die "$cmd\n\n";
+	#print "in Assembly\n$jDepe\n";
+	#print "$finalOut/scaffolds.fasta.filt\n";
+	unless (-e "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/AssemblyStats.txt"){
+		#my $size_in_mb = (-s $fh) / (1024 * 1024);
+		my $tmpCmd="";
+		$jname = "mA$JNUM";#$givenJName;
+		$QSBopt{useLongQueue} = 1;
+		if ($hostFilter || $SpadesAlwaysHDDnode){
+			my $tmpSHDD = $QSBopt{tmpSpace};
+			$QSBopt{tmpSpace} = $Spades_HDspace."G" unless ($Spades_HDspace =~ m/G$/); #set option how much tmp space is required, and reset afterwards
+			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@Spades_Hosts,\%QSBopt) ;
+			$QSBopt{tmpSpace} = $tmpSHDD;
+		} else {
+			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
 		}
 		$QSBopt{useLongQueue} = 0;
 	} else {

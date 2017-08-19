@@ -7,10 +7,46 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw( sortgzblast uniq getE100 getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
+our @EXPORT_OK = qw( sortgzblast attachProteins uniq getE100 getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
+#gets required FA genes via samtools faidx and saves them to file
+#Usage: [text file with target genes] [out faa] [in faa(search genes in this fna)] [new names for output]
+sub attachProteins{#"$basD/tmp.txt",$protF){
+	my ($inT,$prF,$protIn) = ($_[0],$_[1],$_[2]);
+	
+	my %gene2num; my $doRename=0;
+	if (@_ > 3){
+		$doRename=1;
+		my $hr = $_[3];
+		%gene2num = %{$hr};
+	}
+	my $samBin = getProgPaths("samtools");
+	#the old way
+	#systemW("cat $basD/tmp.txt | xargs samtools faidx $protIn  >> $prF");
+	die "Protein file does not exist: $protIn\n" unless (-e $protIn);
+	#print "$protIn\n";
+	my $protStore = `cat $inT | xargs $samBin faidx $protIn`;
+	#die length($protStore)."\n";
+	my @prots = split />/,$protStore;
+	open O,">>$prF" or die "Can't open $prF\n";
+	foreach my $pr (@prots){
+		#1 identify protein
+		next if (length($pr) <= 1);
+		my @spl = split /\n/,$pr;
+		if ($doRename){
+			unless(exists($gene2num{$spl[0]})){die "can not identify $spl[0] gene in index file while rewritign prot names\n$protIn\n";}
+			#print "$gene2num{$spl[0]}\n $pr\n";
+			$spl[0] = ">".$gene2num{$spl[0]};
+		} else {
+			$spl[0] = ">$spl[0]";
+		}
+		print O join("\n",@spl)."\n";
+	}
+	close O;
+	#die "cat $inT | xargs $samBin faidx $protIn\n";
+}
 
 sub readTabbed($){
 	my ($inF) = @_;
