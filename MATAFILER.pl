@@ -259,7 +259,7 @@ GetOptions(
 	"diamondCores=i" => \$dia_Cores,
 	"diaParseEvals=s" => \$diaEVal,
 	"diamondDBs=s" => \$reqDiaDB,#NOG,MOH,ABR,ABRc,ACL,KGM,CZy
-	#ribo profiling
+	#ribo profiling (miTag)
 	"profileRibosome=i" => \$DoRibofind,
 	"riobsomalAssembly=i"  => \$doRiboAssembl,
 	"reProfileRibosome=i" => \$RedoRiboFind ,  
@@ -777,14 +777,17 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 				}
 			}
 			if (!-e $toCpy  || ( (-e $toCpy  || -e "$toCpy.gz" ) && -e $fromCp && -s $fromCp != -s $toCpy)){
+				unlink "$toCpy" if -e ($toCpy);
 				if (-e "$fromCp.gz"){
-					system "zcat $fromCp.gz > $toCpy" ;
+					#system "zcat $fromCp.gz > $toCpy" ;
+					system "ln -s $fromCp.gz $toCpy.gz";
 				} else {
-					system "cp $fromCp $toCpy" ;
+					system "gzip $fromCp";
+					system "ln -s $fromCp.gz $toCpy.gz" ;
 				}
 			}
-			system "gzip $fromCp" unless (-e "$fromCp.gz");
-			system "rm -f $curOutDir/ribos/ltsLCA/inter${RFtag}riboRun_bl.fna";
+			#system "gzip $fromCp" unless (-e "$fromCp.gz");
+			system "rm -f $curOutDir/ribos/ltsLCA/inter${RFtag}riboRun_bl.fna" if (-e "$curOutDir/ribos/ltsLCA/inter${RFtag}riboRun_bl.fna");
 		}
 	}
 	my ($calcDiamond,$calcDiaParse) = IsDiaRunFinished($curOutDir);
