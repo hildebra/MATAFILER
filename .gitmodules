@@ -1,0 +1,3 @@
+[submodule "helpers/SNP"]
+	path = helpers/SNP
+	url = https://github.com/hildebra/SNPConsensus.git

@@ -727,7 +727,6 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	if ($memory =~ s/G$//){$memory *= 1024 * $ncores;};
 	my $tmpSpace = $optHR->{tmpSpace};
 	if ($tmpSpace =~ s/G$//){$tmpSpace *= 1024 ;};
-
 	#die ($memory."\n");
 	my $queues = "\"".$optHR->{shortQueue}."\"";#"\"medium_priority\"";
 	$queues = "\"".$optHR->{longQueue}."\"" if ($optHR->{useLongQueue} ==1);#"\"medium_priority\"";
@@ -790,7 +789,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		if ($jname ne ""){$xtra.="-J $rTag$jname ";}
 		#finish up
 		$xtra .= " ";
-	} elsif ($LSF==1){ #-M memLimit; -q queueName;  -m "host_name[@cluster_name]; -n minProcessors; 
+	} elsif ($LSF==1){ #bsub #-M memLimit; -q queueName;  -m "host_name[@cluster_name]; -n minProcessors; 
 		if ($optHR->{doSync} == 1){$xtra.="-K ";}
 		if ($jname ne ""){$xtra.="-J $rTag$jname ";}
 		if (length($waitJID) >3) {
@@ -803,7 +802,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 			}
 		}
 		$tmpsh = " < ".$tmpsh;
-	} else{
+	} else{ #qsub
 		if ($optHR->{doSync} == 1){$xtra.="-sync y ";}
 		if ($jname ne ""){$xtra.="-N $rTag$jname ";}
 		if (length($waitJID) >3) {
@@ -811,12 +810,12 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		}
 			#$waitJID =~ s/;/,/g;$xtra.="-hold_jid $waitJID ";}
 	}
-	if ($cwd ne ""){if ($LSF==2){$xtra .= "--workdir $cwd";} else {$xtra.="-cwd $cwd"; } }
+	if ($cwd ne ""){if ($LSF==2){$xtra .= "--workdir $cwd";} elsif ($LSF==1) {$xtra.="-cwd $cwd"; }  else {$xtra.="-wd $cwd";} }
 	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}
 	print $LOGhandle $qcm."\n" unless ($LOGhandle eq "" || !defined($LOGhandle) );
-	#print($qcm);
+	#print("$qcm\n\n");
 	#if (@restrHosts > 0){die $qcm;}
 	if ($optHR->{doSubmit} != 0 && $immSubm){
 		print "SUB:$jname\t";

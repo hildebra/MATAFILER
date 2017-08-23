@@ -32,6 +32,7 @@ sub mapReadsToRef;  sub bamDepth;
 sub ReadsFromMapping;
 
 sub spadesAssembly; #main Assembler
+sub megahitAssembly; #secondary Assembler
 sub createPsAssLongReads; #pseudo assembler
 sub scaffoldCtgs;  #scaffold assemblies / external contigs
 sub GapFillCtgs;   #post scaffolding using reads from samples
@@ -58,7 +59,7 @@ sub genoSize;
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
-my $MATFILER_ver = 0.14;
+my $MATFILER_ver = 0.15;
 
 #----------------- defaults ----------------- 
 my $rawFileSrchStr1 = '.*1\.f[^\.]*q\.gz$';
@@ -268,7 +269,7 @@ GetOptions(
 	#other tax profilers..
 	"profileMetaphlan2=i"=> \$DoMetaPhlan,
 	"profileKraken=i"=> \$DoKraken,
-	"estGenoSize=i" => \$DoGenoSize,
+	"estGenoSize=i" => \$DoGenoSize, #estimate average size of genomes in data
 	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
 	#D2s distance
 	"calcInterMGdistance=i" => \$DoCalcD2s,
@@ -1268,12 +1269,10 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	$AsGrps{$cAssGrp}{MapDeps} = "";  $AsGrps{$cAssGrp}{readDeps} = ""; $AsGrps{$cAssGrp}{DiamDeps} = "";
 	# calc statsitics concercing readqual, mappings, genes & contigs
 	
-	
 	if ($pseudAssFlag || ($AssemblyGo && $DoAssembly)) {
 		my $subprts = "agkse";
 		if ($DoBinning){$subprts .= "m";}
 		my ($contRun,$tmp33) = contigStats($curOutDir ,$cln1.";".$AsGrps{$cAssGrp}{prodRun},$GlbTmpPath,$finalCommAssDir,$subprts,1,0,$samplReadLength);
-
 		#run contig stats
 		postSubmQsub("$logDir/MultiContigStats.sh",$AsGrps{$cAssGrp}{PostClnCmd},$AsGrps{$cAssGrp}{CSfinJobName},$contRun);
 		$AsGrps{$cAssGrp}{PostClnCmd} = "";$AsGrps{$cAssGrp}{CSfinJobName} = $contRun;
@@ -1288,6 +1287,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die();
 
 }
+
+print "Main Loop done\n";
 
 #global clean up cmds (like DB removals from scratch)
 DiaPostProcess("",$baseOut);
@@ -3599,26 +3600,35 @@ sub megahitAssembly(){
 	if ($noTmpOnNode){
 		$nodeTmp = $finalOut;
 	}
- 	my $cmd = "rm -rf $nodeTmp\nmkdir -p $nodeTmp\nmkdir -p $finalOut\n\n";
-	$cmd .= "\necho '". $AsGrps{$cAssGrpX}{AssemblSmplDirs}. "' > $nodeTmp/smpls_used.txt\n\n";
+	my $nodePreD = $nodeTmp;$nodePreD=~s/\/[^\/]+\/*$/\//;
+	#die "$nodePreD\n$nodeTmp\n";
+	
+ 	my $cmd = "rm -rf $nodeTmp\nmkdir -p $nodePreD $finalOut\n\n"; #\n  mkdir -p $nodeTmp/tmp\n
 	my $defTotMem = $Assembly_Memory;#60;
 	my $defMem = ($defTotMem/$nCores);
 	$defTotMem = $defMem * $nCores; #total really available mem (in GB)
 
 	my $K = $Assembly_Kmers ;
 	$K =~ s/-k //;
+	#check that k's are closer than 28
+	my @spl  = sort {$a <=> $b}(split /,/,$K);
+	for (my $i=1;$i<@spl;$i++){
+		if ($spl[$i] - $spl[$i-1] > 28){die "kmers for megahit: $K: steps must be <28\n";}
+	}
+	$K = join(",",@spl);
 	#insert single reads
 	my $numInLibs = scalar @{$p1ar};
 	my $sprds = inputFmtMegahit($p1ar,$p2ar,$singlAr,$logDir);
 	$cmd .= $megahitBin;
-	$cmd .= " --k-list $K $sprds -t $nCores -m $defTotMem --out-prefix megaAss ";
+	$cmd .= " --k-list $K $sprds -t $nCores -m ".$defTotMem*1024*1024*1024 ." --out-prefix megaAss ";
 	if ($helpAssembl ne ""){
 		$cmd .= "--untrusted-contigs $helpAssembl ";
 	}
-	$cmd .= "-o $nodeTmp --tmp-dir $nodeTmp/tmp/ \n";
+	$cmd .= "-o $nodeTmp  \n";  #--tmp-dir $nodeTmp/tmp/
 	#from here could as well be separate 1 core job
 	#cleanup assembly
-	$cmd .= "\nrm -fr $nodeTmp/tmp \nmv $nodeTmp/megaAss.contigs.fa $nodeTmp/scaffolds.fasta";
+	$cmd .= "\necho '". $AsGrps{$cAssGrpX}{AssemblSmplDirs}. "' > $nodeTmp/smpls_used.txt\n\n";
+	$cmd .= "\nrm -fr $nodeTmp/tmp \nmv $nodeTmp/megaAss.contigs.fa $nodeTmp/scaffolds.fasta\n\n";
 	#dual size filter
 	$cmd .= "$renameCtgScr $nodeTmp/scaffolds.fasta $smplName\n";
 	$cmd .= "$sizFiltScr $nodeTmp/scaffolds.fasta 400 200\n";
@@ -3650,7 +3660,7 @@ sub megahitAssembly(){
 #	if (-e $logDir."megahitrun.sh.otxt"){	#check for out of mem
 #	}
 	$cmd .= "echo \"MAX MEM ".$defTotMem."G\"";
-	die "$cmd\n\n";
+	#die "$cmd\n\n";
 	#print "in Assembly\n$jDepe\n";
 	#print "$finalOut/scaffolds.fasta.filt\n";
 	unless (-e "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/scaffolds.fasta.filt" && !-z "$finalOut/AssemblyStats.txt"){
@@ -3661,10 +3671,10 @@ sub megahitAssembly(){
 		if ($hostFilter || $SpadesAlwaysHDDnode){
 			my $tmpSHDD = $QSBopt{tmpSpace};
 			$QSBopt{tmpSpace} = $Spades_HDspace."G" unless ($Spades_HDspace =~ m/G$/); #set option how much tmp space is required, and reset afterwards
-			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@Spades_Hosts,\%QSBopt) ;
+			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores)),int($defMem)."G",$jname,$jDepe,"",1,\@Spades_Hosts,\%QSBopt) ;
 			$QSBopt{tmpSpace} = $tmpSHDD;
 		} else {
-			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores/2)+1),int($defMem*2)."G",$jname,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
+			($jname,$tmpCmd) = qsubSystem($logDir."megahitrun.sh",$cmd,(int($nCores)),int($defMem)."G",$jname,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
 		}
 		$QSBopt{useLongQueue} = 0;
 	} else {

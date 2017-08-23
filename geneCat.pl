@@ -291,6 +291,12 @@ foreach my $smpl(@samples){
 		my $shrtHd = $hd ;	#$shrtHd =~ m/(\S+)\s/; $shrtHd = $1;
 		#print $shrtHd."\n";
 		#die $hd."\n";
+		
+		
+		die "0xT20A found!\n$inGenesF\n" if ($hd =~ m/0xT20A/);
+		
+		
+		
 		unless (exists $gff{$shrtHd}){die "can't find gff entry for $shrtHd\n";}
 		unless ($gff{$shrtHd} =~ m/;partial=(\d)(\d);/){ die "Incorrect gene format for gene $hd \n in file $inGenesF\n";}
 		if (exists $curFMGs{$hd} && $doFMGseparation){

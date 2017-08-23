@@ -91,7 +91,7 @@ nucmer	/g/bork3/home/hildebra/bin/MUMmer3.23/./nucmer
 metPhl2	/g/bork3/home/hildebra/bin/metaphlan2/metaphlan2.py
 metPhl2Merge	/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py
 kraken	/g/scb/bork/hildebra/DB/kraken/./kraken
-microCens	python /g/bork3/home/hildebra/env/env/miniconda/bin/run_microbe_census.py
+microCens	python /g/bork3/home/hildebra/bin/MicrobeCensus-1.1.0/scripts/run_microbe_census.py
 
 #functional profiling
 diamond	[MFLRDir]/bin/./diamond
