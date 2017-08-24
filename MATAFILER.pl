@@ -3667,7 +3667,7 @@ sub megahitAssembly(){
 		#my $size_in_mb = (-s $fh) / (1024 * 1024);
 		my $tmpCmd="";
 		$jname = "mA$JNUM";#$givenJName;
-		$QSBopt{useLongQueue} = 1;
+		$QSBopt{useLongQueue} = 0;#super fast, doesn't need long queue
 		if ($hostFilter || $SpadesAlwaysHDDnode){
 			my $tmpSHDD = $QSBopt{tmpSpace};
 			$QSBopt{tmpSpace} = $Spades_HDspace."G" unless ($Spades_HDspace =~ m/G$/); #set option how much tmp space is required, and reset afterwards
