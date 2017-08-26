@@ -15,7 +15,7 @@ use Getopt::Long qw( GetOptions );
 
 sub main;
 sub readGene2COG; sub readNogKingdom;
-sub readCOGdef;
+sub readCOGdef; sub readTCDBdef;
 sub readGene2KO;sub readKeggTax;
 sub check_files; sub remove_file;
 sub writeAllTable;
@@ -101,17 +101,15 @@ $blInf = sortgzblast($blInf,$tmpD) unless ($mode == 3 || $mode == 4);
 
 #die "$blInf";
 
-my $bl2dbF ;
-my $cogDefF ;
-my $NOGtaxf ;
-my $KEGGlink ;
-my $KEGGtaxDb ;
+my $bl2dbF ;my $cogDefF ;my $NOGtaxf ;
+my $KEGGlink ;my $KEGGtaxDb ; my $TCDBhir;
 if ($DButil ne ""){
-	 $bl2dbF = "$DButil/NOG.members.tsv";
-	 $cogDefF = "$DButil/NOG.annotations.tsv";
-	 $NOGtaxf = "$DButil/all_species_data.txt";
-	 $KEGGlink = "$DButil/genes_ko.list";
+	$bl2dbF = "$DButil/NOG.members.tsv";
+	$cogDefF = "$DButil/NOG.annotations.tsv";
+	$NOGtaxf = "$DButil/all_species_data.txt";
+	$KEGGlink = "$DButil/genes_ko.list";
 	$KEGGtaxDb = "$DButil/kegg.tax.list";
+	$TCDBhir = "$DButil/TCDBhir.txt";
 
 }
 
@@ -134,6 +132,7 @@ my @aminBLE = split /,/,$minBLE;
 #@aminBLE = ("1e-9") x scalar(@aminPID);
 my @aminPID = ($percID) x scalar(@aminBLE);
 
+my %TCdef;
 my %NOGkingd ; my %KEGGtax;
 my %COGdef ;my %g2COG ; my %c2CAT ; 
 my %cardE; my %cardFunc; my %cardName; 
@@ -160,6 +159,14 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	$hr1 = readCOGdef($cogDefF);
 	%COGdef = %{$hr1}; $tabCats = 1;
 	%NOGkingd = readNogKingdom($NOGtaxf);
+} elsif ($DBmode eq "TCDB"){
+	@kgdOpts = qw (3);
+	my $hr = readTCDBdef($TCDBhir);
+	%TCdef = %{$hr};
+	@kgdName = ("","","","ALL");
+	@kgdNameShrt = ("","","","ALL");
+	print "transporter DB\n";
+	$tabCats =6;
 } elsif ($DBmode eq "CZy"){
 	@kgdOpts = qw (0 1 2 3 4 5);
 	my $hr = readMohTax($DButil."/MohCzy.tax");
@@ -629,11 +636,12 @@ sub main(){
 	
 	#finalize assignment to read
 	my $curCOG="-";my $curCat = ""; my $curDef = "";
+	my $curCatDef="";
 	my $curKgd = 3; #default always 3.. historic
 	my @splC;
 	if ($ACLdb || $KGMmode){
 		@splC = split /:/,$bestSbj ; $splC[0] = $splC[1] if ($ACLdb);
-	} elsif ($cazyDB || $tabCats==0 ) {
+	} elsif ($cazyDB || $tabCats==0 || $tabCats == 6) {
 		@splC = split /\|/,$bestSbj;
 	} 
 	if ($noTax){
@@ -694,6 +702,27 @@ sub main(){
 		} else {$CATfail++; return;}
 	}elsif ($tabCats==3){  #CAZy
 		$curCOG = $splC[0];
+	}elsif ($tabCats==6){  #TCDB
+		#print "TC6\n@splC\n";
+		if ($splC[3] =~ m/(^[^\.]+\.[^\.]+\.[^\.]+)\.?/){
+			$curCOG = $1;
+		} else {
+			die "Can't find tag\n";
+		}
+		if (exists $TCdef{$curCOG}{CL} ){
+			$curCat = $TCdef{$curCOG}{CL}; $CATexist++;
+		} else {$CATfail++; $curCat = $curCOG; }
+		
+		$curDef = "";
+		if (defined $TCdef{$curCOG}{desc} ){#CLd1
+			$curDef = $TCdef{$curCOG}{desc}; 
+		}
+		$curCatDef = "";
+		if (defined $TCdef{$curCOG}{CLd1} ){#CLd1
+			$curCatDef = $TCdef{$curCOG}{CLd1}; 
+		}
+		#print "$curDef  $curCatDef\n"
+		#die $curCOG."\n";
 	}
 	foreach my $normMethod (@normMethods){
 		$totalCOG++; $lpCnt++;
@@ -733,6 +762,13 @@ sub main(){
 			if ($lpCnt==1){
 				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
 				print $O2 "$bestQuery\t$curCOG\t".join(",",@curCats)."\n" if ($reportGeneCat ==2);
+			}
+		} elsif ($tabCats==6){#TCDB
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			$CATabundance{$normMethod}{$curKgd}{$curCat}+= $score;
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
+				print $O2 "$bestQuery\t$curCOG\t$curDef\t$curCat\t$curCatDef\n" if ($reportGeneCat ==2);
 			}
 		} elsif ($tabCats==3){  #CAZy
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
@@ -779,12 +815,50 @@ sub main(){
 
 sub readCOGdef(){
 	my ($inF) = @_;
-	open I,"<$inF";
+	open I,"<$inF" or die "Can't open $inF\n";
 	my %ret;
 	while (my $line = <I>){
 		chomp $line;
 		my ($txx,$COG,$n1,$n2,$cat,$def) = split(/\t/,$line);
 		$ret{$COG} = $def;
+	}
+	close I;
+	return \%ret;
+}
+sub readTCDBdef($){
+	my ($inF) = @_;
+	#die;
+	print "$inF\n";
+	open I,"<$inF" or die "Can't open $inF\n";
+	my %ret;
+	my $newCat=0; my $curClass; my $curClassDesc1;my $curClassDesc2;
+	while (my $line = <I>){
+		chomp $line;
+		unless ($line =~ m/\S/){
+			
+			$newCat = 1; $curClassDesc1="";$curClassDesc2="";
+			next;
+		}
+		my @spl = split(/ - /,$line);
+		if ($newCat){
+			$newCat = 0;
+			$curClass = $spl[0];
+			if (@spl>0){
+				$curClassDesc1=$spl[1];
+			}
+			if (@spl>1){
+				$curClassDesc2=$spl[2];
+			}
+			#die "$curClass  $curClassDesc1  $curClassDesc2\n";
+			next;
+		}
+		my $curGene = $spl[0];
+		$ret{$curGene}{CL} = $curClass;
+		$ret{$curGene}{CLd1} = $curClassDesc1;
+		$ret{$curGene}{CLd2} = $curClassDesc2;
+		my $desc = "";
+		$desc = $spl[1] if (@spl>0);
+		$ret{$curGene}{desc} = $desc;
 	}
 	close I;
 	return \%ret;

@@ -23,6 +23,9 @@ FMGdir	[MFLRDir]/bin/fetchMG/
 hmmsearch	[MFLRDir]/bin/hmmsearch
 essentialHMM	[MFLRDir]/DB/essential.hmm
 essentialEUK	[MFLRDir]/DB/eukCore.hmm
+trimomatic	[MFLRDir]/bin/trimmomatic-0.36.jar
+illuminaTS3pe	[MFLRDir]/DB/TruSeq3-PE.fa
+illuminaTS3se	[MFLRDir]/DB/TruSeq3-SE.fa
 
 
 #		SNPs / tree building - not public currently
@@ -33,6 +36,7 @@ msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
+
 #     experimental
 sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
 br2dCnt	/g/bork3/home/hildebra/bin/bam-readcount/bin/./bam-readcount
@@ -166,4 +170,5 @@ ABRfors_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_FORS/
 ABRcard_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_Card/
 KEGG_path_DB	/g/bork3/home/hildebra/DB/FUNCT/KEGG/
 ACL_path_DB	/g/bork3/home/hildebra/DB/FUNCT/Aclame/
+TCDB_path_DB	/g/bork3/home/hildebra/DB/FUNCT/TCDB/
 

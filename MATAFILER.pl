@@ -56,6 +56,7 @@ sub genoSize;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
 #bjobs | grep 'SDM' | cut -f1 -d' ' | xargs -t -i bkill {}
+#squ | grep cIn | cut -f12 -d' ' | xargs  -t -i scancel {}
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
@@ -119,7 +120,13 @@ my $jgiDepthBin = getProgPaths("jgiDepth");#"/g/bork3/home/hildebra/bin/metabat/
 my $bedCovBin = getProgPaths("bedCov");#"/g/bork5/hildebra/bin/bedtools2-2.21.0/bin/genomeCoverageBed";
 my $srtMRNA_path = getProgPaths("srtMRNA_path");
 my $ITSDBfa = getProgPaths("ITSdbFA");
-my $lambdaIdxBin = getProgPaths("lambdaIdx");		
+my $lambdaIdxBin = getProgPaths("lambdaIdx");
+my $trimJar = getProgPaths("trimomatic");
+
+#databases
+my $himipeSeqAd = getProgPaths("illuminaTS3pe");
+my $himiseSeqAd = getProgPaths("illuminaTS3se");
+
 
 #local MATAFILER scripts --------------------------
 my $cLSUSSUscript = getProgPaths("cLSUSSU_scr");#"perl /g/bork3/home/hildebra/dev/Perl/16Stools/catchLSUSSU.pl";
@@ -156,6 +163,7 @@ my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",
 #removeInputAgain=remove unzipped files from scratch, after sdm; remove_reads_tmpDir = leave cleaned reads on scratch after everything finishes
 my $unfiniRew=0; my $redoCS=0; my $removeInputAgain=1; my $remove_reads_tmpDir=0;
 my $readsRpairs=1; #are reads given in pairs?
+my $useTrimomatic=1;
 my $splitFastaInput = 0; #assembly as input..
 my $importMocat = 0; my  $mocatFiltPath = "reads.screened.screened.adapter.on.hg19.solexaqa/"; 
 my $alwaysDoStats = 1; 
@@ -216,6 +224,7 @@ GetOptions(
 	"submit=i" => \$doSubmit,
 	"from=i" => \$from,
 	"to=i" => \$to,
+	"useTrimomatic=i" => \$useTrimomatic,
 	"rmRawRds=i" => \$DoFreeGlbTmp,
 	"reduceScratchUse=i" => \$rmScratchTmp,
 	#input FQ related
@@ -962,6 +971,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 					,$GlbTmpPath."seqClean/",$curSDMopt,$jdep.";$sdmjN",$dowstreamAnalysisFlag) ;
 			
 		}
+		$sdmjN = krakHSap($arp1,$arp1, $singAr,$nodeSpTmpD,$sdmjN,1);
 		#die "@{$singAr}";
 		($mergRdsHr,$mergJbN) = mergeReads($arp1,$arp2,$sdmjN,$GlbTmpPath."merge_clean/",$doReadMerge,$dowstreamAnalysisFlag);
 		#my %mrr = %{$mergRdsHr}; die "$mrr{pair1}\n$mrr{pair2}\n$mrr{mrg}\n";
@@ -1749,6 +1759,9 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 			system "rm -f $CLrefDBD/card*";
 			$DBcmd .= "cp $DBpath/card*.txt $DBpath/card*.map $CLrefDBD\n";
 		}
+		if ($curDB eq "TCDB" && !-s "$CLrefDBD/hir.txt"){ 
+			$DBcmd .= "cp $DBpath/TCDBhir.txt  $CLrefDBD\n";
+		}
 
 		my $jN = "_DIDB$shrtDB$JNUM"; my $tmpCmd;
 #		die "$DBcmd";
@@ -2386,8 +2399,22 @@ sub complexGunzCpMv($ $ $ $){
 		die "$GlbTmpPath ne $finDest";
 	}
 	my $newRDf = $finDest."$in";
-	$unzipcmd .= "chmod +w $newRDf\n";
+	
 	return ($unzipcmd,$newRDf);
+}
+
+sub outfiles_trimall($ $){
+	my ($opath,$fil) = @_;
+	my $OFp1 = "$opath/$fil"; 
+	my $OFu1 = "$opath/$fil";	
+	if ($OFp1 =~ m/\.gz$/){
+		$OFu1 =~ s/(\.f[^\.]*q)\.gz$/\.sing$1/ ;$OFp1 =~ s/\.gz$// 
+	} elsif ($OFu1 =~ m/\.f[^\.]*q$/){
+		$OFu1 =~ s/(\.f[^\.]*q)$/\.sing$1/ ;
+	} else {
+		die "Unknown file ending: $fil\n";
+	}
+	return ($OFp1,$OFu1);
 }
 
 sub seedUnzip2tmp(){
@@ -2397,7 +2424,7 @@ sub seedUnzip2tmp(){
 	my $fastp2 = ""; my $xtraRdsTech = "";
 	$xtrMapStr = "" if (!defined $xtrMapStr) ;
 	if ( $xtrMapStr ne ""){
-		die "XX$xtrMapStr\n";
+		#die "XX$xtrMapStr\n";
 		my @spl = split(/:/,   $map{$samples[$JNUM]}{"SupportReads"}   );
 		$xtraRdsTech = $spl[0].$libNum;
 		$fastp2 = $spl[1];
@@ -2493,27 +2520,47 @@ sub seedUnzip2tmp(){
 	#@fastap2 = ($fastap2[0]); @fastap1 = ($fastap1[0]);
 	if (@pa1 == 0 && @pas ==0 ){die"Can;t find files in $fastp\nUsing search pattern: $smplPrefix$rawFileSrchStr1  $smplPrefix$rawFileSrchStr2\n";}
 	my $finishStone = "$finDest/rawRds/done.sto";
+	my $trimoStone = $finishStone;
+	if ($useTrimomatic){
+		$trimoStone = "$finDest/rawRds/trimomatic.sto";
+	}
+
 	$tmpPath.="/rawRds/";
 	my $unzipcmd = "";
 	$unzipcmd .= "sleep $WT\nset -e\n";
-	$unzipcmd .= "rm -f $finishStone\nrm -r -f $tmpPath\nmkdir -p $tmpPath\nmkdir -p $finDest/rawRds/\n";
+	$unzipcmd .= "rm -f $finishStone $trimoStone\nrm -r -f $tmpPath\nmkdir -p $tmpPath\nmkdir -p $finDest/rawRds/\n";
 
 	#make sure input is unzipped
 	#die ($tmpPath."\n");
 	system("mkdir -p $finDest/rawRds/");# my $newRDf ="";
+	my $numCore=1;
 	my $testf1 = "";my $testf2 = "";
 	for (my $i=0; $i<@pa1; $i++){
 		#print $pa1[$i]."\n";
 		my $pp = $fastp;
-		$pp = $fastp2 if ($libInfo[$i] eq $xtraRdsTech);
-		my ($tmpCmd,$newF) = complexGunzCpMv($pp,$pa1[$i],$tmpPath,$finDest."/rawRds/");
-		$unzipcmd .= $tmpCmd."\n";
-		$pa1[$i] = $newF;
-		($tmpCmd,$newF) = complexGunzCpMv($pp,$pa2[$i],$tmpPath,$finDest."/rawRds/");
-		$unzipcmd .= $tmpCmd."\n";
-		$pa2[$i] = $newF;
+		if ($useTrimomatic){
+			$pp = $fastp2 if ($libInfo[$i] eq $xtraRdsTech);
+			#trimomatic instead of unzip
+			my ($OFp1,$OFu1) = outfiles_trimall("$finDest/rawRds/",$pa1[$i]);
+			my ($OFp2,$OFu2) = outfiles_trimall("$finDest/rawRds/",$pa2[$i]);
+			$unzipcmd .= "java -jar $trimJar PE -threads $numCore $pp/$pa1[$i] $pp/$pa2[$i] $OFp1 $OFu1 $OFp2 $OFu2 ILLUMINACLIP:$himipeSeqAd:2:30:10\n";
+			#for now: discard of singletons
+			$unzipcmd .= "rm $OFu1 $OFu2\n";
+			$pa1[$i] = $OFp1; $pa2[$i] = $OFp2;
+		} else {
+		#old style
+			my ($tmpCmd,$newF) = complexGunzCpMv($pp,$pa1[$i],$tmpPath,$finDest."/rawRds/");
+			$unzipcmd .= $tmpCmd."\n";
+			$pa1[$i] = $newF;
+			($tmpCmd,$newF) = complexGunzCpMv($pp,$pa2[$i],$tmpPath,$finDest."/rawRds/");
+			$unzipcmd .= $tmpCmd."\n";
+			$pa2[$i] = $newF;
+		}
 	}
-	#die "@pas\n";
+	$unzipcmd .= "chmod +w ".join(" ",@pa1)."\n";
+	$unzipcmd .= "chmod +w ".join(" ",@pa2)."\n";
+	#die "$unzipcmd\n";
+	#die "@pa1\n";
 	for (my $i=0; $i<@pas; $i++){
 		my $pp = $fastp;
 		#print "$libInfo[$i] eq $xtraRdsTech\n";
@@ -2526,6 +2573,9 @@ sub seedUnzip2tmp(){
 		}
 	}
 	$unzipcmd .= "touch $finishStone\n";
+	if ($useTrimomatic){
+		$unzipcmd .= "touch $trimoStone\n" ;
+	}
 	my $jobN = "";
 	my $jobNUZ = $jobN;
 	
@@ -2538,11 +2588,11 @@ sub seedUnzip2tmp(){
 		my $presence=1;
 		for (my $i=0;$i<@pa1;$i++){	if (!-e $pa1[0] || -z $pa1[0]){$presence=0;}	}
 		for (my $i=0;$i<@pa2;$i++){	if ( !-e $pa2[0] || -z $pa2[0]){$presence=0;}	}
-		if (!$presence || !-e $finishStone ){
+		if (!$presence || !-e $finishStone  || !-e $trimoStone){
 			$jobN = "_UZ$JNUM"; 
 			my $tmpSHDD = $QSBopt{tmpSpace};
 			#print "$unzipcmd\n";
-			$unzipcmd = "" if ($presence && -e $finishStone);
+			$unzipcmd = "" if ($presence && -e $finishStone && -e $trimoStone);
 			$QSBopt{tmpSpace} = "150G"; #set option how much tmp space is required, and reset afterwards
 			($jobN, $tmpCmd) = qsubSystem($logDir."UNZP.sh",$unzipcmd,1,"20G",$jobN,$jDepe,"",1,\@General_Hosts,\%QSBopt) ;
 			#### 1 : UNZIP
@@ -2551,8 +2601,9 @@ sub seedUnzip2tmp(){
 			#print " FDFS ";
 		}
 	#	die($jobN);
-		$jobN = krakHSap(\@pa1,\@pa2, \@pas,$tmpPath,$jobN);
 		#### 2 : remove human contamination
+		#DB just needs to be loaded way too often.. do after sdm to have single files
+		#$jobN = krakHSap(\@pa1,\@pa2, \@pas,$tmpPath,$jobN);
 	}
 	
 		#check already here for mate pair support reads, deactivate fastp2
@@ -2615,10 +2666,19 @@ sub prepKraken($){
 	return $jobN;
 }
 
-sub krakHSap($ $ $ $ $){
-	my ($ar1, $ar2, $ars,$tmpD,$jDep) = @_;
+sub krakHSap($ $ $ $ $ $){
+	my ($ar1, $ar2, $ars,$tmpD,$jDep,$checkIfExists) = @_;
 	my @pa1 = @{$ar1}; my @pa2 = @{$ar2}; my @pas = @{$ars};
 	return $jDep unless ($humanFilter);
+	my $outputExists=1;
+	for (my $i=0;$i<@pa1;$i++){
+		$outputExists=0 if (!-e $pa1[$i] || !-e $pa2[$i]);
+	}
+	for (my $i=0;$i<@pas;$i++){
+		$outputExists=0 if (!-e $pas[$i] );
+	}
+	return $jDep if ($outputExists && $checkIfExists);
+	
 	#my ($DBdir,$DBname) = @_;
 	my $DBdir = $krakenDBDirGlobal;
 	my $unsplBin = "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/unsplit_krak.pl ";
@@ -2628,14 +2688,16 @@ sub krakHSap($ $ $ $ $){
 	for (my $i=0;$i<@pa1;$i++){
 		my $r1 = $pa1[$i]; my $r2 = $pa2[$i];
 		$pa1[$i] =~ m/(.*\/)[^\/]+$/; $fileDir= $1 if ($fileDir eq "");
-		$cmd .= "$krkBin --paired --preload --threads $numThr --fastq-input --unclassified-out $tmpF --db $DBdir/$DBname  $r1 $r2 > /dev/null\n";
+		my $gzFlag = "";$gzFlag =  "--gzip-compressed" if ($pa1[$i] =~ m/\.gz$/);
+		$cmd .= "$krkBin --paired --preload --threads $numThr  $gzFlag --fastq-input --unclassified-out $tmpF --db $DBdir/$DBname  $r1 $r2 > /dev/null\n";
 		#overwrites input files
 		$cmd .= "$unsplBin $tmpF $r1 $r2\n";
 	}
 	$cmd .= "\n\nrm -f $fileDir/krak.stone\n\n";
 	for (my $i=0;$i<@pas;$i++){
 		my $rs = $pas[$i]; 
-		$cmd .= "$krkBin --preload --threads $numThr --fastq-input --unclassified-out $tmpF --db $DBdir/$DBname  $rs > /dev/null\n";
+		my $gzFlag = "";$gzFlag =  "--gzip-compressed" if ($pas[$i] =~ m/\.gz$/);
+		$cmd .= "$krkBin --preload --threads $numThr --fastq-input $gzFlag --unclassified-out $tmpF --db $DBdir/$DBname  $rs > /dev/null\n";
 		$cmd .= "rm -f $rs; mv $tmpF $rs\n";
 		#overwrites input files
 	}

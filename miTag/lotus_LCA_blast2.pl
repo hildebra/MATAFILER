@@ -291,7 +291,11 @@ sub runBlastLCA(){
 		#$queryO = fastq2fna($queryO);
 		#die "$queryO\n";
 	}elsif ($queryO !~ m/\.fna$/){#merged fastq that need to be processed
-		$queryO .= ".extendedFrags.fastq";
+		my $queryOx = "$queryO.extendedFrags.fastq";
+		$queryO .= ".extendedFrags.fna";
+		#convert to fasta
+		system "sed -n '1~4s/^@/>/p;2~4p' $queryOx > $queryO; rm $queryOx";
+		
 		$r1 .= ".notCombined_1.fastq";
 		$r2 .= ".notCombined_2.fastq";
 		$interLeaveO = $tmpD."inter$id.fna";
@@ -323,7 +327,7 @@ sub runBlastLCA(){
 	my $BlastTaxRi = {}; my $BlastTaxR = {};
 	my $fullBlastTaxRi = {}; my $fullBlastTaxR = {};
 	my $simName = ""; my $leftover = 111;
-	my $contInter = 1; my $contQuery = 1;
+	
 	my @taxouts=(); my @taxouts_inter = ();
 	for (my $DBi=0;$DBi<@DBa; $DBi++){
 		my $DB = $DBa[$DBi]; my $DBtax = $DBtaxa[$DBi];
@@ -347,7 +351,7 @@ sub runBlastLCA(){
 			my $strand = "both";
 			#-perc_identity 75
 			$cmd = "";
-			if ($doQuery && $contQuery){
+			if ($doQuery ){
 				$cmd .= "$blastBin -query $query -db $DB -out $taxblastf -outfmt 6 -max_target_seqs 50 -evalue 0.1 -num_threads $BlastCores -strand $strand \n"; #-strand plus both minus
 			}
 			unless ( -e $taxblastf){	print "Running blast on combined files\n";
@@ -372,18 +376,19 @@ sub runBlastLCA(){
 			$tmptaxblastf = "$tmpD/tax.m8" unless ($tmpD eq "");
 			my $cmd = "";
 			$cmd = "";
-			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 16 -sd 1 -b 5 -pd on ";
-			if ($doQuery && $contQuery){
-				$cmd .= "$lambdaBin $defLopt -q $query -i $DB.lambda -o $taxblastf\n";
-			}
-			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
-			if ($doInter && $contInter){
-				$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";
+			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 14 -sd 2 -b 5 -pd on ";
+			if ($doInter){
+				system "cat $interLeave >> $query; rm $interLeave";
+				#$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";
 				#$cmd .= "\nmv $tmptaxblastf $taxblastf2\n";
 				#unless ( -e $taxblastf2){	
 				print "Running blast on interleaved files\n";
 			}
-			#die "$doQuery && $contQuery\n$cmd\n";
+			if ($doQuery || $doInter){
+				$cmd .= "$lambdaBin $defLopt -q $query -i $DB.lambda -o $taxblastf\n";
+			}
+			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
+			#die "$doQuery \n$cmd\n";
 			print "\n\n$cmd\n\n";
 			systemW($cmd);
 			#} else {	print "Blast output $taxblastf2 does exist\n";}}
@@ -403,7 +408,7 @@ sub runBlastLCA(){
 			systemW $cmd;
 			print "Running sortmerna\n";
 			$cmd = "";
-			if ($doQuery && $contQuery){
+			if ($doQuery ){
 				$cmd .= "$smrnaBin --best 50 --reads $query ";
 				$cmd .= "--blast 1 -a 20 -e 0.1 -m 10000 --aligned $taxblastf ";
 				$cmd .= "--ref $refDB\n";
@@ -423,7 +428,7 @@ sub runBlastLCA(){
 	#$hof1 = writeBlastHiera($fullBlastTaxR,$id,$simName);  undef $BlastTaxR ;
 	$LCcmd .= "$LCAbin -i ". join(",",@taxouts) . " -r ".join(",",@DBtaxa)." -o $hof1 -LCAfrac 0.8 -showHitRead\n";
 	#merging of interleave results
-	if ($doInter){
+	if (0&&$doInter){
 		$LCcmd .= "$LCAbin -i ". join(",",@taxouts_inter) . " -r ".join(",",@DBtaxa)." -o $hof2 -LCAfrac 0.8 -showHitRead\n";
 		$LCcmd.= "tail -n+2 $hof2 >> $hof1; rm $hof2;"; #remove header from LCA
 	}
