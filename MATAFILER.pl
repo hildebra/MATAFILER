@@ -971,7 +971,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 					,$GlbTmpPath."seqClean/",$curSDMopt,$jdep.";$sdmjN",$dowstreamAnalysisFlag) ;
 			
 		}
-		$sdmjN = krakHSap($arp1,$arp1, $singAr,$nodeSpTmpD,$sdmjN,1);
+		$sdmjN = krakHSap($arp1,$arp2, $singAr,$nodeSpTmpD,$sdmjN,1);
 		#die "@{$singAr}";
 		($mergRdsHr,$mergJbN) = mergeReads($arp1,$arp2,$sdmjN,$GlbTmpPath."merge_clean/",$doReadMerge,$dowstreamAnalysisFlag);
 		#my %mrr = %{$mergRdsHr}; die "$mrr{pair1}\n$mrr{pair2}\n$mrr{mrg}\n";
@@ -1671,7 +1671,7 @@ sub detectRibo(){
 		if (!-e "$outP//ltsLCA/LSUriboRun_bl.hiera.txt" || !-e "$outP//ltsLCA/SSUriboRun_bl.hiera.txt" || !$allLCAstones ){ #|| !-e "$outP//ltsLCA/ITSriboRun_bl.hiera.txt" 
 			$jobd=$jobName; $mem="3G";
 			$jobd .= ";".$globalRiboDependence{DBcp} unless ($globalRiboDependence{DBcp} eq "alreadyCopied");
-			$QSBopt{useLongQueue} = 1;
+			$QSBopt{useLongQueue} = 0;
 			($jobName, $tmpCmd) = qsubSystem($logDir."RiboLCA.sh",$cmd2,$numCore2,$mem,"_RA$JNUM",$jobName,"",1,[],\%QSBopt);
 			$QSBopt{useLongQueue} = 0;
 		}
