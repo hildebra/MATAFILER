@@ -12,7 +12,8 @@ use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 
-sub prep40MGgenomes{
+#routine to format marker genes with naming etc to work with buildTree script
+sub prep40MGgenomes{ 
 	#\@refGenos,$rewrite,$ncore,$fnFna1,$aaFna1,$cogCats1)
 	my @refGenos = @{$_[0]};my $finalD=$_[1]; my $tag= $_[2];
 	my $rewrite = $_[3]; my $ncore=$_[4];
@@ -52,6 +53,7 @@ sub prep40MGgenomes{
 		$ntGenes =~ s/\.[^\.]+$/\.genes\.fna/;
 		die "Can't find ref genome $refG\n" unless (-e $refG || (-e $ntGenes && -e $proteins));
 		my $prodigal_cmd .= "$prodigalBin -i $refG -a $proteins -d $ntGenes -f gff -p single > /dev/null\n";
+		#die $prodigal_cmd."\n$rewrite || !-e $proteins || !-e $ntGenes\n";
 		system $prodigal_cmd if ($rewrite || !-e $proteins || !-e $ntGenes);
 
 		
@@ -121,8 +123,10 @@ sub prep40MGgenomes{
 
 sub runRaxML{
 	my ($mAli,$bootStrap,$outgroup,$outTree,$ncore) = @_;
-	my $cont = 0;
+	my $cont = 0; my $useNT=1; my $useAA=0;
 	$cont = $_[5] if (@_ > 5);
+	$useNT = $_[6] if (@_ > 6);
+	$useAA = !$useNT;#useless flag atm
 	#die "$cont\n";
 	my ($raTmpF,$raTmpF2,$raTmpF3) = ("RXMtmp","R2XM","RX3M"); #my $raxFile = "RXMall";
 #	my $raxFile2 = "RXMsyn";
@@ -137,23 +141,31 @@ sub runRaxML{
 	my $outGrpRXML = "";
 	if ($outgroup ne ""){$outGrpRXML = "-o $outgroup";}
 	my $raxDef = " --silent -m GTRGAMMA -p 312413 ";
+	if (!$useNT){
+		$raxDef = " --silent -m PROTGAMMALG -p 312413 ";
+	}
 	
 	#raxml - on all sites
 	#die "$outTree\n";
 	if (!$cont || !-e $outTree){
 		my $tcmd="";
 		$tcmd =  "$raxmlBin -T$ncore -f d -s $mAli $raxDef -n $raTmpF -w $raxD $outGrpRXML > $raxLogD/ini.log\n";
-		if (!-e "$raxD/RAxML_bestTree.$raTmpF"){print "Calculating ML tree..\n" ; system "rm -f $raxD/*$raTmpF";system $tcmd;}
-		if (!-e "$raxD/RAxML_bestTree.$raTmpF"){#failed.. prob optimization problem, use other tree instead
+		#die $tcmd."\n";
+		my $expTree1 = "$raxD/RAxML_bestTree.$raTmpF";
+		$expTree1 = "$raxD/RAxML_result.$raTmpF" if ($useAA);
+		if (!-e $expTree1){print "Calculating ML tree..\n" ; system "rm -f $raxD/*$raTmpF";system $tcmd;}
+		if (!-e $expTree1 && !$useAA){#failed.. prob optimization problem, use other tree instead
 			print "Calculating ML tree with GTRGAMMAI model..\n" ;
 			$raxDef = " --silent -m GTRGAMMAI -p 3512413 ";	system "rm -f $raxD/*$raTmpF";
 			systemW "$raxmlBin -T$ncore -f d -s $mAli $raxDef -n $raTmpF -w $raxD $outGrpRXML > $raxLogD/optimized.log\n";
+		}elsif (!-e $expTree1){
+			die "Failed $tcmd\n";
 		}
 		#decide which support vals to calc
 		if ($bootStrap==0){
 			
 			print "Calculating SH support tree..\n";
-			systemW "$raxmlBin -T$ncore -f J -s $mAli $raxDef -n $raTmpF3 -w $raxD -t $raxD/RAxML_bestTree.$raTmpF $outGrpRXML > $raxLogD/optimized.log\n";
+			systemW "$raxmlBin -T$ncore -f J -s $mAli $raxDef -n $raTmpF3 -w $raxD -t $expTree1 $outGrpRXML > $raxLogD/optimized.log\n";
 			system "mv $raxD/RAxML_fastTreeSH_Support.$raTmpF3 $outTree";
 		} else {
 			my $done=0; my $partBoots = "";

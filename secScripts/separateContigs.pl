@@ -13,7 +13,7 @@ sub geneAbundance; sub runMaxBin;
 sub findMicrSat;
 use Mods::GenoMetaAss qw(systemW is_integer reverse_complement_IUPAC);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
-use Mods::TamocFunc qw( getE100);
+use Mods::phyloTools qw( getE100);
 
 
 die "Not enough input args\n" if (@ARGV < 2);
@@ -80,27 +80,29 @@ if ((!-s "$outD/scaff.GC" || !-s "$outD/scaff.pergene.GC"|| !-s "$outD/scaff.per
 
 ###############################   essential proteins  ###############################
 my $oDess = "$outD/ess100genes/";my $outDFMG = "$outD/FMG/";
-if ($subparts =~ m/e/ && !-e "$outDFMG/FMGids.txt"){
+if ($subparts =~ m/e/ && (!-e "$outDFMG/FMGids.txt" || !-e "$oDess/e100split.sto")){
 	print "Searching for core proteins in predicted genes..    ";
 	###############################   fetchMG  ###############################
-	system("mkdir -p $outDFMG");
-	$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $outDFMG -l $FMGd/lib -t 1 -d $genesNT $proteins"; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
-	$cmd .= "; $FMGrwkScr $outDFMG";
-	if ( !-s "$outDFMG/COG0012.faa" && !-s "$outDFMG/COG0016.faa"){
-		systemW $cmd;
+	if ( !-e "$outDFMG/FMGids.txt"){
+		system("mkdir -p $outDFMG");
+		$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $outDFMG -l $FMGd/lib -t 1 -d $genesNT $proteins"; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
+		$cmd .= "; $FMGrwkScr $outDFMG";
+		if ( !-s "$outDFMG/COG0012.faa" && !-s "$outDFMG/COG0016.faa"){
+			systemW $cmd;
+		}
+		system "rm  -rf $assD/genePred/*.cidx $outDFMG/temp $outDFMG/hmmResults";
 	}
-	system "rm  -rf $assD/genePred/*.cidx $outDFMG/temp $outDFMG/hmmResults";
 	############################### essential 100 proteins ###############################
-	
-	getE100($oDess,$proteins,$genesNT);
+	if ( !-e "$oDess/e100split.sto"){
+		getE100($oDess,$proteins,$genesNT);
+		sleep (3);
+		systemW("touch $oDess/e100split.sto;");
+		#required for maxbin
+		#rm $oDess/assembly.hmm*");
+		#die ($protIDs[0]."\n");
 
-	sleep (3);
-	systemW("touch $oDess/e100split.sto;");
-	#required for maxbin
-	#rm $oDess/assembly.hmm*");
-	#die ($protIDs[0]."\n");
-
-	print "Done\n";
+		print "Done\n";
+	}
 } elsif (!-e "$outDFMG/FMGids.txt") {
 	print "No essential proteins requested\n";
 }
@@ -133,6 +135,8 @@ if ( !-s $inD."Binning/MetaBat/MeBa.sto" &&  $subparts =~ m/m/){
 if (int(-s "$outD/microsat.txt") == 0 && $subparts =~ m/s/){
 	findMicrSat($inScaffs,"$outD/microsat.txt");
 }
+
+print "all done\n";
 
 sub findMicrSat{
 	my ($scaffs,$rep) = @_;
@@ -187,6 +191,7 @@ sub calcGeneCov($ $ $){
 
 sub geneAbundance{
 	my ($inF) = @_;
+	#die "$inF\n";
 	#my $hr = readGFF($inD."assemblies/metag/genePred/genes.gff");
 	my $outF = $inF . ".pergene"; 	my $outF2 = $inF . ".percontig";	
 	my $outF3 = $inF . ".window";	my $outF4 = $inF . ".geneStats";

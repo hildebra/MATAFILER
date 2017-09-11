@@ -10,6 +10,7 @@
 #for Jure ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/JureTest 1 95
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/simus2.txt /g/scb/bork/hildebra/SNP/GCs/SimuB 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_sm.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/soil_ex.map,/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map,/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map,/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt /g/scb/bork/hildebra/SNP/GCs/SoilCatv3 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
+#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/drama.map /g/scb/bork/hildebra/SNP/GCs/DramaGC 1 95
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/ 1 95
 #faa generation from gene  catalog 
 #ex ./geneCat.pl ? /g/bork1/hildebra/SNP/GC/T2_GNM3_ABR protExtract 
@@ -56,11 +57,12 @@ $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $ext
 my $justCDhit = 0;
 my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
-my $doSubmit = 0; my $qsubNow = 0;
-my $doFMGseparation = 0; #cluster FMGs separately?
-my $doGeneMatrix =0; #in case of SOIL I really don't need to have a gene abudance matrix / sample
+my $doSubmit = 1; my $qsubNow = 0;
+my $oldNameFolders= 0;
+my $doFMGseparation = 1; #cluster FMGs separately?
+my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
 $baseOut.="/" unless ($baseOut =~ m/\/$/);
-my $toLclustering=1;
+my $toLclustering=0;#just write out, no sorting etc
 
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
 my $cdhitBin = getProgPaths("cdhit");#/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
@@ -167,7 +169,7 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	exit(0);
 } else { #start building new gene cat
 	#die $mapF."\n";
-	my ($hr,$hr2) = readMapS($mapF,1);
+	my ($hr,$hr2) = readMapS($mapF,$oldNameFolders);
 	%map = %{$hr};
 	@samples = @{$map{smpl_order}};
 	%AsGrps = %{$hr2};
@@ -220,7 +222,9 @@ if ($toLclustering){#no length sorting, just write directly
 
 
 my @skippedSmpls; my %uniqueSampleNames; my $doubleSmplWarnString = "";
+my $JNUM= -1;
 foreach my $smpl(@samples){
+	$JNUM++;
 	last if ($justCDhit==1);
 	my $dir2rd = $map{$smpl}{wrdir};
 	#die "\n".$smpl."X\n";
@@ -236,7 +240,8 @@ foreach my $smpl(@samples){
 	#check if mult assembly and adapt
 	my $assGo = 0;
 	my $cAssGrp = $map{$smpl}{AssGroup};
-	$AsGrps{$cAssGrp}{CntAss} ++;	print $cAssGrp."-".$AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss};
+	$AsGrps{$cAssGrp}{CntAss} ++;	
+	print $JNUM." - ".$cAssGrp."-".$AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss};
 	if ($AsGrps{$cAssGrp}{CntAss}  >= $AsGrps{$cAssGrp}{CntAimAss} ){ $assGo = 1;}
 	my $SmplName = $map{$smpl}{SmplID};
 	#$dir2rd = "/g/scb/bork/hildebra/SNP/SimuL/sample-0/";
@@ -359,7 +364,7 @@ foreach my $smpl(@samples){
 	if ($doubleSmplWarnString ne ""){
 		die $doubleSmplWarnString."\n";
 	}
-
+	#last;
 }
 
 
@@ -396,12 +401,12 @@ if ($justCDhit==0){
 		system "mkdir -p $bdir/COG/" unless (-d "$bdir/COG/");
 		my %cogFMG = %{$allFMGs{$cog}};
 		my $ccogf = "$bdir/COG/$cog.preclus.fna";
-		open O,">$ccogf";
+		open Ox,">$ccogf" or die "Can't open COG output file $ccogf\n";
 		$FMGfileList{$cog} =  "$ccogf";
 		foreach my $geK (sort { length($cogFMG{$a}) <=> length($cogFMG{$b}) } keys %cogFMG) {
-			print O $geK."\n".$cogFMG{$geK}."\n";
+			print Ox $geK."\n".$cogFMG{$geK}."\n";
 		}
-		close O;
+		close Ox;
 	}
 } elsif (-d "$bdir/COG") { #COGs were created
 	opendir(DIR, "$bdir/COG/") or die $!;
@@ -832,10 +837,11 @@ sub writeBucket(){
 		#open O,">$bdir"."3Pcompl.fna"; foreach( @O5P ){print O $_;} close O;
 		#open O,">$bdir"."incompl.fna";foreach( @OINC ){print O $_;} close O;
 	} else {
-		open O,">$bdir"."compl.fna"; foreach(sort {length $b <=> length $a} @OCOMPL ){print O $_;} close O;
-		open O,">$bdir"."5Pcompl.fna"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O;
-		open O,">$bdir"."3Pcompl.fna"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O;
-		open O,">$bdir"."incompl.fna";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;
+		open O,">$bdir"."compl.fna" or die "Can't open B0 compl.fna\n"; 
+		foreach(sort {length $b <=> length $a} @OCOMPL ){print O $_;} close O; @OCOMPL = ();
+		open O,">$bdir"."5Pcompl.fna" or die "Can't open B0 5P.fna\n"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O; @O3P=();
+		open O,">$bdir"."3Pcompl.fna" or die "Can't open B0 3P.fna\n"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O; @O5P=();
+		open O,">$bdir"."incompl.fna" or die "Can't open B0 incompl.fna\n";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;  @OINC=();
 	}
 }
 sub readFasta($){

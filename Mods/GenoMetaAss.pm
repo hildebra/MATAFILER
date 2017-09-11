@@ -2,7 +2,7 @@ package Mods::GenoMetaAss;
 use warnings;
 use Cwd 'abs_path';
 use strict;
-use List::MoreUtils 'first_index'; 
+#use List::MoreUtils 'first_index'; 
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 use Exporter qw(import);
@@ -15,7 +15,14 @@ our @EXPORT_OK = qw(convertMSA2NXS gzipwrite renameFastaCnts renameFastqCnts rea
 
 
 
-
+sub first_index (&@) {
+    my $f = shift;
+    for my $i (0 .. $#_) {
+	local *_ = \$_[$i];	
+	return $i if $f->();
+    }
+    return -1;
+}
 
 sub readFasta{
 	my $fil = $_[0];
@@ -814,10 +821,10 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}
-	print $LOGhandle $qcm."\n" unless ($LOGhandle eq "" || !defined($LOGhandle) );
 	#print("$qcm\n\n");
 	#if (@restrHosts > 0){die $qcm;}
 	if ($optHR->{doSubmit} != 0 && $immSubm){
+		print $LOGhandle $qcm."\n" unless ($LOGhandle eq "" || !defined($LOGhandle) );
 		print "SUB:$jname\t";
 		my $ret = `$qcm`; 
 		if ($LSF == 2){#slurm get jobid
@@ -870,16 +877,21 @@ sub readTabByKey{
 	return %ret;
 }
 
-sub writeFasta($ $){
-	my ($hr,$of) = @_;
+sub writeFasta{
+	my ($hr,$of) = ($_[0],$_[1]);
+	my $maxFs = -1;
+	$maxFs = $_[2] if (@_ > 2);
 	my %FA = %{$hr};
+	my $cnt=0;
 	open O,">$of" or die "can't open out fasta $of\n";
 	foreach my $k (keys %FA){
+		$cnt++; 
 		if ($k =~ m/^>/){
 			print O $k."\n".$FA{$k}."\n";
 		} else {
 			print O ">".$k."\n".$FA{$k}."\n";
 		}
+		last if ($maxFs > 0 && $cnt > $maxFs);
 	}
 	close O;
 }

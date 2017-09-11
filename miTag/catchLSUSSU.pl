@@ -172,7 +172,7 @@ sub smrnaRunCmd( $ $ $ $ $){
 	my $cmd = "set -e\n$smrnaBin --best 1 --reads $interLeave ";
 	my $pairOpt = ""; 
 	if (!$isSingl){$pairOpt = "--paired_in ";}
-	$cmd .= "--blast 1 -a $threads -e 0.0001 --log $pairOpt  --fastx --aligned '$outFile' --ref '$refDB'\n";
+	$cmd .= "--blast 1 -a $threads -e 0.00001 --log $pairOpt  --fastx --aligned '$outFile' --ref '$refDB'\n";
 	if (!$isSingl){
 		$cmd .= "rm -f $outFile.r*\n";
 		$cmd .= "$unmergeScript $outFile.fq $outFile.r1.fq $outFile.r2.fq\n";#rm -f $outFile.fq";

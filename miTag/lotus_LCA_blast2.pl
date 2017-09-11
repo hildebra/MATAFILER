@@ -5,7 +5,7 @@
 use strict;
 use warnings;
 use threads;
-use Mods::GenoMetaAss qw(reverse_complement_IUPAC readFasta systemW);
+use Mods::GenoMetaAss qw(reverse_complement_IUPAC readFasta systemW writeFasta);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 
@@ -267,7 +267,6 @@ sub findUnassigned($ $ $ ){
 
 #main routine that does sim search & starts the LCA
 sub runBlastLCA(){
-
 	my ($queryO,$queryXtrSingl,$DBar,$DBtaxar,$id,$doblast,$SmplID,$MKname,$go) =@_;
 	my $taxblastf_base = $outdir."$id";
 	if ($tmpD ne ""){
@@ -376,7 +375,7 @@ sub runBlastLCA(){
 			$tmptaxblastf = "$tmpD/tax.m8" unless ($tmpD eq "");
 			my $cmd = "";
 			$cmd = "";
-			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 14 -sd 2 -b 5 -pd on ";
+			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 14 -sd 1 -b 5 -pd on ";
 			if ($doInter){
 				system "cat $interLeave >> $query; rm $interLeave";
 				#$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";
@@ -387,9 +386,15 @@ sub runBlastLCA(){
 			if ($doQuery || $doInter){
 				$cmd .= "$lambdaBin $defLopt -q $query -i $DB.lambda -o $taxblastf\n";
 			}
+			
+			#takes too long, first check how many reads (and if this can be reduced)
+			my $hr = readFasta($query,0);
+			print "Found ". keys(%{$hr})." candidates in $query\nUsing max 500000 (random) of these.\n";
+			writeFasta($hr,$query,500000);
+			
 			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
 			#die "$doQuery \n$cmd\n";
-			print "\n\n$cmd\n\n";
+			#print "\n\n$cmd\n\n";
 			systemW($cmd);
 			#} else {	print "Blast output $taxblastf2 does exist\n";}}
 			#systemW $cmd ;#or die "\n$cmd\n failed\n";
@@ -456,17 +461,17 @@ sub merge($ $ $){
 		#print "X";
 		my $tmp="";
 		while ($tmp !~ m/^>/){chomp $tmp; $line1.=$tmp;$tmp=<I1>; 
-			unless( defined $tmp){print "OO";last;}
+			unless( defined $tmp){last;}
 			if ($tmp =~m/^@/){die "Input to merge routine is fastq:$r1\n..aborting\n";}
 		}
 		
 		print O $line1; if (defined $tmp ){chomp $tmp; $tmp=~s/\/1$//; $line1 = $tmp."\n"; }
 		$tmp=""; 
-		while ($tmp !~ m/^>/){ chomp $tmp; $line2.=$tmp;$tmp=<I2>; unless (defined $tmp){print "hi";last;}}
+		while ($tmp !~ m/^>/){ chomp $tmp; $line2.=$tmp;$tmp=<I2>; unless (defined $tmp){last;}}
 		#print $line2."\n";
 		#get one more line to get rid of header:
 		print O reverse_complement_IUPAC($line2)."\n"; $line2 = "";#$tmp;
-		unless (defined $tmp){print "LL";last;}
+		unless (defined $tmp){last;}
 	}
 	close O; close I1; close I2;
 	#die "$r1 $r2 $interleave\n"

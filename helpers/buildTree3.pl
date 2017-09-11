@@ -26,7 +26,7 @@ my $doPhym= 0;
 my $pal2nal = getProgPaths("pal2nal");#"perl /g/bork3/home/hildebra/bin/pal2nal.v14/pal2nal.pl";
 #die $pal2nal;
 my $clustaloBin = getProgPaths("clustalo");#= "/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.0-Ubuntu-x86_64";
-my $fastq2phylip = getProgPaths("fastq2phylip_scr");
+my $fasta2phylip = getProgPaths("fasta2phylip_scr");
 my $phymlBin = getProgPaths("phyml");
 my $msapBin = getProgPaths("msaprobs");
 my $trimalBin = getProgPaths("trimal");
@@ -44,7 +44,8 @@ my $gubbinsBin = "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.
  if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
 
 my $ntCnt =0; my $bootStrap=0;
-my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn) = ("","","","",12,0,0.8,1,"_",1,0);
+my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn,
+			$useAA4tree) = ("","","","",12,0,0.8,1,"_",1,0,0);
 my ($continue,$isAligned) = (0,0);#overwrite already existing files?
 my $outgroup="";
 my ($doGubbins,$doCFML,$doRAXML) = (0,0,1);
@@ -64,6 +65,7 @@ GetOptions(
 	"smplSep=s" => \$smplSep, #set the delimiter
 	"outgroup=s"	=> \$outgroup,
 	"NonSynTree=i"	=> \$calcNonSyn,
+	"AAtree=i" => \$useAA4tree,
 	"SynTree=i"	=> \$calcSyn,
 	"continue=i" => \$continue,
 	"bootstrap=i" => \$bootStrap,
@@ -74,7 +76,7 @@ GetOptions(
 ) or die("Error in command line arguments\n");
 if ($doCFML && !$doRAXML){die "Need RaxML alignment, if Clonal fram is to be run..\n";}
 
-if ($aaFna eq "" ){	$calcSyn=0;$calcNonSyn=0;}
+if ($aaFna eq "" || $useAA4tree){	$calcSyn=0;$calcNonSyn=0;}
 if ($filt <1){$ntFrac=$filt; print "Using filter with $ntFrac fraction of nts\n";}
 if ($outgroup ne ""){print "Using outgroup $outgroup\n";}
 if ($bootStrap>0){print "Using bootstrapping in tree building\n";}
@@ -93,7 +95,7 @@ if (!$Ete){
 	my $multAliSyn = $multAli.".syn.fna";
 	my $multAliNonSyn = $multAli.".nonsyn.fna";
 
-	my @MSAs; my @MSAsSyn; my @MSAsNonSyn;#full MSAs and MSAs with syn / nonsyn pos only
+	my @MSAs; my @MSA_AA; my @MSAsSyn; my @MSAsNonSyn;#full MSAs and MSAs with syn / nonsyn pos only
 	my @MSrm; 
 	my %FAA ; my %FNA ;
 	my $doMSA = 1;
@@ -146,10 +148,12 @@ if (!$Ete){
 				$seq2 =~ m/^(.*)$smplSep(.*)$/;#my @spl2 =($1,$2);
 				$samples{$1} = 1; #$genCats{$spl2[1]} = 1; 
 				die "can't find AA seq $seq\n" unless (exists ($FAA{$seq}));
-				die "can't find fna seq $seq\n" unless (exists ($FNA{$seq}));
+				die "can't find fna seq $seq\n" if (!exists ($FNA{$seq}) && !$useAA4tree);
 				$FAA{$seq} =~ s/\*//g if (!$clustalUse);
 				print O ">$seq2\n$FAA{$seq}\n";
-				print O2 ">$seq2\n$FNA{$seq}\n";
+				if (!$useAA4tree){
+					print O2 ">$seq2\n$FNA{$seq}\n";
+				}
 			}
 			close O;close O2;
 			if ($clustalUse){
@@ -160,16 +164,22 @@ if (!$Ete){
 			#die $cmd;
 			system $cmd unless (-s $tmpOutMSA2);
 			#die;
-			convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
 			
-			#die("XX\n") if ($spl2[1] eq "COG0081");
-			($tmpOutMSAsyn,$tmpOutMSAnonsyn) = synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,$ogrGenes,$calcSyn,$calcNonSyn);
+			if (!$useAA4tree){
+				#this part now is all concerned about NT level things..
+				convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$tmpOutMSA);
+				#die("XX\n") if ($spl2[1] eq "COG0081");
+				($tmpOutMSAsyn,$tmpOutMSAnonsyn) = synPosOnly($tmpOutMSA,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,$ogrGenes,$calcSyn,$calcNonSyn);
+				push (@MSAs,$tmpOutMSA);
+				push (@MSAsSyn,$tmpOutMSAsyn) if ($tmpOutMSAsyn ne "");
+				push (@MSAsNonSyn,$tmpOutMSAnonsyn) if ($tmpOutMSAnonsyn ne "");
+			} else {
+				push (@MSA_AA,$tmpOutMSA2);
+			}
 			system "rm -f $tmpInMSA $tmpInMSAnt";# $tmpOutMSA2";
-			push (@MSAs,$tmpOutMSA);
-			push (@MSAsSyn,$tmpOutMSAsyn) if ($tmpOutMSAsyn ne "");
-			push (@MSAsNonSyn,$tmpOutMSAnonsyn) if ($tmpOutMSAnonsyn ne "");
-			
 			push (@MSrm,$tmpOutMSA2,$tmpOutMSA);
+			
+			
 			$cnt ++;
 			print "$cnt ";
 
@@ -178,9 +188,13 @@ if (!$Ete){
 		if ($outgroup ne ""){print "Found $ogrpCnt of $cnt outgroup sequences\n";}
 		#die;
 		#merge cogcats - can go to tree from here
-		mergeMSAs(\@MSAs,\%samples,$multAli,0);
-		mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1) if ($calcSyn);
-		mergeMSAs(\@MSAsNonSyn,\%samples,$multAliNonSyn,1) if ($calcNonSyn);
+		if ($useAA4tree){
+			mergeMSAs(\@MSA_AA,\%samples,$multAli,0); #sames files as in @MSrm
+		} else {
+			mergeMSAs(\@MSAs,\%samples,$multAli,0);
+			mergeMSAs(\@MSAsSyn,\%samples,$multAliSyn,1) if ($calcSyn);
+			mergeMSAs(\@MSAsNonSyn,\%samples,$multAliNonSyn,1) if ($calcNonSyn);
+		}
 		
 		#die();
 		system "rm -f ".join(" ",@MSrm)." ".join(" ",@MSAsSyn); 
@@ -208,17 +222,23 @@ if (!$Ete){
 		}
 		#die $cmd;
 		system $cmd; print "finished MSA\n";
-		if ($tmpInMSA ne ""){
+		if ($tmpInMSA ne "" && !$useAA4tree){
 			convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$multAli);
 			synPosOnly($multAli,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,"",$calcSyn,$calcNonSyn);
 			#system "rm $tmpInMSA $tmpInMSAnt $tmpOutMSA2";
 			system "rm $tmpOutMSA2";
-		} else {
+			push (@MSAs,$multAli);
+		} elsif (!$useAA4tree) {
 			$calcSyn=0;$calcNonSyn=0;
 			my $hr = readFasta($tmpOutMSA2,1); writeFasta($hr,$multAli);#complicated way to shorted headers of infile
 			#system "mv $tmpOutMSA2 $multAli";
+			push (@MSAs,$multAli);
+		} else {#useAA4tree
+			push (@MSA_AA,$tmpOutMSA2);
+			$multAli = $tmpOutMSA2;
+			
+			#TODO: replace selenocysteine (U) with C, to get raxml to work on these as well
 		}
-		push (@MSAs,$multAli);
 		#$multAli = $tmpOutMSA; $multAliSyn = $tmpOutMSAsyn;
 	}
 #die;
@@ -230,9 +250,11 @@ if (!$Ete){
 	
 	my @thrs;
 	#convert MSA to phyllip
-	my $tcmd = "rm -f $multAli.ph*; $fastq2phylip -c 50 $multAli > $multAli.ph\n";
-	$tcmd .= "rm -f $multAliSyn.ph*; $fastq2phylip -c 50 $multAliSyn >$multAliSyn.ph\n" if ($calcSyn);
-	$tcmd .= "rm -f $multAliNonSyn.ph*; $fastq2phylip -c 50 $multAliNonSyn >$multAliNonSyn.ph\n"if ($calcNonSyn);
+	my $tcmd = "rm -f $multAli.ph*; $fasta2phylip -c 50 $multAli > $multAli.ph\n";
+	if (!$useAA4tree){
+		$tcmd .= "rm -f $multAliSyn.ph*; $fasta2phylip -c 50 $multAliSyn >$multAliSyn.ph\n" if ($calcSyn);
+		$tcmd .= "rm -f $multAliNonSyn.ph*; $fasta2phylip -c 50 $multAliNonSyn >$multAliNonSyn.ph\n"if ($calcNonSyn);
+	}
 	if (system $tcmd) {die "fasta2phylim failed:\n$tcmd\n";}
 	
 	#convert MSA to NEXUS
@@ -259,24 +281,26 @@ if (!$Ete){
 
 #distamce matrix, this is fast
 	#system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
-	calcDisPos($multAli,"$outD/MSA/percID.txt");
-	if ($calcSyn){
-	#		system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
-		calcDisPos($multAliSyn,"$outD/MSA/percID_syn.txt");
-	}
-	if ($calcNonSyn){
-		#system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
-		calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt");
+	if (!$useAA4tree){
+		calcDisPos($multAli,"$outD/MSA/percID.txt");
+		if ($calcSyn){
+		#		system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
+			calcDisPos($multAliSyn,"$outD/MSA/percID_syn.txt");
+		}
+		if ($calcNonSyn){
+			#system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
+			calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt");
+		}
 	}
 	if ($doRAXML){
 		my $BStag = ""; if ($bootStrap>0){$BStag="_BS$bootStrap";}
-		runRaxML("$multAli.ph",$bootStrap,$outgroup,"$treeD/RXML_allsites$BStag.nwk",$ncore,$continue);
+		runRaxML("$multAli.ph",$bootStrap,$outgroup,"$treeD/RXML_allsites$BStag.nwk",$ncore,$continue,!$useAA4tree);
 		$phyloTree = "$treeD/RXML_allsites$BStag.nwk";
 		if ($calcSyn){
-			runRaxML("$multAliSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_syn$BStag.nwk",$ncore,$continue) ;
+			runRaxML("$multAliSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_syn$BStag.nwk",$ncore,$continue,1) ;
 		}
 		if ($calcNonSyn){
-			runRaxML("$multAliNonSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_nonsyn$BStag.nwk",$ncore,$continue);
+			runRaxML("$multAliNonSyn.ph",$bootStrap,$outgroup,"$treeD/RXML_nonsyn$BStag.nwk",$ncore,$continue,1);
 		}
 	}
 	if ($doCFML){

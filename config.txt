@@ -34,7 +34,7 @@ phyml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/phyml
 raxml	/g/bork3/home/hildebra/bin/RAxML/raxmlHPC-PTHREADS-SSE3
 msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
-fastq2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
+fasta2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
 
 #     experimental
