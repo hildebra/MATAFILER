@@ -24,10 +24,11 @@ sub sanityCheckCorr;
 sub specImatrix;
 sub createAreadSpecItax;
 
-my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/";
+my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/"; my $freeze11=1;
+#my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_2017";my $freeze11=0;
 #progenomes.specIv2_2
 my $globalCorrThreshold = 0.8; # determines cutoff, when still to accept correlating genes into specI
-
+my $reblast=0;#do blast again?
 
 my $rarBin = getProgPaths("rare");#"/g/bork5/hildebra/dev/C++/rare/rare";
 my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
@@ -51,6 +52,7 @@ my $motuDir = "";#"/g/bork3/home/hildebra/DB/MarkerG/mOTU";
 #my %gene2LG = %{$hr1};
 #$hr1 = readNCBI("/g/bork3/home/hildebra/DB/NCBI/ncbi_tax_table_synonyms_2014-01-23.txt");
 #my %NTax = %{$hr1};
+
 my $hr1 = read_matrix("$GCd/FMG.subset.mat");
 my %FMGmatrix= %{$hr1};
 #$hr1 = read_speci_tax("$SpecID/specI.tax");
@@ -69,6 +71,7 @@ close I;
 my %specItaxM; #real matrix with tax levels
 #die "$specItax{specI_v2_Cluster1309}\n";
 my $specIfullTax = createAreadSpecItax(\%specItax,"$SpecID/specI.tax2");
+my $xtrLab= "";$xtrLab= ".rep" if ($freeze11);
 
 #assign each COG separately
 my @catsPre = split/\n/,`cat $GCd/FMG.subset.cats`;
@@ -92,12 +95,14 @@ foreach (@catsPre){
 	system $cmd unless (-e "$MGdir/$COG.fna");
 	$cmd = "$samBin faidx $GCd/compl.incompl.95.prot.faa ". join (" ", @genes ) . " > $MGdir/$COG.faa";
 	system $cmd unless (-e "$MGdir/$COG.faa");	
-	lambdaBl("$MGdir/$COG.fna","$SpecID/$COG.rep.fna","$MGdir/tax/$COG.tmp.m8");
 	
+	#print "$MGdir/tax/$COG${xtrLab}.tmp.m8\n";
+	lambdaBl("$MGdir/$COG.fna","$SpecID/$COG${xtrLab}.fna","$MGdir/tax/$COG${xtrLab}.tmp.m8"); #.rep
+	#next;
 	
 	die "no cutoff for $COG\n" unless (exists $FMGcutoffs{$COG});
 	my $reqID = $FMGcutoffs{$spl[0]};
-	open I,"<$MGdir/tax/$spl[0].tmp.m8" or die $!;
+	open I,"<$MGdir/tax/$spl[0]${xtrLab}.tmp.m8" or die $!;
 	while (my $line = <I>){
 		chomp $line; @spl = split /\t/,$line;
 		next if (passBlast(\@spl,$reqID)==0);
@@ -148,7 +153,7 @@ foreach (@catsPre){
 	
 	my $reqID = $FMGcutoffs{$spl[0]};
 	#secondary scanning of assignments...
-	open I,"<$MGdir/tax/$spl[0].tmp.m8" or die $!;
+	open I,"<$MGdir/tax/$spl[0]${xtrLab}.tmp.m8" or die "Can't open $MGdir/tax/$spl[0]${xtrLab}.tmp.m8\n";
 	while (my $line = <I>){
 		chomp $line; @spl = split /\t/,$line;
 		my $gid = $spl[0];
@@ -306,6 +311,7 @@ sub sanityCheckCorr(){
 sub passBlast($ $){
 	my $spl = shift;my $reqID = shift;
 	my $lengthGood = 0;
+	if (@{$spl} < 12 || !defined($spl->[13])|| !defined($spl->[12])){die "not enough entries:\n@{$spl}\n";}
 	$lengthGood=1 if ($spl->[3] >= ($spl->[13]*0.1) && $spl->[3] >= ($spl->[12]*0.7)  ); #subject query
 	if ($spl->[2] < ($reqID*0.985) || !$lengthGood)  {return 0;}
 	return 1;
@@ -313,15 +319,15 @@ sub passBlast($ $){
 sub lambdaBl($ $ $){
 	my ($tar,$DB, $taxblastf) = @_;
 	my $cmd="";
-	if (!-f $DB.".dna5.fm.sa.val"  ) {
+	
+	if (!-d $DB.".lambda/"  ) {
 		print "Building LAMBDA index anew (may take up to an hour)..\n";
-		my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
-		#system "touch $DB.dna5.fm.lf.drv.wtc.24";
+		my $cmdIdx = "$lambdaIdxBin -p blastn -t ".int($BlastCores)." -d $DB";
 		if (system($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
 	}
-	$cmd .= "$lambdaBin -t $BlastCores -id 93 -nm 100 -p blastn -e 1e-40 -so 7 -sl 16 -sd 1 -b 5 --output-columns \"std qlen slen\" -pd on -q $tar -d $DB -o $taxblastf\n";
-		#die $cmd."\n";
-	system $cmd unless (-e $taxblastf);
+	$cmd .= "$lambdaBin -t $BlastCores -id 93  -nm 100 -p blastn -e 1e-40 -q $tar -oc \"std qlen slen\" -i $DB.lambda -o $taxblastf\n";
+	#die $cmd."\n";
+	system $cmd if (!-e $taxblastf || $reblast);
 }
 
 
@@ -464,6 +470,7 @@ sub correlation {
 
 sub read_matrix($){
 	my ($mF) = @_;
+	print "Reading matrix\n";
 	my %oM;
 	open I,"<$mF" or die "Can't open $mF\n";
 	my $cnt=0;
@@ -518,7 +525,8 @@ sub specImatrix($$){
 		#sum up to hi lvl
 		my %thisMap;
 		foreach my $si (keys %specIprofiles){
-			print "$si    @{$sTax{$si}}\n" if (@{$sTax{$si}} == 0);
+			die "doesnt exist: $si\n" if (!exists($sTax{$si}));
+			print "ERR: $si    @{$sTax{$si}}\n" if (@{$sTax{$si}} <= $t);
 			my $clvl = join (";",@{$sTax{$si}}[0 .. $t]);
 			
 			#if ($clvl eq "Bacteria;Proteobacteria;Gammaproteobacteria;Enterobacterales;Enterobacteriaceae;Escherichia;Escherichia albertii"){

@@ -2,6 +2,7 @@
 #perl site_taxon_table.pl Family * > family.ITS.tab ### usage
 
 use strict;
+use Mods::GenoMetaAss qw(gzipopen);
 
 my $tax_level_a= lc shift @ARGV;
 my $outF = shift @ARGV;
@@ -10,7 +11,8 @@ my %sites;
 my %taxa;
 
 foreach my $file (@ARGV) {
-        open my $FHANDLE, "<$file" or die "Could not open $file: $!\n";
+		#open my $FHANDLE, "< $file" or die "Could not open $file: $!\n";
+		my ($FHANDLE,$readinOk) = gzipopen($file,"tax infile");
 		my $tag = $file;
 		$tag =~ s/.*\///;
 		$tag =~ s/\.hiera\.txt$//;

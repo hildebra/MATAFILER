@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use lib '/g/bork5/hildebra/dev/Perl/assemblies';
+use lib '/g/bork3/home/hildebra/dev/Perl/assemblies';
 use FAlite;
 use Getopt::Long;
 use List::Util qw(sum max min);

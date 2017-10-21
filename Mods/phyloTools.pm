@@ -7,10 +7,11 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getFMG renameFMGs);
+our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getGenoGenes getFMG renameFMGs);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
+sub getGenoGenes;
 
 #routine to format marker genes with naming etc to work with buildTree script
 sub prep40MGgenomes{ 
@@ -22,7 +23,7 @@ sub prep40MGgenomes{
 	$outGrp = $_[5] if (@_ > 5);
 	if (@_ > 6){$fnFna1= $_[6];$aaFna1= $_[7];$cogCats1= $_[8];}
 	print "Using outgroup $outGrp\n" if ($outGrp ne "");
-	my $prodigalBin = getProgPaths("prodigal");
+	
 	my $buildTreeScr = getProgPaths("buildTree_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree.pl";
 	my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
 	my $FMGrwkScr = getProgPaths("FMGrwk_scr");
@@ -49,12 +50,13 @@ sub prep40MGgenomes{
 			$allGenomes{$GenomeN} = 1;
 		}
 		#die "$GenomeN\n";
-		my $proteins = $refG; my $ntGenes = $refG; $proteins =~ s/\.[^\.]+$/\.genes\.faa/;
-		$ntGenes =~ s/\.[^\.]+$/\.genes\.fna/;
-		die "Can't find ref genome $refG\n" unless (-e $refG || (-e $ntGenes && -e $proteins));
-		my $prodigal_cmd .= "$prodigalBin -i $refG -a $proteins -d $ntGenes -f gff -p single > /dev/null\n";
+		my ($ntGenes,$proteins) = getGenoGenes($refG);
+		#my $proteins = $refG; my $ntGenes = $refG; $proteins =~ s/\.[^\.]+$/\.genes\.faa/;
+		#$ntGenes =~ s/\.[^\.]+$/\.genes\.fna/;
+		#die "Can't find ref genome $refG\n" unless (-e $refG || (-e $ntGenes && -e $proteins));
+		#my $prodigal_cmd .= "$prodigalBin -i $refG -a $proteins -d $ntGenes -f gff -p single > /dev/null\n";
 		#die $prodigal_cmd."\n$rewrite || !-e $proteins || !-e $ntGenes\n";
-		system $prodigal_cmd if ($rewrite || !-e $proteins || !-e $ntGenes);
+		#system $prodigal_cmd if ($rewrite || !-e $proteins || !-e $ntGenes);
 
 		
 		#fetch mg
@@ -223,29 +225,50 @@ sub runRaxML{
 	system "rm -rf $raxD";
 }
 
-
+sub getGenoGenes{
+	my $refG = $_[0];
+	my $rewrite =0;
+	$rewrite = $_[1] if (@_ >= 2);
+	my $prodigalBin = getProgPaths("prodigal");
+	my $proteins = $refG; my $ntGenes = $refG; $proteins =~ s/\.[^\.]+$/\.genes\.faa/;
+	$ntGenes =~ s/\.[^\.]+$/\.genes\.fna/;
+	die "Can't find ref genome $refG\n" unless (-e $refG || (-e $ntGenes && -e $proteins));
+	my $prodigal_cmd .= "$prodigalBin -i $refG -a $proteins -d $ntGenes -f gff -p single > /dev/null\n";
+	#die $prodigal_cmd."\n$rewrite || !-e $proteins || !-e $ntGenes\n";
+	system $prodigal_cmd if ($rewrite || !-e $proteins || !-e $ntGenes);
+	return ($ntGenes,$proteins);
+}
 sub getFMG{
 	my ($oDess,$proteins,$genesNT) = @_;
 	my $redo=0;my $ncore=1;my $rename="";
 	$ncore = $_[3] if (@_ >= 4);
-	$rename = $_[5] if (@_ >= 6);
 	$redo = $_[4] if (@_ >= 5);
-	my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
-	my $FMGrwkScr = getProgPaths("FMGrwk_scr");
+	$rename = $_[5] if (@_ >= 6);
+	
+	if ($proteins eq ""){die "getFMG:: need protein file\n$proteins\n";}
+	if ($oDess eq ""){
+		$proteins=~m/^(.*)\/([^\/]+)$/;
+		$oDess = $1;
+		if ($2 =~ m/(.*)\b\.genes\b?\.faa$/){
+			$oDess .= "/FMGs$1/";
+		} else { die "getFMG:: protein name needs to end on .faa\n$2\n";}
+	}
+	#die $proteins."\n".$oDess."\n";
 	my $GenomeDir = $proteins; $GenomeDir =~ s/[^\/]+$//;
 	system "mkdir -p $oDess" unless (-d $oDess);
-	my $cmd = "";
-	$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $oDess -l $FMGd/lib -t $ncore -d $genesNT $proteins "; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
 	#die $cmd;
-	if ( $redo ==1 || $redo ==3 || (!-s "$oDess/COG0012.faa" && !-s "$oDess/COG0016.faa")){
+	if ( $redo  || (!-s "$oDess/COG0012.faa" && !-s "$oDess/COG0016.faa")){
+		my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
+		my $FMGrwkScr = getProgPaths("FMGrwk_scr");
+		my $cmd = "";
+		$cmd = "perl $FMGd/fetchMG.pl -m extraction -o $oDess -l $FMGd/lib -t $ncore -d $genesNT $proteins "; # -x $FMGd/bin  -b $FMGd/lib/MG_BitScoreCutoffs.uncalibrated.txt
 		#print $cmd;
 		systemW $cmd;
 		system "rm  -rf $GenomeDir/*.cidx $oDess/temp $oDess/hmmResults";
+		system "$FMGrwkScr $oDess" if ($redo);
 	}
-	
-	
-	system "$FMGrwkScr $oDess" unless ($redo >= 2);
-	#return $oDess;
+	#die "$redo\n";
+	return $oDess;
 }
 sub renameFMGs{
 	my ($oDess,$rename,$outN,$renameShrt) = @_;

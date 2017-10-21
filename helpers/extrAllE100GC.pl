@@ -7,15 +7,18 @@ use strict;
 sub processSubGenes;
 sub getGeneSeqsSubGenes;
 
+use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::GenoMetaAss qw(readMapS systemW readClstrRev);
-my $smtBin = "/g/bork5/hildebra/bin/samtools-1.2/samtools";
-my $rarBin = "/g/bork5/hildebra/dev/C++/rare/rare";
+my $smtBin = getProgPaths("samtools");#/g/bork5/hildebra/bin/samtools-1.2/samtools";
+my $rarBin = getProgPaths("rare");#"/g/bork5/hildebra/dev/C++/rare/rare";
 
 my $GCd = $ARGV[0];
+my $oldNameFolders = $ARGV[1];
 my $mapF = `cat $GCd/LOGandSUB/GCmaps.inf`;
-my ($hrm,$hr2X) = readMapS($mapF);
+my ($hrm,$hr2X) = readMapS($mapF,$oldNameFolders);
 my %map = %{$hrm};
 my @samples = @{$map{smpl_order}};
+
 #my $GCd = "$inD/GeneCatalog/";
 #getGeneSeqsSubGenes("FMG");die();
 
@@ -54,13 +57,15 @@ foreach my $smpl(@samples){
 print "Read ref dataset\n";
 
 #print "@e1cat\n";
-
-print "Creating e100 gene matrix\n";
-processSubGenes(\%genesE1h,"e100");
 print "Creating FMG gene matrix\n";
 processSubGenes(\%genesFMG,"FMG");
 print "extracting FNA & FAA's of FMG genes\n";
 getGeneSeqsSubGenes("FMG");
+
+
+die "Done FMG\n";
+print "Creating e100 gene matrix\n";
+processSubGenes(\%genesE1h,"e100");
 print "Finished\n";
 exit(0);
 

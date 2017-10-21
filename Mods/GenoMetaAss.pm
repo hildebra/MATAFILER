@@ -265,25 +265,25 @@ sub gzipwrite{
 	return $O;
 }
 sub gzipopen{
-my ($inF,$descr) = @_;
-my $dodie = 1;
-if (@_ > 2){$dodie = $_[2];}
-$inF .= ".gz" if (!-e $inF && -e $inF.".gz");
-if ($inF =~ m/\.gz$/){
-	my $inFwo = $inF; $inFwo =~ s/\.gz$//;
-	$inF = $inFwo if (-e $inFwo && !-e $inF);
-} else {
+	my ($inF,$descr) = @_;
+	my $dodie = 1;
+	if (@_ > 2){$dodie = $_[2];}
 	$inF .= ".gz" if (!-e $inF && -e $inF.".gz");
-}
-my $I; my $OK = 1;
-if($inF =~ m/\.gz$/ ){
-	my $msg = "Can't open a pipe to $descr file $inF\n";
-	if (!open($I, "gunzip -c $inF |")) {if ($dodie){die $msg;} else { $OK=0;print $msg;}}
-} else{
-	my $msg = "Can't open $descr file $inF\n";
-	if (!open($I, "<", "$inF") ) {if ($dodie){die $msg;} else {$OK=0; print $msg;}}
-}
-return ($I,$OK);
+	if ($inF =~ m/\.gz$/){
+		my $inFwo = $inF; $inFwo =~ s/\.gz$//;
+		$inF = $inFwo if (-e $inFwo && !-e $inF);
+	} else {
+		$inF .= ".gz" if (!-e $inF && -e $inF.".gz");
+	}
+	my $I; my $OK = 1;
+	if($inF =~ m/\.gz$/ ){
+		my $msg = "Can't open a pipe to $descr file $inF\n";
+		if (!open($I, "gunzip -c $inF |")) {if ($dodie){die $msg;} else { $OK=0;print $msg;}}
+	} else{
+		my $msg = "Can't open $descr file $inF\n";
+		if (!open($I, "<", "$inF") ) {if ($dodie){die $msg;} else {$OK=0; print $msg;}}
+	}
+	return ($I,$OK);
 }
 
 sub readNCBItax($){
@@ -699,7 +699,7 @@ sub emptyQsubOpt{
 		useLongQueue => 0,
 		qsubPEenv => getProgPaths("qsubPEenv"),
 		perl5lib => "$MFdir:\$PERL5LIB",
-		cpplib => "/g/bork3/home/hildebra/env/zlib-1.2.8:/g/bork3/x86_64/lib64:/lib:/lib64:/usr/lib64",
+		cpplib => "/g/bork3/home/hildebra/env/env/miniconda/bin/gcc/",
 		tmpSpace => "30G",
 		xtraNodeCmds => $xtraNodeCmds,
 		qmode => $qmode,

@@ -4,7 +4,7 @@
 #./combine_DIA.pl /g/scb/bork/hildebra/Tamoc/FinSoil/
 use warnings;
 use strict;
-use Mods::GenoMetaAss qw(gzipopen readMap);
+use Mods::GenoMetaAss qw(gzipopen readMapS);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 sub writeMat;
@@ -37,17 +37,18 @@ my $inD = $ARGV[0];
 $inD .= "/" unless ($inD =~ m/\/$/);
 my $outD1 = $inD."pseudoGC/FUNCT/";
 system "mkdir -p $outD1" unless (-d $outD1);
-my ($hrm,$hr2) = readMap($inD."LOGandSUB/inmap.txt");
+my ($hrm,$hr2) = readMapS($inD."LOGandSUB/inmap.txt",0);
 my %map = %{$hrm};
 my @samples = @{$map{smpl_order}};
-
+#die "@samples\n";
 #find out if subfolders exists
 my %DBsD;my $testD;
 my %Taxs; #contains the subparts that the matrix is split into
 #look what dirs do exists and if they have the DB signature files in them
+#die "$map{$samples[0]}{dir}\n";
 foreach my $DB (@DBs){
 	my @subDirs = ();
-	$testD = $inD.$map{$samples[0]}{dir}."/diamond/";
+	$testD = $map{$samples[0]}{wrdir}."/diamond/";
 	print $testD."\n";
 	opendir D,$testD or die "Can't open dir $testD\n";
 	my $cnt=0;
@@ -75,7 +76,7 @@ foreach my $DB (@DBs){
 	if ($DB eq "KGM"){$Taxs{$DB} = ["EUK","BAC","UNC"]; $calcModules = 1; next;}
 	my @tmp2 = @{$DBsD{$DB}};# die "@tmp2\n";
 	print "@{$DBsD{$DB}}\n".@tmp2."\n";
-	$testD = $inD.$map{$samples[0]}{dir}."/diamond/".${$DBsD{$DB}}[0]."/";
+	$testD = $map{$samples[0]}{wrdir}."/diamond/".${$DBsD{$DB}}[0]."/";
 	#die $testD;
 	opendir D,$testD or die "Can't open dir $testD\n";
 	my @files = readdir D;closedir D;
@@ -117,7 +118,7 @@ foreach my $DB (@DBs){
 				#$genes{1}{gg} = "falk";
 				#die $genes{1}{gg};
 				foreach my $smpl(@samples){
-					my $dir2rd = $inD.$map{$smpl}{dir};
+					my $dir2rd = $map{$smpl}{wrdir};
 					my $SmplName = $map{$smpl}{SmplID};
 					#print $SmplName."\n";
 					my $DiaCOGf = "$dir2rd/diamond/$deepDir/$DB"."parse.$DB.$TAX.$NORM.cat.cnts";

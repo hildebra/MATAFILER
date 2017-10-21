@@ -49,7 +49,7 @@ treeDistScr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/bin/distv9.pl
 #		scaffolding operations (imrpoving assemblies with mate pairs)
 nxtrim	/g/bork3/home/hildebra/bin/NxTrim/./nxtrim
 BESST	/g/bork3/home/hildebra/bin/BESST/./runBESST
-gapfiller	perl /g/bork5/hildebra/bin/GapFiller/GapFiller_n.pl
+gapfiller	perl /g/bork3/home/hildebra/bin/GapFiller/GapFiller_n.pl
 
 #		gene catalogue
 cdhit	[MFLRDir]/bin/cd-hit
@@ -79,15 +79,15 @@ augustus	/g/bork3/home/hildebra/bin/augustus-3.2.1/bin/augustus
 
 #very specific usage, mostly not required
 d2meta	/g/bork3/home/hildebra/bin/d2Meta/d2Meta/d2Meta.out
-nonpareil	/g/bork5/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage sequenced in your samples
-hmmer3	/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
+nonpareil	/g/bork3/home/hildebra/bin/nonpareil/nonpareil	#estimate metag coverage sequenced in your samples
+hmmer3	/g/bork3/home/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch #FOAM KEGG assignments gene cat
 mmseqs2	/g/bork3/home/hildebra/bin/mmseqs2/bin/mmseqs   #experimental clustering of genes
 growthP	python /g/bork3/home/hildebra/bin/growthpred-v1.07/./growthpred-v1.07.py
-rnammer	/g/bork5/hildebra/bin/rna_mmer/./rnammer
+rnammer	/g/bork3/home/hildebra/bin/rna_mmer/./rnammer
 
 #no longer used
-#usearch	/g/bork5/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
-#novosrt	/g/bork5/hildebra/bin/novocraft/novosort
+#usearch	/g/bork3/home/hildebra/bin/usearch/usearch8.0.1421M_i86linux32_fh
+#novosrt	/g/bork3/home/hildebra/bin/novocraft/novosort
 blat	/g/bork3/home/hildebra/bin/blat/./blat
 nucmer	/g/bork3/home/hildebra/bin/MUMmer3.23/./nucmer
 

@@ -12,16 +12,23 @@ my $sortSepScr = getProgPaths("sortSepReLen_scr");#"perl $thisDir/secScripts/sep
 my $bwt2Bin = getProgPaths("bwt2");#"/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2";
 my $smtBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
 
+my $selfSearch=2;#set to -1 to deactivate
+
 my $DB = "/g/bork3/home/hildebra/data/SNP/GCs/SoilCatv2b1/compl.incompl.95.fna";
 $DB = "/g/bork3/home/hildebra/DB/GeneCats/Soil/soil.catalog.95nr.fna";
 $DB = "/scratch/bork/hildebra/geneCat/soil.catalog.95nr.fna";
-my @fnaRefs = ("/g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa","/g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna","/g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna");
-my @fnRNms = ("frz11","tara","gut1000");
+my @fnaRefs = ("/g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa","/g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna","/g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna","/scratch/bork/hildebra/geneCat/soil.catalog.95nr.fna");
+my @fnRNms = ("frz11","tara","gut1000","soil");
 my $odir = "/g/bork3/home/hildebra/DB/GeneCats/Soil/cmp2otherGC/";
 my $tmpDir = "/local/hildebra/cmpGC/";
 $tmpDir = "\$TMPDIR/hildebra/cmpGC/";
 my @tdirs = ("9305","9350","20250","20205");
-my $numCor=60;
+my $DBn = "Soil";
+if ($selfSearch>=0){
+	$DBn = $fnRNms[$selfSearch]; $DB = $fnaRefs[$selfSearch];
+	splice @fnaRefs,$selfSearch,1; splice @fnRNms,$selfSearch,1;
+}
+my $numCor=24;
 my $BlastCores = $numCor; my $doBwt2 = 2; my $tag = "mini";
 my $bwtCore = $numCor;
 
@@ -33,9 +40,10 @@ system "mkdir -p $tmpDir" unless (-d $tmpDir);
 my $cnt = -1; my $DBdep = "";
 foreach my $query (@fnaRefs){
 	$cnt++;my $cmd="mkdir -p $tmpDir\n";
-	my $tmptaxblastf = "$odir/$fnRNms[$cnt].m8";
-	my $tmptaxsamf = "$odir/$fnRNms[$cnt].sam";
-	my $bwt35Log = "$odir/$fnRNms[$cnt].bwt2.log";
+	my $tmptaxblastf = "$odir/${DBn}_$fnRNms[$cnt].m8";
+	my $tmptaxsamf = "$odir/${DBn}_$fnRNms[$cnt].sam";
+	my $bwt35Log = "$odir/${DBn}_$fnRNms[$cnt].bwt2.log";
+	next if (-e $tmptaxsamf);
 	if ($doBwt2==0){
 		if (!-d $DB.".lambda/"  ) {
 			print "Building LAMBDA index anew (may take up to an hour)..\n";
@@ -79,10 +87,12 @@ foreach my $query (@fnaRefs){
 		#fix missing newlines
 		$cmd .= "rm -f $tmpFNA\n";
 	}
+	#die "$cmd\n";
 	print "Aligning sample $fnRNms[$cnt]...\n";
+	#die;
 	#system $cmd;
 	$QSBoptHR->{useLongQueue} = 0;
-	my ($dep,$qcmd) = qsubSystem($odir."QsubCmpGeneCat_${tag}_$cnt.sh",$cmd,$numCor,"10G","cmpGC$cnt",$DBdep,"",1,[],$QSBoptHR);
+	my ($dep,$qcmd) = qsubSystem($odir."QsubCmpGeneCat_${tag}_${DBn}_$cnt.sh",$cmd,$numCor,"9G","cmpGC$cnt",$DBdep,"",1,[],$QSBoptHR);
 	print "$qcmd\n";
 	#last if ($cnt == 0);
 	#last;

@@ -10,7 +10,7 @@
 #for Jure ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/JureTest 1 95
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/simus2.txt /g/scb/bork/hildebra/SNP/GCs/SimuB 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_sm.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/soil_ex.map,/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map,/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map,/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt /g/scb/bork/hildebra/SNP/GCs/SoilCatv3 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
-#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/drama.map /g/scb/bork/hildebra/SNP/GCs/DramaGC 1 95
+#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/drama2.map /g/scb/bork/hildebra/SNP/GCs/DramaGCv2 1 95
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/ 1 95
 #faa generation from gene  catalog 
 #ex ./geneCat.pl ? /g/bork1/hildebra/SNP/GC/T2_GNM3_ABR protExtract 
@@ -92,9 +92,9 @@ my $eggDB = getProgPaths("eggNOG_DB");#"/g/bork3/home/hildebra/DB/FUNCT/eggNOG10
 my $ABresHMM = getProgPaths("ABresHMM_DB");#"/g/bork/forslund/morehmms/Resfams.hmm";
 
 
-my $tmpDir = "/tmp/hildebra/GC/";# submaster
+my $tmpDir = "/scratch/bork//GC/Dram/";# submaster
 my $GLBtmp = "/scratch/bork/hildebra/GC/";
-$tmpDir = "/local/hildebra/GC/";# upsilon
+#$tmpDir = "/local/hildebra/GC/";# upsilon
 #my $tmpDir =  "/alpha/data/hildebra/tmp/";#
 
 $baseOut =~ m/\/([^\/]+)\/?$/;
@@ -139,7 +139,7 @@ if ($mapF =~ m/^\??$/){
 my $qsubDir = $OutD."qsubsAlogs/";
 system "echo \'$version\' > $OutD/version.txt";
 
-my $numCor = 40; my $totMem = 200; #in G
+my $numCor = 80; my $totMem = 400; #in G
 #my $defaultsCDH =""; 
 my %map; my %AsGrps; my @samples;
 my $bucketCnt = 0; my $cnt = 0;
@@ -207,17 +207,15 @@ open O,">$OutD/LOGandSUB/GCmaps.ori"; print O join ",",@maps; close O;
 #die();
 if ($BIG==0){	$numCor = 24; $totMem = 30; }
 
-system "mkdir -p $bdir";
-
-open my $OC,">$bdir/compl.fna" or die "Can't open $bdir/compl.fna\n"; 
-open my $O5,">$bdir"."5Pcompl.fna";
-open my $O3,">$bdir"."3Pcompl.fna";
-open my $OI,">$bdir"."incompl.fna";
-if ($toLclustering){#no length sorting, just write directly
+system "mkdir -p $bdir" unless (-d $bdir);
+my $OC; my $O5; my $O3; my $OI;
+if ($justCDhit && $toLclustering){
+	die "shouldn't \n";
+	open $OC,">$bdir/compl.fna" or die "Can't open $bdir/compl.fna\n"; 
+	open $O5,">$bdir"."5Pcompl.fna";
+	open $O3,">$bdir"."3Pcompl.fna";
+	open $OI,">$bdir"."incompl.fna";
 	print "Direct output to file\n";
-} else {
-	close $O3;close $OC;close $O5; close $OI;
-
 }
 
 
@@ -359,7 +357,7 @@ foreach my $smpl(@samples){
 		push(@bucketDirs,$bdir);
 		#clean old seqs
 		@OCOMPL=();@O3P=();@O5P=();@OINC=();
-		die () if ($bucketCnt ==2);
+		#die () if ($bucketCnt ==2);
 	}
 	if ($doubleSmplWarnString ne ""){
 		die $doubleSmplWarnString."\n";
@@ -632,14 +630,15 @@ sub combineClstr(){
 }
 
 
-sub clusterFNA($ $ $ $ $ $){
-	my ($inFNA, $oFNA, $aS,$aL, $ID, $numCor) = @_;
+sub clusterFNA($ $ $ $ $ $ $){
+	my ($inFNA, $oFNA, $aS,$aL, $ID, $numCor, $gfac) = @_;
 	my $cmd = "";
+	if ($ID >1){$ID=$ID/100;}
 	if ($clustMMseq){#mmseq2 clustering
 		$cmd .= $mmseqs2Bin;
 	} else {
 		#	$defaultsCDH = "-d 0 -c 0.$cdhID -g 0 -T $numCor -M ".int(($totMem+30)*1024) if (@ARGV>3);
-		$cmd .= $cdhitBin."-est -i $inFNA -o $oFNA -n 9 -G 1 -aS $aS -aL $aL -d 0 -c $ID -g 0 -T $numCor -M ".int(($totMem+30)*1024)."\n";
+		$cmd .= $cdhitBin."-est -i $inFNA -o $oFNA -n 9 -G 1 -r 1 -aS $aS -aL $aL -d 0 -c $ID -g $gfac -T $numCor -M ".int(($totMem+30)*1024)."\n";
 	}
 	return $cmd;
 }
@@ -662,7 +661,7 @@ sub submCDHIT($ $ $ $ $){
 		if (!-s "$bdir/COG/$cog.$cdhID.fna"){
 			$copycat = 1;
 			#$cmd .= $cdhitBin."-est -i $FMGfileList{$cog} -o $tmpDir/COG/$cog.$cdhID.fna -n 9 -G 1 -aS 0.95 -aL 0.6 -d 0 -c ". $FMGcutoffs{$cog}/100 ." -g 0 -T $numCor\n";
-			$cmd .= clusterFNA($FMGfileList{$cog},"$tmpDir/COG/$cog.$cdhID.fna",0.95,0.6,($FMGcutoffs{$cog}/100),$numCor);
+			$cmd .= clusterFNA($FMGfileList{$cog},"$tmpDir/COG/$cog.$cdhID.fna",0.95,0.6,($FMGcutoffs{$cog}/100),$numCor,1);
 			$FMGFL2{$cog} = "$tmpDir/COG/$cog.$cdhID.fna";
 		} else {
 			$cpFromP = 1;
@@ -684,7 +683,7 @@ sub submCDHIT($ $ $ $ $){
 			$cmd .= "gunzip $tmpDir/compl.$cdhID.fna*\n" if (-s "$bdir/compl.$cdhID.fna.gz" || -s "$bdir/compl.$cdhID.fna.clstr.gz");
 		} else {
 			#$cmd .= $cdhitBin."-est -i $bdir/compl.fna -o $tmpDir/compl.$cdhID.fna  -n 9 -G 1 -aS 0.95 -aL 0.6 $defaultsCDH \n" ;
-			$cmd .= clusterFNA( "$bdir/compl.fna", "$tmpDir/compl.$cdhID.fna",0.95,0.6,"$cdhID",$numCor);
+			$cmd .= clusterFNA( "$bdir/compl.fna", "$tmpDir/compl.$cdhID.fna",0.95,0.6,"$cdhID",$numCor,0);
 			$cmd .= "cp $tmpDir/compl.$cdhID.fna* $bdir\n" unless ($copycat);
 		}
 	} else {
@@ -732,7 +731,7 @@ sub submCDHIT($ $ $ $ $){
 			}
 			
 			#take care of long reads
-			$cmd .= "$sortSepScr 7000 $tmpDir/35Pcompl.fna\n";
+			$cmd .= "$sortSepScr 8000 $tmpDir/35Pcompl.fna\n";
 			$cmd .= $bwt2Bin." --sensitive --local --norc --no-unal --no-hd --no-sq -p 1 ";
 			$cmd .= "--un $tmpDir/P35compl.NAl.pre.$cdhID.fna.long -x $bwtIdx -f -U  $tmpDir/35Pcompl.fna.long > $tmpDir/35compl.$cdhID.align.sam 2> $bwt35Log\n";
 			#and bulk of reads
@@ -754,7 +753,7 @@ sub submCDHIT($ $ $ $ $){
 				$cmd .= "gunzip $bdir/incompl.fna.gz\n";
 			}
 			#take care of long reads
-			$cmd .= "$sortSepScr 7000 $bdir/incompl.fna\n";
+			$cmd .= "$sortSepScr 8000 $bdir/incompl.fna\n";
 
 			$cmd .= $bwt2Bin." --sensitive --local --norc --no-unal --no-hd --no-sq -p 1 ";
 			$cmd .= "--un $tmpDir/incompl.NAl.pre.$cdhID.fna.long -x $bwtIdx -f -U $bdir/incompl.fna.long > $tmpDir/incompl.$cdhID.align.sam 2> $bwtIncLog\n";
@@ -781,7 +780,8 @@ sub submCDHIT($ $ $ $ $){
 
 	#calc gene matrix.. can as well be run later on finished file..
 	if (1||$doGeneMatrix){
-		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Matrix -map $mapF -refD $assDirs\n"; #add flag -useCoverage to get coverage estimates instead
+		my $newMapp = ""; $newMapp = "-oldMapStyle" if ($oldNameFolders);
+		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Matrix $newMapp -map $mapF -refD $assDirs\n"; #add flag -useCoverage to get coverage estimates instead
 		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Mat.cov -map $mapF -refD $assDirs -useCoverage\n"; #coverage mat
 		$cmd .= "gzip $OutD/Mat.cov* \n";
 	}
@@ -795,7 +795,7 @@ sub submCDHIT($ $ $ $ $){
 
 	#get protein sequences for each gene & rewrite seq names to numbers
 	$cmd .= "$selfScript ? $baseOut protExtract \"$extraRdsFAA\"\n";
-	$cmd .= "$extre100Scr $OutD\n";
+	$cmd .= "$extre100Scr $OutD $oldNameFolders\n";
 	$cmd .= "$selfScript MGS $OutD\n";
 	
 	$cmd .= "mv $tmpDir/log/Cluster.log $qsubDir\n";
@@ -829,8 +829,8 @@ sub writeBucket(){
 	my ($OCOMPLar,$O3Par,$O5Par,$OINCar,$bdir,$bnum) = @_;
 	if ($toLclustering){return;}
 	systemW("mkdir -p $bdir");
-	my @OCOMPL = @{$OCOMPLar}; my @O3P = @{$O3Par};  my @O5P = @{$O5Par}; my @OINC = @{$OINCar}; 
-	if (@OCOMPL ==0){die "no genes found!";}
+	#my @OCOMPL = @{$OCOMPLar}; 
+	if (@{$OCOMPLar} ==0){die "no genes found!";}
 	if ($toLclustering){#no length sorting
 		#open O,">$bdir"."compl.fna"; foreach( @OCOMPL ){print O $_;} close O;
 		#open O,">$bdir"."5Pcompl.fna"; foreach( @O3P ){print O $_;} close O;
@@ -838,9 +838,12 @@ sub writeBucket(){
 		#open O,">$bdir"."incompl.fna";foreach( @OINC ){print O $_;} close O;
 	} else {
 		open O,">$bdir"."compl.fna" or die "Can't open B0 compl.fna\n"; 
-		foreach(sort {length $b <=> length $a} @OCOMPL ){print O $_;} close O; @OCOMPL = ();
-		open O,">$bdir"."5Pcompl.fna" or die "Can't open B0 5P.fna\n"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O; @O3P=();
-		open O,">$bdir"."3Pcompl.fna" or die "Can't open B0 3P.fna\n"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O; @O5P=();
+		foreach(sort {length $b <=> length $a} @{$OCOMPLar} ){print O $_;} close O; @{$OCOMPLar} = ();
+		my @O5P = @{$O5Par};
+		open O,">$bdir"."5Pcompl.fna" or die "Can't open B0 5P.fna\n"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O; @O3P=();
+		my @O3P = @{$O3Par};  
+		open O,">$bdir"."3Pcompl.fna" or die "Can't open B0 3P.fna\n"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O; @O5P=();
+		 my @OINC = @{$OINCar}; 
 		open O,">$bdir"."incompl.fna" or die "Can't open B0 incompl.fna\n";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;  @OINC=();
 	}
 }
@@ -1052,7 +1055,7 @@ sub secondaryCls(){
 	#my @keys = sort { length($remGenes{$a}) <=> length($remGenes{$b}) } keys(%h);
 
 #	systemW($cdhitBin."-est -i $inD/incompl.NAl.srt.$cdhID.fna -o $outfna -n 9 -G 0 -aL 0.3 -aS 0.8 $defaultsCDH\n") unless (-e $outfna);
-	$cmd = clusterFNA( "$inD/incompl.NAl.srt.$cdhID.fna", "$outfna",0.8,0.6,"$cdhID",$numCor);
+	$cmd = clusterFNA( "$inD/incompl.NAl.srt.$cdhID.fna", "$outfna",0.8,0.6,"$cdhID",$numCor,0);
 	systemW($cmd);
 	#$cmd .= "rm -f $inD/incompl.NAl.$cdhID.fna\n";
 	#$cmd .= "rm -f $inD/P35compl.NAl.$cdhID.fna $inD/35compl.$cdhID.align.sam $inD/incompl.$cdhID.align.sam\n";
