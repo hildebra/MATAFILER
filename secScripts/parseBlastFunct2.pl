@@ -613,20 +613,22 @@ sub main(){
 					#&& ($tabCats!=5 || $Subject =~ m/^GI:/ )#ABRc specific
 					) {
 					#now decide if the hit itself is actually better
-					
-			if (($bestID -5)< $id && $bestE*10 > $eval &&
+					#print "BETTER   $c2CAT{$Subject}\n";
+			if (  (($bestID -5)< $id && $bestE*10 > $eval &&
 					( $id >= ($bestID *0.97) && $id >= $bestIDever*0.9   && ( $AlLen >= $bestAlLen * 1.15 ) )  ||  #length is just better (15%+)
 					(   ($id >= $bestID *1.03) && ( $AlLen >= $bestAlLen * 0.9) ) ||#id is just better, while length is not too much off
-					$bitSc > $bestBitScpre*0.8
+					$bitSc > $bestBitScpre*0.8 ) ||  
+					($fndCat==0 && exists $c2CAT{$Subject}) #big one: take in any case
 					){   #convincing score
-						$fndCat =1; 
+						#print "ENTER!\n";
+						$fndCat =1 if (exists $c2CAT{$Subject}); 
 						$bestSbj =$Subject; 
 						$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
 						$bestBitScpre=$bitSc;
 						$bestID = $id;  
 						if ($bestID > $bestIDever){$bestIDever=$bestID;}
 			}
-		}
+		} #else { print "NOT HIT";}
 		my @tmp;
 	}
 	#print @blRes ."  $bestSbj $bestQuery\n";
@@ -673,6 +675,8 @@ sub main(){
 		$curKgd = $NOGkingd{$taxid} if (!$CBMmode);
 	}
 	
+	#print $curKgd."SSS\n";
+	
 	if ($tabCats == 1){
 		unless (exists( $g2COG{$bestSbj} )){
 			$COGfail++;	return;
@@ -699,7 +703,7 @@ sub main(){
 	}elsif ($tabCats == 2){ #KEGG
 		if (exists $c2CAT{$bestSbj} ){
 			$curCat = $c2CAT{$bestSbj}; $CATexist++;
-		} else {$CATfail++; return;}
+		} else {$CATfail++; return;}#print "FAIL: $bestSbj\n\n";
 	}elsif ($tabCats==3){  #CAZy
 		$curCOG = $splC[0];
 	}elsif ($tabCats==6){  #TCDB
@@ -727,7 +731,7 @@ sub main(){
 	foreach my $normMethod (@normMethods){
 		$totalCOG++; $lpCnt++;
 		#die "can't find length entry for $bestSbj\n" unless (exists $DBlen{$bestSbj});
-		#print $DBlen{$bestSbj}." $normMethod ";
+		#print $DBlen{$bestSbj}." $normMethod \n";
 		$score = $bestAlLen / $SbjLen if ($normMethod eq "GLN"); #score for this hit, normed by prot length
 		if ($tabCats == 1){ #NOG
 			#hash{$_} = $valA for qw(a b c);
@@ -749,6 +753,7 @@ sub main(){
 		
 		} elsif ($tabCats == 2){ #KEGG
 			$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
+			#print "$bestQuery\t$curCat\n";
 			if ($lpCnt==1 && $curCat ne "" ){
 				print $O2 "$bestQuery\t$curCat\n" if ($reportGeneCat  );
 			}

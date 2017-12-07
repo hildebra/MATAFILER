@@ -252,12 +252,12 @@ GetOptions(
 	"binSpeciesMG=i" => \$DoBinning,
 	"reAssembleMG=i" => \$redoAssembly,
 	"assembleMG=i" => \$DoAssembly,
-	"mapReadsOntoAssembly=i" => \$map2Assembly,  #map original reads back on assembly, to estimate abundance etc
+	#mapping related (asselmbly)
+	"remap2assembly=i" => \$redoAssMapping,
+	"mapReadsOntoAssembly=i" => \$map2Assembly ,  #map original reads back on assembly, to estimate abundance etc
 	"saveReadsNotMap2Assembly=i" => \$SaveUnalignedReads,
 	#gene prediction on assembly
 	"predictEukGenes=i" => \$DO_EUK_GENE_PRED,#severely limits total predicted gene amount (~25% of total genes)
-	#mapping related (asselmbly)
-	"remap2assembly=i" => \$redoAssMapping,
 	#mapping
 	"mappingCoverage=i" => \$mapModeCovDo,
 	"mappingMem=i" => \$MappingMem, #mem for bwa/bwt2 in GB
@@ -384,6 +384,10 @@ system "mkdir -p $globaldDiaDBdir" unless (-d $globaldDiaDBdir);
 if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 #in this case primary focus is on mapping and not on assemblies
 	if ($ARGV[0] eq "map2DB"){$mapModeCovDo=0;$mapModeDecoyDo=0;}
+	if ($map2Assembly || $DoAssembly){
+		print "Mapping mode: Deactivating mapping and assembly modules\n";
+		$map2Assembly=0; $DoAssembly =0;
+	}
 	my @refDB1 = split(/,/,$refDBall);
 	my @bwt2Name1;
 	if (defined $bwt2NameAll){
@@ -409,8 +413,10 @@ if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 					push(@bwt2Name,$bwt2Name1[$i].$j);
 				}
 			}
-		} else {
+		} elsif (@sfiles == 1) {
 			push(@refDB,$sfiles[0]);push(@bwt2Name,$bwt2Name1[$i]);
+		} else {
+			die "Could not find file for entry $refDB1[$i]\n";
 		}
 	}
 	#die "@refDB\n@bwt2Name\n";
@@ -1418,7 +1424,7 @@ if ($DoRibofind ){
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/ITS.miTag $dir_RibFind/ITS/*.hiera.txt.gz \n";
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/SSU.miTag $dir_RibFind/SSU/*.hiera.txt.gz \n";
 		$mrgCmd .= "$mergeMiTagScript ".join(",",@lvls)." $dir_RibFind/LSU.miTag $dir_RibFind/LSU/*.hiera.txt.gz \n";
-		die $mrgCmd."\n";
+		#die $mrgCmd."\n";
 		my $of_exist = 1;
 		foreach my $lvl (@lvls){ 
 			$of_exist=0 unless (-e "$dir_RibFind/ITS.miTag.$lvl.txt" && -e "$dir_RibFind/LSU.miTag.$lvl.txt" && -e "$dir_RibFind/SSU.miTag.$lvl.txt"); 
@@ -1442,7 +1448,6 @@ if ($DoMetaPhlan){
 	if ($metaPhl2FailCnts){print "$metaPhl2FailCnts samples with incomplete Metaphlan assignments\n";}
 	else { print "All samples have metaphlan assignments.\n";
 		mergeMP2Table($dir_MP2);
-
 }}
 open O,">$baseOut/MMPU.txt";print O $mmpuOutTab;close O;
 
@@ -2553,25 +2558,32 @@ sub seedUnzip2tmp(){
 			#print "$fastp\n";
 			#die "$smplPrefix$rawFileSrchStr2\n";
 			opendir(DIR, $fastp) or die "Can't find: $fastp\n";	
+			if ($rawFileSrchStrSingl ne ""){
+				@pas = sort ( grep { /$smplPrefix$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir DIR;
+				#die "$rawFileSrchStrSingl\n@pas\n@pa1\n";
+#				my %h;
+#				@h{(@pa1,@pa2)} = undef;
+#				@pas = grep {not exists $h{$_}} @pas;
+				#die "@pas\n@pa1\n";
+			}
 			if ($readsRpairs){
 				@pa2 = sort ( grep { /$smplPrefix$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
 				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir(DIR);
-			}
-			#print readdir(DIR);
-			if ($rawFileSrchStrSingl ne ""){
-				@pas = sort ( grep { /$smplPrefix$rawFileSrchStrSingl/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
-				#die "$rawFileSrchStrSingl\n@pas\n@pa1\n";
+				#print "@pa2  XX\n";
 				my %h;
-				@h{(@pa1,@pa2)} = undef;
-				@pas = grep {not exists $h{$_}} @pas;
-				#die "@pas\n@pa1\n";
+				@h{(@pas)} = undef;
+				@pa1 = grep {not exists $h{$_}} @pa1;
+				@pa2 = grep {not exists $h{$_}} @pa2;
+				#die "@pas\n@pa1\n@pa2\n";
 			}
+			close(DIR);
+			#print readdir(DIR);
 		} else {
 			$fastp .= $map{mocatFiltPath}; 
 			opendir(DIR, $fastp) or die "$!\n$fastp\n";;	
+			@pas = sort ( grep { /.*single\.f[^\.]*q\.gz$/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 			@pa2 = sort ( grep { /.*2\.f[^\.]*q\.gz$/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
 			@pa1 = sort ( grep { /.*1\.f[^\.]*q\.gz$/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir DIR;
-			@pas = sort ( grep { /.*single\.f[^\.]*q\.gz$/  && -e "$fastp/$_"} readdir(DIR) );	close(DIR);
 		}
 	}
 	#die "@pa1\n@pas\n";
@@ -2826,7 +2838,7 @@ sub krakHSap($ $ $ $ $ $){
 	unless (-e "$fileDir/krak.stone"){
 		#die "$fileDir\n";
 		$jobN = "_KR$JNUM";
-		($jobN, $tmpCmd) = qsubSystem($logDir."KrakHS.sh",$cmd,$numThr,"10G",$jobN,$jDep.";$krakDeps","",1,\@General_Hosts,\%QSBopt) ;
+		($jobN, $tmpCmd) = qsubSystem($logDir."KrakHS.sh",$cmd,$numThr,"16G",$jobN,$jDep.";$krakDeps","",1,\@General_Hosts,\%QSBopt) ;
 	}
 	return $jobN;
 }
@@ -2967,6 +2979,7 @@ sub mapReadsToRef{
 	$nodeTmp.="_map/";
 
 	my $tmpOut = ${$dirsHr}{glbTmp};	my $finalD = ${$dirsHr}{outDir}; #s,m
+	#die "$finalD\n";
 	my @finalDS = split /,/,$finalD;
 	my @mappDir = split /,/,$mappDirPre;
 
@@ -3012,7 +3025,6 @@ sub mapReadsToRef{
 	for (my $k=0;$k<@outNms;$k++){
 		#print "$tmpOut22\n";
 		if ($rewrite2ndMap){$outputExistsNEx++; system "rm -fr $tmpOut22[$k] $finalDS[$k]/$outNms[$k]-smd* $mappDir[$k]/$outNms[$k]-smd*"; next;}
-
 		my $outstat = check_map_done($doCram, $finalDS[$k], $outNms[$k], $mappDir[$k]);
 
 		next if ($outstat);#-e "$finalDS[$k]/$outNms[$k]-smd.bam.coverage.gz" );#|| -e "$mappDir[$k]/$outNms[$k]-smd.bam.coverage.gz");
@@ -3079,15 +3091,16 @@ sub mapReadsToRef{
 	if ($numLib==0){
 		$numLib = scalar @paS; $usePairs=0;
 	}
-	#die "@bwtIdxs\n";
+	#die "@bwtIdxs\n"; 
 	for (my $kk=0;$kk<@bwtIdxs;$kk++){  #iterator over different genomes
-		#print  "$finalDS[$kk]/$outNms[$kk]-smd.bam\nXXX\n$mappDir[$kk]\n";
+		#die  "$finalDS[$kk]/$outNms[$kk]-smd.bam\nXXX\n$mappDir[$kk]\n";
 		if ($decoyModeActive){
 			my $allDone=1;
 			for (my $k=0;$k<@outNms;$k++){
-				#print " $outNms[$k]\n";
-				$allDone =0 unless(check_map_done($doCram, $finalDS[$k], $outNms[$k], $mappDir[$k]));
+				#print "$finalDS[$k] $outNms[$k] $mappDir[$k]\n";
+				$allDone =0 unless(check_map_done($doCram, $finalDS[$k], $outNms[$k], $mappDir[$kk]));
 			}
+			#die;
 			next if ($allDone);
 		} elsif (-e $tmpOut22[$kk] || check_map_done($doCram, $finalDS[$kk], $outNms[$kk], $mappDir[$kk])){ #this check is for non-decoy mode
 			#(-e "$finalDS[$kk]/$outNms[$kk]-smd.bam" && -e "$finalDS[$kk]/$outNms[$kk]-smd.bam.coverage.gz") ){
@@ -3136,8 +3149,11 @@ sub mapReadsToRef{
 			
 			if ($decoyModeActive){#remove unnecessary reads
 				$algCmd .= "$smtBin index $iTO\n";
+				#die;
 				for (my $k=0;$k<@regs;$k++){
+					#		print "$k\t$finalDS[$k]\n";
 					if(check_map_done($doCram, $finalDS[$k], $outNms[$k], $mappDir[$k])){$subBams[$k]="";next;}
+
 					$algCmd .= "$bamHdFilt_scr $iTO $reg_lcs[$k] 0 > $iTO.decoy.sam.$k\n";
 					$algCmd.= "  $smtBin view -@ $Ncore $iTO $regs[$k] >> $iTO.decoy.sam.$k\n";
 					$algCmd.= "  $smtBin view -b -h -@ $Ncore $iTO.decoy.sam.$k > $iTO.decoy.$k\nrm $iTO.decoy.sam.$k \n";
@@ -3230,10 +3246,10 @@ sub bamDepth{
 	my $cramSTO = "$mappDir/$baseN-smd.cram.sto";
 	my $nxtBAM = "$tmpOut/$baseN-smd.bam";
 	my $sortTMP = $nodeTmp."/$baseN.srt";
-	
+ 
 	#check if already done
 	my $outstat = check_map_done($doCram, $finalD, $baseN, $mappDir);
-	#die "$outstat";
+	#print "$outstat";
 	if ($outstat>=1){return ("","",$outstat);}
 	
 	#die "$mappDir/$baseN-smd.bam.coverage.gz\n$finalD/$baseN-smd.bam.coverage.gz\n" ;#if (-e "$finalD/$baseN-smd.bam.coverage.gz");

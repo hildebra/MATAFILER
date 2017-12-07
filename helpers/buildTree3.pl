@@ -19,6 +19,8 @@ use Getopt::Long qw( GetOptions );
 sub convertMultAli2NT;
 sub mergeMSAs;
 sub synPosOnly;
+sub fixHDs4Phylo; #!
+sub runFasttree; #!
 sub calcDisPos;#gets only the dissimilar positions of an MSA, as well as %id similarity
 
 my $doPhym= 0;
@@ -32,6 +34,8 @@ my $msapBin = getProgPaths("msaprobs");
 my $trimalBin = getProgPaths("trimal");
 my $pigzBin  = getProgPaths("pigz");
 my $trDist = getProgPaths("treeDistScr");
+my $fsttreeBin  = getProgPaths("fasttree");
+
 my $gubbinsBin = "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.py";
 
 
@@ -39,7 +43,7 @@ my $gubbinsBin = "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.
 #trimal -in /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/COG0185.faa -out /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/tst.fna -backtrans /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/inMSA0.fna -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon
 #some runtim options...
 #my $ncore = 20;#RAXML cores
- my $ntFrac =2; 
+ my $ntFrac =2;  my $fixHeaders = 0;
  my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
  if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
 
@@ -48,7 +52,7 @@ my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,
 			$useAA4tree) = ("","","","",12,0,0.8,1,"_",1,0,0);
 my ($continue,$isAligned) = (0,0);#overwrite already existing files?
 my $outgroup="";
-my ($doGubbins,$doCFML,$doRAXML) = (0,0,1);
+my ($doGubbins,$doCFML,$doRAXML,$doFastTree) = (0,0,1,0);
 
 die "no input args!\n" if (@ARGV == 0 );
 
@@ -59,6 +63,7 @@ GetOptions(
 	"cats=s"      => \$cogCats,
 	"outD=s"      => \$outD,
 	"cores=i" => \$ncore,
+	"fixHeaders=i" => \$fixHeaders, #!
 	"useEte=i"      => \$Ete,
 	"NTfilt=f"      => \$filt,
 	"smplDef=i"	=> \$smplDef, #is the genome somehow quantified with a delimiter (_) ?
@@ -71,6 +76,7 @@ GetOptions(
 	"bootstrap=i" => \$bootStrap,
 	"isAligned=i" => \$isAligned,
 	"runRAxML=i" => \$doRAXML,
+	"runFastTree=i" => \$doFastTree,
 	"runClonalFrameML=i" => \$doCFML,
 	"runGubbins=i" => \$doGubbins,
 ) or die("Error in command line arguments\n");
@@ -83,13 +89,14 @@ if ($bootStrap>0){print "Using bootstrapping in tree building\n";}
 else {$ntCnt = $filt;}
 my $tmpD = $outD;
 system "mkdir -p $outD" unless (-d $outD);
+my $treeD = "$outD/TMCtree/";
+my $treeDFT = "$outD/FTtree/";
+system "rm -fr $treeD" if (-d $treeD && !$continue);
 my $cmd =""; my %usedGeneNms;
 #die "$Ete\n";
 #------------------------------------------
 #sorting by COG, MSA & syn position extraction
 if (!$Ete){
-	my $treeD = "$outD/TMCtree/";
-	system "rm -fr $treeD" if (-d $treeD && !$continue);
 	system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
 	my $multAli = "$outD/MSA/MSAli.fna";
 	my $multAliSyn = $multAli.".syn.fna";
@@ -100,6 +107,12 @@ if (!$Ete){
 	my %FAA ; my %FNA ;
 	my $doMSA = 1;
 	$doMSA =0 if ($continue && -e $multAli && (-e $multAliSyn ||!$calcSyn)&& (-e $multAliNonSyn ||!$calcNonSyn));
+	#!
+	if ($fixHeaders){
+		if ($cogCats ne ""){die"implement fix hds for cats\naborting\n";}
+		$aaFna=fixHDs4Phylo($aaFna);$fnFna = fixHDs4Phylo($fnFna); 
+	}
+	
 	#die "$doMSA $continue\n";
 	#my @xx = keys %FAA; die "$xx[0] $xx[1]\n$FAA{HM29_COG0185}\n";
 	if ($doMSA && $cogCats ne ""){
@@ -205,7 +218,12 @@ if (!$Ete){
 		my $tmpOutMSA2 = "$tmpD/outMSA.faa";
 		my $tmpOutMSAsyn = $multAliSyn;#"$tmpD/outMSA.syn.fna";
 		my $tmpOutMSAnonsyn = $multAliNonSyn;
-		my $numFas = `grep -c '^>' $tmpInMSAnt`;
+		my $numFas = 0; #!
+		if ($tmpInMSA ne ""){ 
+			$numFas = `grep -c '^>' $tmpInMSA`; 
+		} else {
+			$numFas = `grep -c '^>' $tmpInMSAnt`;
+		}
 		chomp $numFas;
 		my $inFasta = $tmpInMSA;
 		$inFasta = $tmpInMSAnt if ($tmpInMSA eq "");
@@ -291,6 +309,10 @@ if (!$Ete){
 			#system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
 			calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt");
 		}
+	}
+	if ($doFastTree){
+		system "mkdir -p $treeDFT" unless (-d $treeDFT);
+		runFasttree($multAli,"$treeDFT/FASTTREE_allsites.nwk",$ncore);
 	}
 	if ($doRAXML){
 		my $BStag = ""; if ($bootStrap>0){$BStag="_BS$bootStrap";}
@@ -534,6 +556,40 @@ sub synPosOnlyAA($ $){#only leaves "constant" AA positions in MSA file..
 
 }
 
+#!
+sub fixHDs4Phylo ($){
+	#routine to check that headers of fastas don't contain ":", ",", ")", "(", ";", "]", "[", "'"
+	my ($inF) = @_;
+	my $reqFix=0;
+	if ($inF eq ""){return "";}
+	my $hr = readFasta($aaFna,1); my %FAA = %{$hr};
+	foreach my $hd (keys %FAA){
+		if ($hd =~ m//){
+			$reqFix=1;last;
+		}
+	}
+	my $outF = $inF;
+	if ($reqFix){
+		$outF .= ".fix";
+		print "Fixing headers in input file (to $outF)\n";
+		my %newHDs;
+		open O,">$outF";
+		foreach my $hd (keys %FAA){
+			my $hd2 = substr $hd,0,40; #cut to raxml length
+			$hd2 =~ s/[:,\}\{;\]\[']/|/g;
+			$newHDs{$hd2} ++;
+			$hd2 .= $newHDs{$hd2};
+			print O ">$hd2\n$FAA{$hd}\n";
+		}
+	}
+	return $outF;
+}
+sub runFasttree{
+	my ($inMSA,$treeOut,$ncore) = @_;
+	my $fsttreeBin  = getProgPaths("fasttree");
+	my $cmd = "$fsttreeBin $inMSA > $treeOut\n";
+	systemW $cmd;
+}
 sub synPosOnly{#now finished, version is cleaner
 	my ($inMSA,$inAAMSA,$outMSA, $outMSAns, $ffold, $outgroup, $doSyn, $doNSyn) = @_;
 	#print "Syn NT";

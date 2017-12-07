@@ -14,7 +14,7 @@ my $inD = $ARGV[0];
 $inD .= "/" unless ($inD =~ m/\/$/);
 my $outD1 = $inD."pseudoGC/FUNCT/ABR_k/";
 system "mkdir -p $outD1" unless (-d $outD1);
-my ($hrm,$hr2) = readMap($inD."LOGandSUB/inmap.txt");
+my ($hrm,$hr2) = readMap($inD."LOGandSUB/inmap.txt",0,{},{},0);
 my %map = %{$hrm};
 my @samples = @{$map{smpl_order}};
 my %cat;
@@ -24,7 +24,8 @@ my %cat;
 foreach my $DB (@DBs){
 	foreach my $NORM ("cnt"){#,"GLN"){
 		foreach my $smpl(@samples){
-			my $testD = $inD.$map{$smpl}{dir}."/diamond/ABR/";
+			print "$smpl  XX\n";
+			my $testD = $map{$smpl}{wrdir}."/diamond/ABR/";
 			my $ABRfile = $testD."ABR.cats.txt";
 			open I,"<$ABRfile" or die "couldn't find $ABRfile\n";
 			while (my $line = <I>){

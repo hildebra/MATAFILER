@@ -7,11 +7,47 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getGenoGenes getFMG renameFMGs);
+our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getGenoGenes getFMG renameFMGs fixHDs4Phylo
+			runFasttree);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 sub getGenoGenes;
+
+
+sub fixHDs4Phylo ($){
+	#routine to check that headers of fastas don't contain ":", ",", ")", "(", ";", "]", "[", "'"
+	my ($inF) = @_;
+	my $reqFix=0;
+	if ($inF eq ""){return "";}
+	my $hr = readFasta($inF,1); my %FAA = %{$hr};
+	foreach my $hd (keys %FAA){
+		if ($hd =~ m//){
+			$reqFix=1;last;
+		}
+	}
+	my $outF = $inF;
+	if ($reqFix){
+		$outF .= ".fix";
+		print "Fixing headers in input file (to $outF)\n";
+		my %newHDs;
+		open O,">$outF";
+		foreach my $hd (keys %FAA){
+			my $hd2 = substr $hd,0,40; #cut to raxml length
+			$hd2 =~ s/[:,\}\{;\]\[']/|/g;
+			$newHDs{$hd2} ++;
+			$hd2 .= $newHDs{$hd2};
+			print O ">$hd2\n$FAA{$hd}\n";
+		}
+	}
+	return $outF;
+}
+sub runFasttree{
+	my ($inMSA,$treeOut,$ncore) = @_;
+	my $fsttreeBin  = getProgPaths("fasttree");
+	my $cmd = "$fsttreeBin $inMSA > $treeOut\n";
+	systemW $cmd;
+}
 
 #routine to format marker genes with naming etc to work with buildTree script
 sub prep40MGgenomes{ 
@@ -313,14 +349,14 @@ sub renameFMGs{
 	}
 	return (\%catGe);
 }
-sub getE100($ $ $){
-	my ($oDess,$proteins,$genesNT) = @_;
+sub getE100($ $ $ $){
+	my ($oDess,$proteins,$genesNT,$ncore) = @_;
 	my $hmmbin = getProgPaths("hmmsearch");#"/g/bork5/hildebra/bin/hmmer-3.1b1-linux-intel-x86_64/binaries/hmmsearch";
 	my $essDB = getProgPaths("essentialHMM");#"/g/bork5/hildebra/bin/multi-metagenome-master/R.data.generation/essential.hmm";
 	my $essEukDB = getProgPaths("essentialEUK");#"/g/bork3/home/hildebra/DB/HMMs/eukCore/eukCore.hmm"; #TODO
 	systemW("mkdir -p $oDess");
 	my $cmd = "";
-	$cmd .= "$hmmbin --domtblout $oDess/assembly.hmm.orfs.txt -o $oDess/assembly.hmmsout.txt --cut_tc --cpu 1 --notextw $essDB $proteins\n";
+	$cmd .= "$hmmbin --domtblout $oDess/assembly.hmm.orfs.txt -o $oDess/assembly.hmmsout.txt --cut_tc --cpu $ncore --notextw $essDB $proteins\n";
 	$cmd .= "tail -n+4 $oDess/assembly.hmm.orfs.txt | sed \'s/\\s\\s*/ /g\' | sed \'s/^#.*//g\' | cut -f1,4 -d \" \" > $oDess/ess100.id.txt\n";
 
 	if (!-s "$oDess/ess100.id.txt" && !-e "$oDess/e100split.sto"){

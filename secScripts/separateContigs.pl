@@ -22,6 +22,8 @@ my $assD = $ARGV[1];
 my $subparts = $ARGV[2];
 my $readLength = $ARGV[3];
 
+my $ncore = 1;
+
 
 #my $rdCovBin = "/g/bork3/home/hildebra/dev/C++/rdCov/./rdCover";
 my $rdCovBin =getProgPaths("readCov");
@@ -94,7 +96,7 @@ if ($subparts =~ m/e/ && (!-e "$outDFMG/FMGids.txt" || !-e "$oDess/e100split.sto
 	}
 	############################### essential 100 proteins ###############################
 	if ( !-e "$oDess/e100split.sto"){
-		getE100($oDess,$proteins,$genesNT);
+		getE100($oDess,$proteins,$genesNT,$ncore);
 		sleep (3);
 		systemW("touch $oDess/e100split.sto;");
 		#required for maxbin

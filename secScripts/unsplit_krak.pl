@@ -15,7 +15,8 @@ while (<I>){
 	if (m/(^@.*);(\d+);/){
 		my $len = $2 ;
 		print O2 $1."/2\n"; print O1 $1."/1\n";
-		chomp($seq = <I>); $NU = <I>; chomp($qual = <I>);
+		$seq = <I>;$NU = <I>;$qual = <I>;
+		chomp($seq);  chomp($qual);
 		print O1 substr($seq,0,$len)."\n+\n".substr($qual,0,$len)."\n";
 		print O2 substr($seq,$len+1,$len)."\n+\n".substr($qual,$len+1,$len)."\n";
 	} else {
