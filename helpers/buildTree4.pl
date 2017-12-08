@@ -3,9 +3,9 @@
 #perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree2.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 0 -SynTree 0 -runRAxML 0 -runGubbins 0
 #ARGS: ./buildTree.pl -fna [FNA] -faa [FAA] -cat [categoryFile] -outD [outDir] -cores [CPUs] -useEte [1=ETE,0=this script] -NTfilt [filter]
 #versions: ver 2 makes a link to nexus file formats, to be used in MrBayes and BEAST etc
+#8.12.17: added mod3 from Mechthild
 
-
-# perl /g/scb/bork/luetge/pangenomics/speciation/dNdS/scripts/buildTree3_mod4.pl -fna /g/scb/bork/luetge/pangenomics/speciation/dNdS/fasta/allOrtho_freeze11_cluster_10.fna -aa /g/scb/bork/luetge/pangenomics/speciation/dNdS/fasta/allOrtho_freeze11_cluster_10.faa -cats /g/scb/bork/luetge/pangenomics/speciation/dNdS/catFiles/freeze11_cluster_10_categories4MSA.txt -outD /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 0 -SynTree 0 -runRAxML 0 -runGubbins 0 -runLengthCheck 0 -runDNDS 0 -genesToPhylip 0 -continue 1 -runFastgear 1
+# perl /g/scb/bork/luetge/pangenomics/speciation/dNdS/scripts/buildTree4_mod2.pl -fna /g/scb/bork/luetge/pangenomics/speciation/dNdS/fasta/allOrtho_freeze11_cluster_10.fna -aa /g/scb/bork/luetge/pangenomics/speciation/dNdS/fasta/allOrtho_freeze11_cluster_10.faa -cats /g/scb/bork/luetge/pangenomics/speciation/dNdS/catFiles/freeze11_cluster_10_categories4MSA.txt -outD /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 0 -SynTree 0 -runRAxML 0 -runGubbins 0 -runLengthCheck 0 -runDNDS 0 -genesToPhylip 0 -continue 1 -runFastgear 0 -runFastGearPostProcessing 1 -clustername cluster_10
 
 use warnings;
 use strict;
@@ -15,7 +15,7 @@ use threads ('yield',
                  'stringify');
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::GenoMetaAss qw( systemW readFasta writeFasta convertMSA2NXS);
-use Mods::phyloTools qw(runRaxML runFasttree fixHDs4Phylo);
+use Mods::phyloTools qw(runRaxML runQItree runFasttree fixHDs4Phylo);
 use Getopt::Long qw( GetOptions );
 use Bio::Phylo::IO;
 
@@ -43,6 +43,9 @@ my $pamlBin = "/g/bork3/home/luetge/softs/paml4.9e/bin/codeml";
 
 my $fastgearBin = "/g/bork3/home/luetge/softs/fastGEARpackageLinux64bit/run_fastGEAR.sh";
 my $matlabBin = "/g/bork3/home/luetge/softs/matlab/v901";
+my $fastgearSummaryBin = "/g/bork3/home/luetge/softs/fastGearPostprocessingLinux64bit/run_collectRecombinationStatistics.sh";
+my $fastgearReconstrBin = "/g/bork3/home/luetge/softs/fastGearPostprocessingLinux64bit/run_startAncestryReconstruction.sh";
+my $fastgearReorderBin = "/g/bork3/home/luetge/softs/fastGearPostprocessingLinux64bit/run_reorderMultipleGenes.sh";
 
 #die "TODO $trimalBin\n";
 #trimal -in /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/COG0185.faa -out /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/tst.fna -backtrans /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/inMSA0.fna -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon
@@ -58,13 +61,15 @@ my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,
 my ($continue,$isAligned) = (0,0);#overwrite already existing files?
 my $outgroup="";
 my $fixHeaders = 0;
-my ($doGubbins,$doCFML,$doRAXML,$doFastTree) = (0,0,1,0);
+my ($doGubbins,$doCFML,$doRAXML,$doFastTree, $doIQTree) = (0,0,0,1, 0);#fastree as default tree builder
 
 #check length of fasta to avoid frameshift
 my $doLengthCheck=1;
 my $doDNDS=0;
 my $doGenesToPh=0;
 my $doFastGear=0;
+my $doFastGearSummary=0;
+my $clusterName="";
 
 die "no input args!\n" if (@ARGV == 0 );
 
@@ -89,12 +94,15 @@ GetOptions(
 	"isAligned=i" => \$isAligned,
 	"runRAxML=i" => \$doRAXML,
 	"runFastTree=i" => \$doFastTree,
+	"runIQtree=i" => \$doIQTree,
 	"runClonalFrameML=i" => \$doCFML,
 	"runGubbins=i" => \$doGubbins,
 	"runLengthCheck=i" => \$doLengthCheck,		#check that sequence length can be divided by 3
 	"runDNDS=i" => \$doDNDS,			#run dNdS analysis
 	"genesToPhylip=i" => \$doGenesToPh,	
 	"runFastgear=i" => \$doFastGear,
+	"runFastGearPostProcessing=i" => \$doFastGearSummary,
+	"clustername=s" => \$clusterName,
 ) or die("Error in command line arguments\n");
 if ($doCFML && !$doRAXML){die "Need RaxML alignment, if Clonal fram is to be run..\n";}
 
@@ -104,8 +112,14 @@ if ($outgroup ne ""){print "Using outgroup $outgroup\n";}
 if ($bootStrap>0){print "Using bootstrapping in tree building\n";}
 else {$ntCnt = $filt;}
 my $tmpD = $outD;
-system "mkdir -p $outD" unless (-d $outD);
+system "mkdir -p $tmpD" unless (-d $tmpD);
 my $cmd =""; my %usedGeneNms;
+
+
+my $outD_clust = "";
+if($clusterName eq ""){$outD_clust = "$outD/MSA_FG";}
+else {my $outD_clust = "/g/bork5/luetge/$clusterName";}
+
 #die "$Ete\n";
 #------------------------------------------
 #sorting by COG, MSA & syn position extraction
@@ -130,11 +144,12 @@ if ($fixHeaders){
 	$aaFna=fixHDs4Phylo($aaFna);$fnFna = fixHDs4Phylo($fnFna); 
 }
 
-my $treeD = "$outD/TMCtree/";#raxml, fasttree, phyml tree output dir
+my $treeD = "$outD/phylo/";#raxml, fasttree, phyml tree output dir
 #my $treeDFT = "$outD/FTtree/";#fasttree output
 
-#system "rm -fr $treeD" if (-d $treeD && !$continue);
+system "rm -fr $treeD" if (-d $treeD && !$continue);
 system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
+system "mkdir -p  $treeD/" unless(-d "$treeD");
 my $multAli = "$outD/MSA/MSAli.fna";
 my $multAliSyn = $multAli.".syn.fna";
 my $multAliNonSyn = $multAli.".nonsyn.fna";
@@ -302,7 +317,13 @@ if ($doMSA && $cogCats ne ""){
 	my $tmpOutMSA2 = "$tmpD/outMSA.faa";
 	my $tmpOutMSAsyn = $multAliSyn;#"$tmpD/outMSA.syn.fna";
 	my $tmpOutMSAnonsyn = $multAliNonSyn;
-	my $numFas = `grep -c '^>' $tmpInMSAnt`;
+	#print "$tmpInMSAnt\n";
+	my $numFas;
+	if (-e $tmpInMSA){
+		$numFas = `grep -c '^>' $tmpInMSA`;
+	} else {
+		$numFas = `grep -c '^>' $tmpInMSAnt`;
+	}
 	chomp $numFas;
 	my $inFasta = $tmpInMSA;
 	$inFasta = $tmpInMSAnt if ($tmpInMSA eq "");
@@ -317,8 +338,9 @@ if ($doMSA && $cogCats ne ""){
 		$cmd = "sed -i 's/\\*//g' $tmpInMSA\n";
 		$cmd .= "$msapBin -num_threads $ncore $inFasta > $tmpOutMSA2\n";
 	}
-	#die $cmd;
-	system $cmd; print "finished MSA\n";
+	unless ($continue && -e  $tmpOutMSA2){
+		systemW $cmd ; print "finished MSA\n";
+	}
 	if ($tmpInMSA ne "" && !$useAA4tree){
 		convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$multAli);
 		synPosOnly($multAli,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,"",$calcSyn,$calcNonSyn);
@@ -393,7 +415,16 @@ if (!$useAA4tree){
 
 if ($doFastTree){
 	#system "mkdir -p $treeDFT" unless (-d $treeDFT);
-	runFasttree($multAli,"$treeD/FASTTREE_allsites.nwk",$ncore);
+	my $fasttree = "$treeD/FASTTREE_allsites.nwk";
+	unless ($continue && -e $fasttree){
+		runFasttree($multAli,$fasttree,$ncore);
+	}
+}
+if ($doIQTree){
+	my $IQtree = "$treeD/IQtree_allsites.nwk";
+	unless ($continue && -e "$IQtree.treefile"){
+		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap);
+	}
 }
 
 if ($doRAXML){
@@ -486,14 +517,72 @@ if($doFastGear){
 			$cnt3 ++;
 		}
 
+	my $MsaDF1 = "$outD/MSA";
+	#my $MsaDF2 = "$outD/MSA_FG";
+	my $MsaDF2 = "$outD_clust/MSA_FG";
+	my $MsaDF3 = ""; #added by Falk, debug, TODO!!
+	system "mkdir $MsaDF3";		
+	system "cp -r $MsaDF1 $MsaDF2";
+	
+
 	foreach my $geneF (@geneListF){
-		my $outFG = "$outD/fastGear/$geneF";
+		my $outFG = "$outD/fastGear/fastGear_Results/$geneF";
 		system "mkdir -p  $outFG" unless(-d "$outFG");
 		my $outFileFG = "$outFG/${geneF}_res.mat";
-		my $MsaDF = "$outD/MSA";
+		system "cat $MsaDF2/$geneF.*.fna | sed 's/_.*\$//' > $MsaDF2/$geneF.fna";
 		my $FGparFile ="/g/bork3/home/luetge/softs/fastGEARpackageLinux64bit/fG_input_specs.txt";
-		runFastgear($geneF, $outFileFG, $MsaDF, $FGparFile);
+		runFastgear($geneF, $outFileFG, $MsaDF2, $FGparFile);
 	}
+	system "rm -r $outD_clust";
+	#die;
+}
+	
+
+
+### postprocessing fastgear output ##
+	
+if($doFastGearSummary){
+	my $FGDataD = "$outD/fastGear/";
+	my $summaryD = "$FGDataD/fastGear_Summaries";
+	system "mkdir -p  $summaryD" unless(-d "$summaryD");
+	my $resultD = "$FGDataD/fastGear_Results";
+	die "no fastgear results found\n" unless(-d $resultD);
+		
+	#die "$treeFileFG\n";
+	my $allNamesFile ="$summaryD/allNamesFromTop.txt";
+	my $treeNamesFile ="$summaryD/subtreeNamesFromTop.txt";
+	
+	# get a list with all genomes in tree
+	if(! -e $allNamesFile |! -e $treeNamesFile){
+		my @genomeListFG;		
+		my @FNAheader_all = `grep '^>' $multAli`;
+		#die "@FNAheader_all\n";
+		foreach my $genome (@FNAheader_all){
+			my ($genome2) = $genome =~ m/>(.*)?/;
+			push (@genomeListFG, $genome2);
+			}
+		open T1,">$allNamesFile";
+		print T1 join("\n",@genomeListFG);
+		close T1;	
+		#die;
+		open T2,">$treeNamesFile";
+		print T2 join("\n",@genomeListFG);
+		close T2;
+		#die "@genomeListFG\n";
+	}
+
+	# reorder files -> required for further steps?
+	my $reorder_cmd = "$fastgearReorderBin $matlabBin $FGDataD fastGear_ allNamesFromTop.txt both";
+	#die "$reorder_cmd\n";
+	system $reorder_cmd; 
+	
+	## collect Recombination statistics #
+
+	my $SRC_cmd = "$fastgearSummaryBin $matlabBin $FGDataD fastGear_";
+	system $SRC_cmd; 
+	print "fastgear collect recombination statistics finished";
+	my $FG_sumOut = "$summaryD/fastGear__recSummaries.txt";
+	if(-e $FG_sumOut){system "rm -rf $resultD";}
 	#die;
 }
 
@@ -918,7 +1007,7 @@ sub runCodeml($ $ $ $ $ $ $ $){
 ### Fastgear -> test for recombination 
 sub runFastgear($ $ $ $){
 	my ($geneFG, $outFile, $inD, $parFile) = @_;
-	$cmd = "$fastgearBin $matlabBin $inD/$geneFG.*.fna $outFile $parFile";
+	$cmd = "$fastgearBin $matlabBin $inD/$geneFG.fna $outFile $parFile";
 	#die "$cmd\n";
 	system $cmd; 
 	print "fastgear on $geneFG finished";

@@ -103,6 +103,7 @@ $blInf = sortgzblast($blInf,$tmpD) unless ($mode == 3 || $mode == 4);
 
 my $bl2dbF ;my $cogDefF ;my $NOGtaxf ;
 my $KEGGlink ;my $KEGGtaxDb ; my $TCDBhir;
+my $PATRVIRanno;
 if ($DButil ne ""){
 	$bl2dbF = "$DButil/NOG.members.tsv";
 	$cogDefF = "$DButil/NOG.annotations.tsv";
@@ -110,7 +111,7 @@ if ($DButil ne ""){
 	$KEGGlink = "$DButil/genes_ko.list";
 	$KEGGtaxDb = "$DButil/kegg.tax.list";
 	$TCDBhir = "$DButil/TCDBhir.txt";
-
+	$PATRVIRanno = "$DButil/PATRIC_VF.tab";
 }
 
 $blInf =~ m/(.*)\/([^\/]+$)/;
@@ -132,7 +133,7 @@ my @aminBLE = split /,/,$minBLE;
 #@aminBLE = ("1e-9") x scalar(@aminPID);
 my @aminPID = ($percID) x scalar(@aminBLE);
 
-my %TCdef;
+my %TCdef; my %PTVdef;
 my %NOGkingd ; my %KEGGtax;
 my %COGdef ;my %g2COG ; my %c2CAT ; 
 my %cardE; my %cardFunc; my %cardName; 
@@ -166,6 +167,14 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	@kgdName = ("","","","ALL");
 	@kgdNameShrt = ("","","","ALL");
 	print "transporter DB\n";
+	$tabCats =6;
+} elsif ($DBmode eq "PTV"){
+	@kgdOpts = qw (3);
+	my $hr = readTCDBdef($TCDBhir);
+	%PTVdef = %{$hr};
+	@kgdName = ("","","","ALL");
+	@kgdNameShrt = ("","","","ALL");
+	print "PATRIC virulence factors DB\n";
 	$tabCats =6;
 } elsif ($DBmode eq "CZy"){
 	@kgdOpts = qw (0 1 2 3 4 5);

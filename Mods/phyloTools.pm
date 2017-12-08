@@ -8,7 +8,7 @@ use strict;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getGenoGenes getFMG renameFMGs fixHDs4Phylo
-			runFasttree);
+			runFasttree runQItree);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
@@ -41,6 +41,20 @@ sub fixHDs4Phylo ($){
 		}
 	}
 	return $outF;
+}
+
+sub runQItree{
+	my ($inMSA,$treeOut,$ncore,$outgr,$bootStrap) = @_;
+	my $iqTree  = getProgPaths("iqtree");
+	my $cmd = "$iqTree -s $inMSA -nt $ncore -pre $treeOut ";
+	$cmd .= "-o $outgr " unless ($outgr eq "");
+	if ($bootStrap >0){
+		if ($bootStrap < 1000){print "can't perform ultrafast bootstrap (bootstrap need to be >= 1000)\n"; exit(0);}
+		$cmd .= "-bb $bootStrap " ;
+		#also consider -b >=100 for std bootstrap
+	}
+	#die $cmd;
+	systemW $cmd;
 }
 sub runFasttree{
 	my ($inMSA,$treeOut,$ncore) = @_;

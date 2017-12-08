@@ -32,6 +32,7 @@ illuminaTS3se	[MFLRDir]/DB/TruSeq3-SE.fa
 pal2nal	perl /g/bork3/home/hildebra/bin/pal2nal.v14/pal2nal.pl
 phyml	/g/bork3/home/hildebra/bin/ete/ext_apps-latest/bin/phyml
 raxml	/g/bork3/home/hildebra/bin/RAxML/raxmlHPC-PTHREADS-SSE3
+iqtree	/g/bork3/home/hildebra/bin/iqtree-omp-1.5.6-Linux/bin/iqtree-omp
 msaprobs	/g/bork3/home/hildebra/bin/MSAProbs-0.9.7/MSAProbs/msaprobs
 clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fasttree	/g/bork3/home/hildebra/bin/fasttree/./FastTreeMP
@@ -131,7 +132,7 @@ sepCts_scr	perl [MFLRDir]/secScripts/separateContigs.pl
 assStat_scr	perl [MFLRDir]/secScripts/assemblathon_stats.pl
 renameCtg_scr	[MFLRDir]/secScripts/renameCtgs.pl
 sizFilt_scr	perl [MFLRDir]/secScripts/sizeFilterFas.pl
-buildTree_scr	perl [MFLRDir]/helpers/buildTree3.pl
+buildTree_scr	perl [MFLRDir]/helpers/buildTree4.pl
 sizSplit_scr	[MFLRDir]/secScripts/splitFNAbyLength.pl
 contigKgdSplit_scr	[MFLRDir]/secScripts/sortCtgKingdom.pl
 calcGC_scr	[MFLRDir]/secScripts/calcGC.pl
@@ -172,4 +173,5 @@ ABRcard_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABR_Card/
 KEGG_path_DB	/g/bork3/home/hildebra/DB/FUNCT/KEGG/
 ACL_path_DB	/g/bork3/home/hildebra/DB/FUNCT/Aclame/
 TCDB_path_DB	/g/bork3/home/hildebra/DB/FUNCT/TCDB/
+PATRIC_VIR_path_DB	/g/bork3/home/hildebra/DB/FUNCT/PATRIC/VirFac_KF/
 

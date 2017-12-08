@@ -597,7 +597,7 @@ sub readMap{
 			$agBP{$curAG}{prodRun} = "";
 			#print $agBP{$spl[$AssGroupCol]}{CntAimAss}. " :$spl[$AssGroupCol]\n" ;
 		} else {$ret{$curSmp}{AssGroup} = $Scnt; $agBP{$Scnt}{CntAimAss}=0;$agBP{$Scnt}{prodRun} = "";}
-		if ($MapGroupCol >= 0){
+		if ($MapGroupCol >= 0 && $spl[$MapGroupCol] ne ""){
 			my $curM = "M_".$spl[$MapGroupCol];
 			$ret{$curSmp}{MapGroup} = $curM;
 			if (!exists($agBP{$curM}{CntAimMap})){$agBP{$curM}{CntAimMap}=0;}

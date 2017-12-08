@@ -154,7 +154,7 @@ my $mergeMiTagScript = getProgPaths("mrgMiTag_scr");#"/g/bork3/home/hildebra/dev
 #databases empty structs --------------------------
 my $globalKraTaxkDB = "";
 my %globalRiboDependence =(DBcp => "");
-my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",KGE=>"",ACL=>"",KGM=>"" );
+my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",KGE=>"",ACL=>"",KGM=>"", PTV=>"" );
 
 
 
@@ -190,7 +190,7 @@ my $DoKraken = 0; my $RedoKraken = 0; my $KrakTaxFailCnts=0;
 my $pseudoAssembly = 0; #in case no assembly is possible (soil single reads), just filter for reads X long 
 my $DoFreeGlbTmp = 0; my $defaultReadLength = 100;
 my $maxReqDiaDB = 6; #max number of databases supported by METAFILER
-my $reqDiaDB = "";#,NOG,MOH,ABR,ABRc,ACL,KGM";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
+my $reqDiaDB = "";#,NOG,MOH,ABR,ABRc,ACL,KGM,PTV";#,ACL,KGM,ABRc,CZy";#"NOG,CZy"; #"NOG,MOH,CZy,ABR,ABRc,ACL,KGM"   #old KGE,KGB
 #program configuration
 my $Assembly_Cores=48; my $Assembly_Memory = 200; #in GB
 my $Spades_HDspace = 100; #required space in GB
@@ -274,7 +274,7 @@ GetOptions(
 	"reProfileFunct=i" => \$rewriteDiamond,
 	"diamondCores=i" => \$dia_Cores,
 	"diaParseEvals=s" => \$diaEVal,
-	"diamondDBs=s" => \$reqDiaDB,#NOG,MOH,ABR,ABRc,ACL,KGM,CZy
+	"diamondDBs=s" => \$reqDiaDB,#NOG,MOH,ABR,ABRc,ACL,KGM,CZy,PTV
 	#ribo profiling (miTag)
 	"profileRibosome=i" => \$DoRibofind,
 	"riobsomalAssembly=i"  => \$doRiboAssembl,
@@ -1839,6 +1839,10 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 		if ($curDB eq "ABRc" && !-s "$CLrefDBD/card.parsed.f11.tab.map"){ 
 			system "rm -f $CLrefDBD/card*";
 			$DBcmd .= "cp $DBpath/card*.txt $DBpath/card*.map $CLrefDBD\n";
+		}
+		if ($curDB eq "PTV" && !-s "$CLrefDBD/PATRIC_VF.tab"){ 
+			system "rm -f $CLrefDBD/PATRIC_VF.tab";
+			$DBcmd .= "cp $DBpath/PATRIC_VF.tab $CLrefDBD\n";
 		}
 		if ($curDB eq "TCDB" && !-s "$CLrefDBD/hir.txt"){ 
 			$DBcmd .= "cp $DBpath/TCDBhir.txt  $CLrefDBD\n";
