@@ -13,7 +13,7 @@ my $smtBin = getProgPaths("samtools");#/g/bork5/hildebra/bin/samtools-1.2/samtoo
 my $rarBin = getProgPaths("rare");#"/g/bork5/hildebra/dev/C++/rare/rare";
 
 my $GCd = $ARGV[0];
-my $oldNameFolders = $ARGV[1];
+my $oldNameFolders = -1;#$ARGV[1];
 my $mapF = `cat $GCd/LOGandSUB/GCmaps.inf`;
 my ($hrm,$hr2X) = readMapS($mapF,$oldNameFolders);
 my %map = %{$hrm};
@@ -123,7 +123,7 @@ sub processSubGenes(){
 	print "Selected ".@rows." rows.. writing to $GCd/$tag.subset.mat\n";
 	open O,">$GCd/$tag.lines" or die "Can't open output lines file\n";;print O join("\n",@rows);close O;
 	
-	my $cmdX= "$rarBin lineExtr $GCd/Matrix.mat $GCd/$tag.subset.mat $GCd/$tag.lines\n rm $GCd/$tag.lines";
+	my $cmdX= "$rarBin lineExtr -i $GCd/Matrix.mat -o $GCd/$tag.subset.mat -reference $GCd/$tag.lines\n rm $GCd/$tag.lines";
 	print $cmdX."\n";
 	system $cmdX;
 	print "Done $tag\n";

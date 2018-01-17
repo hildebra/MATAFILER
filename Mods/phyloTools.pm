@@ -44,14 +44,22 @@ sub fixHDs4Phylo ($){
 }
 
 sub runQItree{
-	my ($inMSA,$treeOut,$ncore,$outgr,$bootStrap) = @_;
+	my ($inMSA,$treeOut,$ncore,$outgr,$bootStrap,$useAA,$fast) = @_;
 	my $iqTree  = getProgPaths("iqtree");
 	my $cmd = "$iqTree -s $inMSA -nt $ncore -pre $treeOut ";
 	$cmd .= "-o $outgr " unless ($outgr eq "");
+	$cmd .= "-fast " unless ($fast eq "");
+	if ($useAA){
+		$cmd .= "-m LG "; #needs to be HKY for nts
+	} else {
+		$cmd .= "-m HKY "; 
+	}
 	if ($bootStrap >0){
 		if ($bootStrap < 1000){print "can't perform ultrafast bootstrap (bootstrap need to be >= 1000)\n"; exit(0);}
 		$cmd .= "-bb $bootStrap " ;
 		#also consider -b >=100 for std bootstrap
+	} else {
+		$cmd .= "-alrt 1000 ";
 	}
 	#die $cmd;
 	systemW $cmd;

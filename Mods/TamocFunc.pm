@@ -7,12 +7,46 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw( sortgzblast attachProteins uniq getFMG readTabbed readTabbed2 getSpecificDBpaths renameFMGs);
-use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
+our @EXPORT_OK = qw( sortgzblast attachProteins attachProteins2 uniq getFMG readTabbed readTabbed2 readTabbed3 getSpecificDBpaths renameFMGs);
+use Mods::GenoMetaAss qw(systemW readFasta renameFastHD gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
+
 
 #gets required FA genes via samtools faidx and saves them to file
 #Usage: [text file with target genes] [out faa] [in faa(search genes in this fna)] [new names for output]
+
+
+sub attachProteins2{
+	my ($inT,$prF,$protIn) = ($_[0],$_[1],$_[2]);
+	
+	my %gene2num; my $doRename=0;
+	if (@_ > 3){
+		$doRename=1;
+		my $hr = $_[3];
+		%gene2num = %{$hr};
+	}
+	die "Protein file does not exist: $protIn\n" unless (-e $protIn);
+	my $hr = readFasta($protIn);
+	my %fas = %{$hr};
+	#print "$protIn\n";
+	#my $protStore = `cat $inT | xargs $samBin faidx $protIn`;
+	#die length($protStore)."\n";
+	my @prots = @{$inT};
+	open O,">>$prF" or die "Can't open $prF\n";
+	foreach my $pr (@prots){
+		$pr =~ s/^>//;
+		#1 identify protein
+		my $seq = $fas{$pr};
+		if ($doRename){
+			unless(exists($gene2num{$pr})){die "can not identify $pr gene in index file while rewritign prot names\n$protIn\n";}
+			#print "$gene2num{$spl[0]}\n $pr\n";
+			$pr = $gene2num{$pr};
+		} 
+		print O ">".$pr."\n".$seq."\n";
+	}
+	close O;
+}
+
 sub attachProteins{#"$basD/tmp.txt",$protF){
 	my ($inT,$prF,$protIn) = ($_[0],$_[1],$_[2]);
 	
@@ -58,6 +92,20 @@ sub readTabbed($){
 		$ret{$spl[0]} = $spl[1];
 	}
 	close It;
+	return \%ret;
+}
+sub readTabbed3($ $){
+	my ($inF,$col) = @_;
+	my %ret;
+	my ($It,$OK) = gzipopen($inF,"Tabbed file",1);
+	#open It,"<$inF" or die "Cant open tabbed infile $inF\n";
+	while (<$It>){
+		chomp;
+		my @spl = split /\t/;
+		if (@spl < $col){die"Requested column $col, but file $inF has only ".@spl." columns\n";}
+		$ret{$spl[0]} = $spl[$col];
+	}
+	close $It;
 	return \%ret;
 }
 sub readTabbed2{
@@ -111,6 +159,7 @@ sub getSpecificDBpaths($ $){
 	elsif ($curDB eq "KGM"){$DBpath = getProgPaths("KEGG_path_DB"); $refDB = "euk_pro.pep";$shrtDB = $curDB; }
 	elsif ($curDB eq "TCDB"){$DBpath = getProgPaths("TCDB_path_DB"); $refDB = "tcdb.faa";$shrtDB = $curDB; }
 	elsif ($curDB eq "PTV"){$DBpath = getProgPaths("PATRIC_VIR_path_DB"); $refDB = "PATRIC_VF.faa";$shrtDB = $curDB; }
+	elsif ($curDB eq "PAB"){$DBpath = getProgPaths("ABprod_path_DB"); $refDB = "dedup_best_prod_predictions.faa";$shrtDB = $curDB; }
 	else {die"Unknown DB for Diamond: $curDB\n";}
 	
 	if ($checkDBpreped){
@@ -130,6 +179,7 @@ sub sortgzblast{ #function that checks if the diamond output was already sorted 
 	#print "$input\n";
 	if ( $input =~ m/\.srt\.gz$/ ) { #redo srt in case there's a $trial file
 		my $trial = $input; $trial =~ s/\.srt//; my $trialuse=0;
+		if (!-e $input && !-e $trial){die "$input doesn't exist!\n";}
 		if (-e $trial && -e $input && (-s $trial > -s $input)){$input = $trial; $trialuse=1; }#print "trial\n";
 		if (-e $input && !$trialuse){return $input; }
 		if (-e $trial && !-e $input){$input = $trial;}

@@ -402,15 +402,17 @@ if ($doGubbins){
 #distamce matrix, this is fast
 #system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
 if (!$useAA4tree){
-	calcDisPos($multAli,"$outD/MSA/percID.txt") unless(-e "$outD/MSA/percID.txt" && $continue);
+	calcDisPos($multAli,"$outD/MSA/percID.txt",1) unless(-e "$outD/MSA/percID.txt" && $continue);
 	if ($calcSyn){
 	#		system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
-		calcDisPos($multAliSyn,"$outD/MSA/percID_syn.txt");
+		calcDisPos($multAliSyn,"$outD/MSA/percID_syn.txt",1);
 	}
 	if ($calcNonSyn){
 		#system "$trimalBin -in $multAliNonSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_nonsyn.txt\n";
-		calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt");
+		calcDisPos($multAliNonSyn,"$outD/MSA/percID_nonsyn.txt",1);
 	}
+} else {
+	calcDisPos($multAli,"$outD/MSA/AA_percID.txt",1) unless(-e "$outD/MSA/percID.txt" && $continue);
 }
 
 if ($doFastTree){
@@ -421,9 +423,13 @@ if ($doFastTree){
 	}
 }
 if ($doIQTree){
-	my $IQtree = "$treeD/IQtree_allsites.nwk";
+	my $IQtree = "$treeD/IQtree_fast_allsites";
 	unless ($continue && -e "$IQtree.treefile"){
-		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap);
+		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap,$useAA4tree,1);
+	}
+	$IQtree = "$treeD/IQtree_allsites";
+	unless ($continue && -e "$IQtree.treefile"){ #and slow..
+		#runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap,$useAA4tree,0);
 	}
 }
 
@@ -610,8 +616,15 @@ exit(0);
 
 
 
-sub calcDisPos($ $){
-	my ($MSA,$opID) = @_;
+sub calcDisPos($ $ $){
+	my ($MSA,$opID, $isNT) = @_;
+	
+	$cmd = $clustaloBin." -i $MSA -o $MSA.tmp --outfmt=fasta --percent-id --distmat-out $opID --threads=$ncore --force --full\n";
+	$cmd .= "rm -f $MSA.tmp\n";
+	systemW $cmd;
+	return;
+	
+	#too slow
 	my $kr = readFasta($MSA);
 	my %MS = %{$kr};
 	my %diffArs;my %perID;
@@ -626,19 +639,33 @@ sub calcDisPos($ $){
 			my $ss2 = $MS{$k2};
 			my $mask = $ss1 ^ $ss2;
 			my $diff=0;
-			my$N2=($ss2 =~ tr/[-]//);$N2+=($ss2 =~ tr/[N]//);
-			my$N1=($ss1 =~ tr/[-]//);$N1+=($ss1 =~ tr/[N]//);
-			while ($mask =~ /[^\0]/g) {
-				my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
-				if ($s1 eq "N" ||$s1 eq "-"){
-					$N2++;next;
+			my$N2=($ss2 =~ tr/[-]//);
+			my$N1=($ss1 =~ tr/[-]//);
+			if ($isNT){
+				$N1+=($ss1 =~ tr/[N]//);$N2+=($ss2 =~ tr/[N]//);
+				while ($mask =~ /[^\0]/g) {
+					my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
+					if ($s1 eq "-"){
+						$N2++;next;
+					}
+					if ($s2 eq "-" ){#missing data, position doesn't matter
+						$N1++;next;
+					}
+					$diffArs{$-[0]}=1;
+					$diff++;
 				}
-				if ($s2 eq "N" ||$s2 eq "-" ){#missing data, position doesn't matter
-					$N1++;next;
+			} else {
+				while ($mask =~ /[^\0]/g) {
+					my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
+					if ($s1 eq "N" ||$s1 eq "-"){
+						$N2++;next;
+					}
+					if ($s2 eq "N" ||$s2 eq "-" ){#missing data, position doesn't matter
+						$N1++;next;
+					}
+					$diffArs{$-[0]}=1;
+					$diff++;
 				}
-				$diffArs{$-[0]}=1;
-				$diff++;
-				#print "$s1-$s2  $-[0]  $- \n";
 			}
 			my $nonDiff = ($mask =~ tr/[\0]//);
 			$nonDiff -= $N1;

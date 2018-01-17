@@ -9,7 +9,7 @@ use Exporter qw(import);
 our @EXPORT_OK = qw(convertMSA2NXS gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap 
 		readMapS renameFastHD findQsubSys emptyQsubOpt qsubSystem
 		readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
-		readFasta writeFasta readFastHD readTabByKey convertNT2AA prefix_find runDiamond median deNovo16S);
+		readFasta writeFasta readFastHD splitFastas readTabByKey convertNT2AA prefix_find runDiamond median deNovo16S);
 
 
 
@@ -23,6 +23,50 @@ sub first_index (&@) {
     }
     return -1;
 }
+
+
+sub splitFastas($ $ $){
+	my ($inF,$num , $path) = @_;
+	system "mkdir -p $path" unless (-d $path);
+	my $fCnt = 0; my $curCnt=0;
+	$inF =~ m/\/([^\/]+)$/;
+	my $inF2 = $1;
+	my @nFiles = ("$path/$inF2.$fCnt");
+	print "$nFiles[-1]\n";
+	if ($num < 2){
+		print "No split required!\n";
+		system "rm $nFiles[-1];ln -s  $inF $nFiles[-1]";
+		return \@nFiles;
+	}
+	if (-e $nFiles[-1] && -e "$path/$inF2.".($num-1) && !-e "$path/$inF2.".($num)){
+		print "seems to exist already\n";
+		for (my $i=1;$i<$num;$i++){
+			push(@nFiles,"$path/$inF2.$i");
+		}
+		return \@nFiles;
+	}
+	system "rm $nFiles[-1]" if (-e $nFiles[-1]);
+	my $protN = `grep -c '^>' $inF`;chomp $protN;
+	my $pPerFile = int($protN/$num)+10;
+	open I,"<$inF"; 
+	open my $out,">".$nFiles[-1];
+	while (my $l = <I>){
+		if ($l =~ m/^>/){
+			$curCnt++;
+			if ($curCnt > $pPerFile){
+				$fCnt++; close $out; 
+				push(@nFiles,"$path/$inF2.$fCnt");
+				open $out,">$nFiles[-1]";
+				$curCnt=0;
+			}
+		}
+		print $out $l;
+	}
+	close I; close $out;
+	return \@nFiles;
+	
+}
+
 
 sub readFasta{
 	my $fil = $_[0];
@@ -60,22 +104,6 @@ sub readFasta{
 }
 
 
-
-sub convertNT2AA($){
- my ($text) = @_;
- # translate a DNA 3-character codon to an amino acid. We take three letter groups from
-# the incoming string of C A T and G and translate them via a Hash.  It's listed vertically
-# so we can label each of the amino acids as we set it up.
-
-#$text = "aaatgaccgatcagctacgatcagctataaaaaccccggagctacgatcatcg";
-
-$text =~ s/[N]*$//i;
-if (length($text) % 3 != 0){
-	my $ltr = length($text) % 3;
-	my $lt = length($text);
-	$text = substr $text,0,($lt -$ltr);
-}
-
 sub median
 {
     my @vals = sort {$a <=> $b} @_;
@@ -90,87 +118,106 @@ sub median
     }
 }
 
-my %convertor = (
-    'TCA' => 'S',    # Serine
-    'TCC' => 'S',    # Serine
-    'TCG' => 'S',    # Serine
-    'TCT' => 'S',    # Serine
-    'TTC' => 'F',    # Phenylalanine
-    'TTT' => 'F',    # Phenylalanine
-    'TTA' => 'L',    # Leucine
-    'TTG' => 'L',    # Leucine
-    'TAC' => 'Y',    # Tyrosine
-    'TAT' => 'Y',    # Tyrosine
-    'TAA' => '*',    # Stop
-    'TAG' => '*',    # Stop
-    'TGC' => 'C',    # Cysteine
-    'TGT' => 'C',    # Cysteine
-    'TGA' => '*',    # Stop
-    'TGG' => 'W',    # Tryptophan
-    'CTA' => 'L',    # Leucine
-    'CTC' => 'L',    # Leucine
-    'CTG' => 'L',    # Leucine
-    'CTT' => 'L',    # Leucine
-    'CCA' => 'P',    # Proline
-    'CCC' => 'P',    # Proline
-    'CCG' => 'P',    # Proline
-    'CCT' => 'P',    # Proline
-    'CAC' => 'H',    # Histidine
-    'CAT' => 'H',    # Histidine
-    'CAA' => 'Q',    # Glutamine
-    'CAG' => 'Q',    # Glutamine
-    'CGA' => 'R',    # Arginine
-    'CGC' => 'R',    # Arginine
-    'CGG' => 'R',    # Arginine
-    'CGT' => 'R',    # Arginine
-    'ATA' => 'I',    # Isoleucine
-    'ATC' => 'I',    # Isoleucine
-    'ATT' => 'I',    # Isoleucine
-    'ATG' => 'M',    # Methionine
-    'ACA' => 'T',    # Threonine
-    'ACC' => 'T',    # Threonine
-    'ACG' => 'T',    # Threonine
-    'ACT' => 'T',    # Threonine
-    'AAC' => 'N',    # Asparagine
-    'AAT' => 'N',    # Asparagine
-    'AAA' => 'K',    # Lysine
-    'AAG' => 'K',    # Lysine
-    'AGC' => 'S',    # Serine
-    'AGT' => 'S',    # Serine
-    'AGA' => 'R',    # Arginine
-    'AGG' => 'R',    # Arginine
-    'GTA' => 'V',    # Valine
-    'GTC' => 'V',    # Valine
-    'GTG' => 'V',    # Valine
-    'GTT' => 'V',    # Valine
-    'GCA' => 'A',    # Alanine
-    'GCC' => 'A',    # Alanine
-    'GCG' => 'A',    # Alanine
-    'GCT' => 'A',    # Alanine
-    'GAC' => 'D',    # Aspartic Acid
-    'GAT' => 'D',    # Aspartic Acid
-    'GAA' => 'E',    # Glutamic Acid
-    'GAG' => 'E',    # Glutamic Acid
-    'GGA' => 'G',    # Glycine
-    'GGC' => 'G',    # Glycine
-    'GGG' => 'G',    # Glycine
-    'GGT' => 'G',    # Glycine
-    );
+sub convertNT2AA($){
+	my ($text) = @_;
+	#print $text."\n";
+	 # translate a DNA 3-character codon to an amino acid. We take three letter groups from
+	# the incoming string of C A T and G and translate them via a Hash.  It's listed vertically
+	# so we can label each of the amino acids as we set it up.
 
-# We don't actually know where the groups of 3 will start in our sample piece of DNA, so we've got
-# three ways of doing the coding ... here's a loop to work out each of the possibilities in turn,
-# leaving the odd extra letters on the beginning or end.
-#for ($s=0; $s<3; $s++) {
-#last; #bs, just need on code
-#        $scrap = substr($text,0,$s);
-#        $main = substr($text,$s);
-#        $main =~ s/(...)/"$convertor{uc $1}" || "?"/eg;
-#        print "$scrap$main\n";
-#        }
-$text =~ s/(...)/"$convertor{uc $1}" || "?"/eg;
-$text =~ s/[^ACDEFGHIKLMNPQRSTVWY*]/X/g;
-#die $text;
-return $text;
+	#$text = "aaatgaccgatcagctacgatcagctataaaaaccccggagctacgatcatcg";
+
+	$text =~ s/[N]*$//i;
+	if (length($text) % 3 != 0){
+		print "Input not correct length!\n";
+		my $ltr = length($text) % 3;
+		my $lt = length($text);
+		$text = substr $text,0,($lt -$ltr);
+	}
+
+
+
+	my %convertor = (
+		'TCA' => 'S',    # Serine
+		'TCC' => 'S',    # Serine
+		'TCG' => 'S',    # Serine
+		'TCT' => 'S',    # Serine
+		'TTC' => 'F',    # Phenylalanine
+		'TTT' => 'F',    # Phenylalanine
+		'TTA' => 'L',    # Leucine
+		'TTG' => 'L',    # Leucine
+		'TAC' => 'Y',    # Tyrosine
+		'TAT' => 'Y',    # Tyrosine
+		'TAA' => '*',    # Stop
+		'TAG' => '*',    # Stop
+		'TGC' => 'C',    # Cysteine
+		'TGT' => 'C',    # Cysteine
+		'TGA' => '*',    # Stop
+		'TGG' => 'W',    # Tryptophan
+		'CTA' => 'L',    # Leucine
+		'CTC' => 'L',    # Leucine
+		'CTG' => 'L',    # Leucine
+		'CTT' => 'L',    # Leucine
+		'CCA' => 'P',    # Proline
+		'CCC' => 'P',    # Proline
+		'CCG' => 'P',    # Proline
+		'CCT' => 'P',    # Proline
+		'CAC' => 'H',    # Histidine
+		'CAT' => 'H',    # Histidine
+		'CAA' => 'Q',    # Glutamine
+		'CAG' => 'Q',    # Glutamine
+		'CGA' => 'R',    # Arginine
+		'CGC' => 'R',    # Arginine
+		'CGG' => 'R',    # Arginine
+		'CGT' => 'R',    # Arginine
+		'ATA' => 'I',    # Isoleucine
+		'ATC' => 'I',    # Isoleucine
+		'ATT' => 'I',    # Isoleucine
+		'ATG' => 'M',    # Methionine
+		'ACA' => 'T',    # Threonine
+		'ACC' => 'T',    # Threonine
+		'ACG' => 'T',    # Threonine
+		'ACT' => 'T',    # Threonine
+		'AAC' => 'N',    # Asparagine
+		'AAT' => 'N',    # Asparagine
+		'AAA' => 'K',    # Lysine
+		'AAG' => 'K',    # Lysine
+		'AGC' => 'S',    # Serine
+		'AGT' => 'S',    # Serine
+		'AGA' => 'R',    # Arginine
+		'AGG' => 'R',    # Arginine
+		'GTA' => 'V',    # Valine
+		'GTC' => 'V',    # Valine
+		'GTG' => 'V',    # Valine
+		'GTT' => 'V',    # Valine
+		'GCA' => 'A',    # Alanine
+		'GCC' => 'A',    # Alanine
+		'GCG' => 'A',    # Alanine
+		'GCT' => 'A',    # Alanine
+		'GAC' => 'D',    # Aspartic Acid
+		'GAT' => 'D',    # Aspartic Acid
+		'GAA' => 'E',    # Glutamic Acid
+		'GAG' => 'E',    # Glutamic Acid
+		'GGA' => 'G',    # Glycine
+		'GGC' => 'G',    # Glycine
+		'GGG' => 'G',    # Glycine
+		'GGT' => 'G',    # Glycine
+		);
+
+	# We don't actually know where the groups of 3 will start in our sample piece of DNA, so we've got
+	# three ways of doing the coding ... here's a loop to work out each of the possibilities in turn,
+	# leaving the odd extra letters on the beginning or end.
+	#for ($s=0; $s<3; $s++) {
+	#last; #bs, just need on code
+	#        $scrap = substr($text,0,$s);
+	#        $main = substr($text,$s);
+	#        $main =~ s/(...)/"$convertor{uc $1}" || "?"/eg;
+	#        print "$scrap$main\n";
+	#        }
+	$text =~ s/(...)/"$convertor{uc $1}" || "?"/eg;
+	$text =~ s/[^ACDEFGHIKLMNPQRSTVWY*]/X/g;
+	#die $text;
+	return $text;
 }
 
 
@@ -510,7 +557,7 @@ sub readMap{
 	my $Scnt = defined $_[1] ? $_[1] : 0;
 	my %ret = defined $_[2] ? %{$_[2]} : (); 
 	my %agBP = defined $_[3] ? %{$_[3]} : ();
-	my $folderStrClassical = defined $_[4] ? $_[4] : 0;
+	my $folderStrClassical = defined $_[4] ? $_[4] : -1;
 #die "$folderStrClassical\n";
 	my @order = exists $ret{smpl_order} ? @{$ret{smpl_order}} : ();
 	my $dirCol = -1; my $smplCol = 0; my $rLenCol = -1; my $SeqTech = -1; my $SmplPrefixCol = -1;
@@ -521,6 +568,7 @@ sub readMap{
 	my $baseID = ""; my $mocatFiltPath = "";
 	my $inDirSet = 0;
 	my $cnt = -1;
+	my $infFoldClass = -1;
 	my @dir2dirsA;
 	my %trackMGs; my %trackAGs; #hashes to track the last (final) sample in each mapgroup.. important to know this to check if assembly / mapping is done 
 	my %memberMGs ; my %memberAGs ;
@@ -570,7 +618,19 @@ sub readMap{
 		#die "$ret{$curSmp}{rddir} $dirCol $cdir $curSmp\n $smplCol $dirCol\n";
 		if ($SmplPrefixCol>=0){$cdir2 = $spl[$SmplPrefixCol];; $ret{$curSmp}{prefix} = $cdir2;} else {$ret{$curSmp}{prefix} = "";}
 		$cdir2.="/" unless ($cdir2 =~ m/\/$/);
-		if ($folderStrClassical){
+		
+		
+		if ($folderStrClassical== -1){
+			if (-d  $dir2out.$cdir2 && !-d $dir2out.$curSmp){
+				if ($infFoldClass==0){die "readMap: Inferring old/new folder structure failed, as both folders seem to be valid\n";}
+				$ret{$curSmp}{wrdir} = $dir2out.$cdir2;
+				$infFoldClass = 1;
+			} else {
+				if ($infFoldClass==1){die "readMap: Inferring old/new folder structure failed, as both folders seem to be valid\n";}
+				$ret{$curSmp}{wrdir} = $dir2out.$curSmp."/";
+				$infFoldClass = 0;
+			}
+		}elsif ($folderStrClassical == 1){
 			$ret{$curSmp}{wrdir} = $dir2out.$cdir2;
 		} else {
 			$ret{$curSmp}{wrdir} = $dir2out.$curSmp."/";
@@ -749,13 +809,15 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH --cpus-per-task  $ncores\n#SBATCH -o $tmpsh.otxt\n"; #\n#SBATCH -n  $ncores
 		print O "#SBATCH --tmp=$tmpSpace\n#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
 		print O "#SBATCH -p $queues\n";
-		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
-		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
+		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";##\$ -v TMPDIR=/dev/shm\n";
+		print O "#\$ -V\n";
+		#print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n"; #causes problems..
 	} elsif ($qmode eq "sge"){
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
 		print O "#!/bin/bash\n#\$ -S /bin/bash\n#\$ -cwd\n#\$ -pe ".$optHR->{qsubPEenv}." $ncores\n#\$ -o $tmpsh.otxt\n#\$ -e $tmpsh.etxt\n#\$ -l h_vmem=$mem\n";
-		print O "#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n#\$ -v TMPDIR=/dev/shm\n";
-		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
+		print O "#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";#\$ -v TMPDIR=/dev/shm\n";
+#		print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n";
+		print O "#\$ -V\n";
 	} else {$LSF = 1;$qbin="bsub";
 		print O "#!/bin/bash\n";
 		print O "export LD_LIBRARY_PATH=/g/bork3/home/hildebra/env/env/miniconda/lib/:/g/bork3/home/hildebra/env/zlib-1.2.8/:/g/bork8/costea/boost_1_53_0/:/shared/ibm/platform_lsf/9.1/linux2.6-glibc2.3-x86_64/lib:/g/bork3/x86_64/lib64:/g/bork3/x86_64/lib:\${LD_LIBRARY_PATH}\n\n";

@@ -24,8 +24,8 @@ sub sanityCheckCorr;
 sub specImatrix;
 sub createAreadSpecItax;
 
-my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/"; my $freeze11=1;
-#my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_2017";my $freeze11=0;
+#my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/"; my $freeze11=1;
+my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_f11/";my $freeze11=0;
 #progenomes.specIv2_2
 my $globalCorrThreshold = 0.8; # determines cutoff, when still to accept correlating genes into specI
 my $reblast=0;#do blast again?
@@ -53,8 +53,6 @@ my $motuDir = "";#"/g/bork3/home/hildebra/DB/MarkerG/mOTU";
 #$hr1 = readNCBI("/g/bork3/home/hildebra/DB/NCBI/ncbi_tax_table_synonyms_2014-01-23.txt");
 #my %NTax = %{$hr1};
 
-my $hr1 = read_matrix("$GCd/FMG.subset.mat");
-my %FMGmatrix= %{$hr1};
 #$hr1 = read_speci_tax("$SpecID/specI.tax");
 #my %specItax = %{$hr1};
 #annotate against DB using lambda
@@ -65,7 +63,8 @@ if (0){ #too general
 }
 
 my %specIid;my %specItax;
-open I,"<$SpecID/progenomes.specIv2_2";
+#open I,"<$SpecID/progenomes.specIv2_2";
+open I,"<$SpecID/prok-refdb-v11.0.0_specI-v2_clusters-v1.map" or die "Can't open in map\n";
 while (<I>){next if (m/^#/);chomp; my @xx = split /\t/;$specIid{$xx[1]} = $xx[0];$xx[1]=~m/^(\d+)\./; $specItax{$xx[0]}=$1;}
 close I;
 my %specItaxM; #real matrix with tax levels
@@ -107,7 +106,7 @@ foreach (@catsPre){
 		chomp $line; @spl = split /\t/,$line;
 		next if (passBlast(\@spl,$reqID)==0);
 		#next if (exists $Q2S{$spl[0]});
-		$spl[1] =~ m/^(.*\..*)\./;
+		$spl[1] =~ m/^([^\.]*\..[^\.]*)\./;
 		die "can't find specI $1\n" unless (exists $specIid{$1});
 		#get specI assignments
 		my $speci= $specIid{$1};
@@ -131,6 +130,9 @@ foreach (@catsPre){
 #die;
 #print "Done initial blast\n$MGdir\n";
 #foreach (sort {$COGass{$a} cmp $COGass{$b}} keys %COGass){print "$_ $FMGcutoffs{$_}:  $COGass{$_}($COGDBLass{$_})\n";}
+
+my $hr1 = read_matrix("$GCd/FMG.subset.mat");
+my %FMGmatrix= %{$hr1};
 
 my %gene2specI; my %specIprofiles; my %SpecIgenes2;
 #sort out best multi hit by correlation analysis
@@ -162,7 +164,7 @@ foreach (@catsPre){
 		
 		#2 gene not already assigned in first high confidence pass
 		next if (exists $gene2specI{$gid});
-		$spl[1] =~ m/^(.*\..*)\./;
+		$spl[1] =~ m/^([^\.]*\.[^\.]*)\./;
 		die "can't find specI $1\n" unless (exists $specIid{$1});
 		#get specI assignments
 		my $speci= $specIid{$1};
@@ -581,6 +583,9 @@ sub createAreadSpecItax{
 			chomp $l; my @spl = split /\t/,$l;
 			#if ($cnt == 0){}
 			my $id = shift @spl;
+			while (@spl < 7){
+				push(@spl,"?");
+			}
 			$ret{$id} = \@spl;
 		}
 		close I;
@@ -595,6 +600,7 @@ sub createAreadSpecItax{
 		push (@spids,$k);
 
 	}
+	#die @taxids."\n";
 	#die "python /g/bork3/home/hildebra/dev/python/get_ranks.py ".join(" ",@taxids);
 	if (@taxids>0){
 		print "Detecting ".@taxids." new taxids\n";

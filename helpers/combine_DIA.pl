@@ -15,7 +15,7 @@ sub writeMat;
 #MOHparse.MOH.gene.cnts.gz
 #NOGparse.NOG.cat.cnts.gz
 #NOGparse.NOG.gene.cnts.gz
-my @DBs = ("ABRc","CZy","NOG","KGM"); # ("ABRc","KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
+my @DBs = ("ABRc"); # ("ABRc","KGB","KGE","CZy","NOG","ABR","MOH","KGM","ACL");
 my @modDBs = ("KGM");
 #@DBs = ("NOG","KGB","KGE"); # ("KGB","KGE","CZy","NOG","ABR","MOH");#("NOG","CZy","MOH");
 #@DBs = ("NOG");#("NOG","CZy","MOH");
@@ -37,9 +37,14 @@ my $inD = $ARGV[0];
 $inD .= "/" unless ($inD =~ m/\/$/);
 my $outD1 = $inD."pseudoGC/FUNCT/";
 system "mkdir -p $outD1" unless (-d $outD1);
-my ($hrm,$hr2) = readMapS($inD."LOGandSUB/inmap.txt",0);
+my ($hrm,$hr2) = readMapS($inD."LOGandSUB/inmap.txt",-1);
 my %map = %{$hrm};
-my @samples = @{$map{smpl_order}};
+#my @samples = @{$map{smpl_order}};
+#if (!-d $map{$samples[0]}{wrdir}){ #check for new way of reading dir
+#	($hrm,$hr2) = readMapS($inD."LOGandSUB/inmap.txt",0);
+#	%map = %{$hrm};
+#	@samples = @{$map{smpl_order}};
+#}
 #die "@samples\n";
 #find out if subfolders exists
 my %DBsD;my $testD;
@@ -67,7 +72,16 @@ foreach my $DB (@DBs){
 	closedir D;
 	#die "@subDirs\n\n";
 	$DBsD{$DB} = \@subDirs;
+
+	foreach my $smpl(@samples){ #check that diamond blastx finished properly
+		my $dir2rd = $map{$smpl}{wrdir};
+		if (!-e "$dir2rd/diamond/dia.$DB.blast.srt.gz"){
+			die "Can't find base diamond output for $dir2rd\n";
+		}
+	}
+
 }
+#die;
 #print "D1\n";
 #look in each subdir specific to DB for valid *cat file to get the TAXs available
 foreach my $DB (@DBs){
@@ -81,14 +95,15 @@ foreach my $DB (@DBs){
 	opendir D,$testD or die "Can't open dir $testD\n";
 	my @files = readdir D;closedir D;
 	my @tmp; foreach (@files){push @tmp,$_ if (m/^$DB.*cat.*/);}
-	#print "@tmp\n";
+	if (@tmp == 0){#search for another pattern
+		#print "XXXX\n";
+		foreach (@files){push @tmp,$_ if (m/^${DB}parse*/);}
+	}
 	my @ins;
 	foreach my $v (@tmp){
-		#print $v."\n";
-		#NOGparse.NOG.FNG.cnt.cat.cnts.gz
 		push @ins,$1 if ($v =~ m/$DB.?parse\.$DB\.(\w+)\.cnt/);
 	}
-	#print "@ins\n";
+	print "@ins\n";
 	$Taxs{$DB} = \@ins;
 }
 #die;
@@ -117,6 +132,7 @@ foreach my $DB (@DBs){
 				my %CGsums=(); my %CTsums = ();
 				#$genes{1}{gg} = "falk";
 				#die $genes{1}{gg};
+				#die "$TAX\n";
 				foreach my $smpl(@samples){
 					my $dir2rd = $map{$smpl}{wrdir};
 					my $SmplName = $map{$smpl}{SmplID};
@@ -126,7 +142,7 @@ foreach my $DB (@DBs){
 					
 					#print $DiaCATf."\n";
 					#MOHparse.MOH.gene.cnts.gz
-					if ($DB ne "NOG" && $DB ne "KGB" && $DB ne "KGE" && $DB ne "KGM"&& $DB ne "ABRc"){
+					if ($DB ne "NOG" &&$DB ne "PTV" && $DB ne "PAB" &&$DB ne "PTV" &&  $DB ne "KGB" && $DB ne "KGE" && $DB ne "KGM"&& $DB ne "ABRc"){
 						$DiaCATf = "$dir2rd/diamond/$deepDir/$DB"."parse.$DB.$TAX.$NORM.gene.cnts.gz" ;
 					} else {
 						$DiaCATf = "$dir2rd/diamond/$deepDir/$DB"."parse.$TAX.$NORM.CATcnts";
@@ -155,6 +171,7 @@ foreach my $DB (@DBs){
 							#die;
 						}
 					}
+					#die "$DiaCATf\n";
 					my ($I,$ok) = gzipopen($DiaCATf,"Diamond cat",0);
 					if (!$ok){ $failCOG{$smpl}=1;
 						print "$smpl fail\n";

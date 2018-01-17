@@ -10,7 +10,7 @@
 #for Jure ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/JureTest 1 95
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/simus2.txt /g/scb/bork/hildebra/SNP/GCs/SimuB 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_sm.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/soil_ex.map,/g/scb/bork/hildebra/data2/refData/Soil/PNAS_refs/other_soil.map,/g/scb/bork/hildebra/data2/refData/Soil/howe2014/iowa.map,/g/scb/bork/hildebra/data2/Soil_finland/soil_map.txt /g/scb/bork/hildebra/SNP/GCs/SoilCatv3 1 95 /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.fna /g/bork3/home/hildebra/data/TAMOC/FinSoil/GlbMap/extraGenes_all.faa
-#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/drama2.map /g/scb/bork/hildebra/SNP/GCs/DramaGCv2 1 95
+#ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/drama2.map /g/scb/bork/hildebra/SNP/GCs/DramaGCv3.1 1 95
 #ex ./geneCat.pl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/maps/ 1 95
 #faa generation from gene  catalog 
 #ex ./geneCat.pl ? /g/bork1/hildebra/SNP/GC/T2_GNM3_ABR protExtract 
@@ -22,9 +22,9 @@ use warnings;
 use strict;
 use File::Basename;
 use Cwd; use English;
-use Mods::GenoMetaAss qw( readMapS qsubSystem emptyQsubOpt systemW readGFF);
+use Mods::GenoMetaAss qw( splitFastas readMapS qsubSystem emptyQsubOpt systemW readGFF);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
-use Mods::TamocFunc qw(attachProteins);
+use Mods::TamocFunc qw(attachProteins attachProteins2 getSpecificDBpaths);
 
 sub readSam; sub readCDHITCls;sub readFasta; 
 sub writeBucket; sub submCDHIT;
@@ -54,13 +54,15 @@ $extraRdsFNA = $ARGV[4] if (@ARGV > 4);#FNA with (predicted) genes, that are to 
 my $extraRdsFAA = "";
 $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $extraRdsFNA
 #die $cdhID."\n";
-my $justCDhit = 0;
+my $justCDhit = 1;
 my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
 my $doSubmit = 1; my $qsubNow = 0;
 my $oldNameFolders= 0;
 my $doFMGseparation = 1; #cluster FMGs separately?
 my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
+my $numCor = 87; my $totMem = 700; #in G
+
 $baseOut.="/" unless ($baseOut =~ m/\/$/);
 my $toLclustering=0;#just write out, no sorting etc
 
@@ -74,6 +76,7 @@ my $hmmBin3 = getProgPaths("hmmer3");#"/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin
 #my $tabixBin = "/g/bork5/hildebra/bin/samtools-1.2/tabix-0.2.6/./tabix";
 #my $bgzipBin = "/g/bork5/hildebra/bin/samtools-1.2/tabix-0.2.6/./bgzip";
 my $mmseqs2Bin = getProgPaths("mmseqs2");
+my $pigzBin = getProgPaths("pigz");
 
 my $rareBin = getProgPaths("rare");#"/g/bork3/home/hildebra/dev/C++/rare/rare";
 my $GCcalc = getProgPaths("calcGC_scr");#"perl $thisDir/secScripts/calcGC.pl";
@@ -139,7 +142,6 @@ if ($mapF =~ m/^\??$/){
 my $qsubDir = $OutD."qsubsAlogs/";
 system "echo \'$version\' > $OutD/version.txt";
 
-my $numCor = 80; my $totMem = 400; #in G
 #my $defaultsCDH =""; 
 my %map; my %AsGrps; my @samples;
 my $bucketCnt = 0; my $cnt = 0;
@@ -155,7 +157,10 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	mergeClsSam($baseOut,$cdhID);
 	exit(0);
 } elsif($mapF eq "MGS"){ #create MGS/MGU with canopy clustering
-	canopyCluster($OutD,$tmpDir);
+	my $numCor2 = $numCor;
+	if (@ARGV > 2){$numCor2 = $ARGV[2];}
+	#die "$numCor2\n";
+	canopyCluster($OutD,$tmpDir,$numCor2);
 	exit(0);
 }elsif ($mapF eq "FMG_extr"){
 	die "deprecated, use helpers/extrAllE100GC.pl\n";
@@ -218,8 +223,47 @@ if ($justCDhit && $toLclustering){
 	print "Direct output to file\n";
 }
 
+print "Checking if all requires input files are present..\n";
 
 my @skippedSmpls; my %uniqueSampleNames; my $doubleSmplWarnString = "";
+#first check if all input is present
+foreach my $smpl(@samples){
+	last if ($justCDhit==1);
+	my $dir2rd = $map{$smpl}{wrdir};
+	if ($map{$smpl}{ExcludeAssem} eq "1"){next;}
+	if ($map{$smpl}{dir} eq "" ){#very specific read dir..
+		if ($map{$smpl}{SupportReads} ne ""){
+			$dir2rd = "$baseOut$smpl/";	
+		} else {
+			die "Can;t find valid path for $smpl\n";
+		}
+	} 
+	my $assGo = 0;
+	my $cAssGrp = $map{$smpl}{AssGroup};
+	$AsGrps{$cAssGrp}{CntAss} ++;	
+	my $metaGD = "$dir2rd/assemblies/metag/";
+	if (!-e "$metaGD/longReads.fasta.filt.sto" && !-e "$metaGD/scaffolds.fasta.filt"){$metaGD = `cat $dir2rd/assemblies/metag/assembly.txt`; chomp $metaGD;}
+	my $inFMGd = "$metaGD/ContigStats/FMG/";
+	if ($AsGrps{$cAssGrp}{CntAss}  >= $AsGrps{$cAssGrp}{CntAimAss} ){ $assGo = 1; $AsGrps{$cAssGrp}{CntAss}=0;}
+	unless ($assGo){ next;}#print "Not last in comb assembly: ".$map{$smpl}{dir}."\n";
+	if ((!-e "$metaGD/scaffolds.fasta.filt" || !-e "$metaGD/longReads.fasta.filt") && !-e "$metaGD/$path2nt"){# && -d $inFMGd){
+		print "Skipping $dir2rd\n";
+		die "no ass1\n $metaGD\n$dir2rd/assemblies/metag/assembly.txt\n" unless (-e "$metaGD/scaffolds.fasta.filt" && !-e "$metaGD/longReads.fasta.filt" ); 
+		die "no ass2\n $$metaGD/longReads.fasta.filt\n" unless (-e "$metaGD/longReads.fasta.filt" ); 
+		die "no NT\n" unless (-e "$metaGD/$path2nt");
+		push(@skippedSmpls,$map{$smpl}{dir});
+		next;
+	}
+	my $inGenesF = "$metaGD/$path2nt";
+	my $inGenesGFF = "$metaGD/$path2gff";
+	die "Gene predictions not present: $inGenesF\n" if (!-e $inGenesF);
+	die "Gene annotations not present: $inGenesGFF\n" if (!-e $inGenesGFF);
+
+}
+
+print "All required input files seem to be presents.\nAdding up all reads\n";
+
+#now really add all files together
 my $JNUM= -1;
 foreach my $smpl(@samples){
 	$JNUM++;
@@ -241,6 +285,7 @@ foreach my $smpl(@samples){
 	$AsGrps{$cAssGrp}{CntAss} ++;	
 	print $JNUM." - ".$cAssGrp."-".$AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss};
 	if ($AsGrps{$cAssGrp}{CntAss}  >= $AsGrps{$cAssGrp}{CntAimAss} ){ $assGo = 1;}
+	unless ($assGo){print "Not last in comb assembly: ".$map{$smpl}{dir}."\n"; next;}
 	my $SmplName = $map{$smpl}{SmplID};
 	#$dir2rd = "/g/scb/bork/hildebra/SNP/SimuL/sample-0/";
 	my $metaGD = "$dir2rd/assemblies/metag/";
@@ -248,7 +293,6 @@ foreach my $smpl(@samples){
 	my $inFMGd = "$metaGD/ContigStats/FMG/";
 	#print "\n$metaGD\n";
 	#print "$dir2rd/assemblies/metag/scaffolds.fasta.filt\n";
-	unless ($assGo){print "Not last in comb assembly: ".$map{$smpl}{dir}."\n"; next;}
 	if ((!-e "$metaGD/scaffolds.fasta.filt" || !-e "$metaGD/longReads.fasta.filt") && !-e "$metaGD/$path2nt"){# && -d $inFMGd){
 		print "Skipping $dir2rd\n";
 		die "no ass1\n $metaGD\n$dir2rd/assemblies/metag/assembly.txt\n" unless (-e "$metaGD/scaffolds.fasta.filt" && !-e "$metaGD/longReads.fasta.filt" ); 
@@ -429,7 +473,7 @@ exit(0);
 
 
 sub canopyCluster{
-	my ($GCd,$tmpD) = @_;
+	my ($GCd,$tmpD,$NC) = @_;
 	my $canBin = "/g/bork3/home/hildebra/bin/canclus/cc_x64.bin";
 	my $matF_pre = "$GCd/Matrix.mat";
 	my $matF = "$GCd/Matrix.norm.mat";
@@ -440,9 +484,9 @@ sub canopyCluster{
 		#print "Done\n";
 	}
 	my $oD = "$GCd/Canopy/";	system "rm -r $oD;mkdir -p $oD";
-	my $numCPU = 33; my $jdeps = "";
+	my $jdeps = "";
 	#die "Can't find matrix infile $matF\n" unless (-e $matF);
-	$cmd .= "$canBin -i $matF -o $oD/clusters.txt -c $oD/profiles.txt -p TC -n $numCPU --die_on_kill --stop_criteria 250000 --cag_filter_min_sample_obs 5 --cag_filter_max_top3_sample_contribution 1 --filter_max_top3_sample_contribution 1\n";
+	$cmd .= "$canBin -i $matF -o $oD/clusters.txt -c $oD/profiles.txt -p TC -n $NC --die_on_kill --stop_criteria 250000 --cag_filter_min_sample_obs 5 --cag_filter_max_top3_sample_contribution 1 --filter_max_top3_sample_contribution 1\n";
 #	print $cmd 
 	#my ($jdep,$txtBSUB) = qsubSystem($qsubDir."CanopyCL.sh",$cmd,$numCPU,"4G","CAN",$jdeps,"",1,[],$QSBoptHR);print "MGS call send off\n"; 
 	
@@ -466,18 +510,19 @@ sub cleanUpGC(){#not used any longer
 
 sub readGeneIdx($){
 	my ($in) = @_;
-	my %ret;
+	my %ret; my $gCnt=0;
 	open I,"<$in" or die "Can't read gene index file $in\n";
 	while(my $line=<I>){
 		next if ($line =~ m/#/);
 		chomp $line;
 		my @spl = split(/\t/,$line);
 		$ret{$spl[2]} = $spl[0];
+		$gCnt++;
 		#print $spl[2] ." ". $spl[0]."\n";
 	}
 	close I;
 	print "Gene Index read\n";
-	return (\%ret);
+	return (\%ret,$gCnt);
 }
 #simply rewrites original fasta names to counts used in my genecats
 sub rewriteFastaHdIdx($ $){
@@ -488,7 +533,7 @@ sub rewriteFastaHdIdx($ $){
 	while (my $l = <I>){
 		if ($numHd > 100){
 			print "Seems like $inf heads were already reformated to number sheme!\n";
-			system "rm $inf.tmp"; close I; close O; return;
+			 close I; close O; system "rm $inf.tmp"; return;
 		}
 		if ($l =~ m/^>/){
 			chomp $l;
@@ -516,17 +561,23 @@ sub protExtract{
 	#my $incl = $inD."Matrix.genes2rows.txt";
 	system("rm -f $protF");
 	print "Writing to new proteins file: \n$protF\n";
-	my $geneIdxH = readGeneIdx($inD."Matrix.genes2rows.txt");
+	
+	my ($geneIdxH,$numGenes) = readGeneIdx($inD."Matrix.genes2rows.txt");
 	rewriteFastaHdIdx($inD."compl.incompl.95.fna",$geneIdxH);
 	
 	my %linV = %{$geneIdxH}; #represent gene name to matrix ID
 	my @ordG = sort keys %linV;
+	#temp DEBUG
+	#my @ordG = ('Va48.6M6__C64835_L=218572=_153');
+	if (@ordG != $numGenes){ die "NUmber of genes read not equal to actual number of genes. Not enough mem?\n";}
 	my $curSmpl=""; my $ctchStr = ""; my $cnt=0; 
-	my $ctchStrXtr = ""; 
+	my @ctchAr=();
+	my $ctchStrXtr = "";
+	print "Starting Protein Extraction from source assembly folders\n";
 	#collects all genes from a given sample, that is serving as seed gene for clustering
 	for my $k (@ordG){
 		my @spl = split(/__/, $k);
-		#print "$k";
+		#print "$k\n";
 		if (@spl == 1){#this is an extra protein
 			#die "@spl\n";
 			$ctchStrXtr .= "'$k' ";
@@ -535,7 +586,7 @@ sub protExtract{
 		if ($curSmpl ne $spl[0]){ #this part writes all protein IDs collected for current sample to tmp file
 			#use faidx to extract all collected gene IDs for current sample
 			if ($curSmpl eq ""){
-				$curSmpl = $spl[0]; $ctchStr="";
+				$curSmpl = $spl[0]; 
 			} else {
 				unless (exists ($map{$curSmpl})){$curSmpl = $map{altNms}{$curSmpl} if (exists ($map{altNms}{$curSmpl}));}
 				unless (exists ($map{$curSmpl})){#also extra protein, but with __ marker in them
@@ -553,16 +604,18 @@ sub protExtract{
 #				my $protIn = $metaGD."/".$path2aa;
 				#unless (-e $protIn){$protIn = $map{$curSmpl}{wrdir}."/"."assemblies/metag/genePred/proteins.faa.shrtHD.faa";}
 				die "prot file $protIn doesnt exits\n" unless (-e $protIn);
-				open O,">$inD/tmp.txt";print O $ctchStr;close O;
-				attachProteins("$inD/tmp.txt",$protF,$protIn,$geneIdxH);
+				#open O,">$inD/tmp.txt";print O $ctchStr;close O;
+				#attachProteins("$inD/tmp.txt",$protF,$protIn,$geneIdxH);
+				attachProteins2(\@ctchAr,$protF,$protIn,$geneIdxH);
 				#systemW("cat $basD/tmp.txt | xargs samtools faidx $protIn  >> $protF");
 				#print $k."\n";
 				#die $protIn."\n";
-				$curSmpl = $spl[0];$ctchStr="";
+				$curSmpl = $spl[0];$ctchStr="";@ctchAr=();
 				#print $curSmpl."\n";
 			}
 		}
-		$ctchStr.="'$k' ";
+		#$ctchStr.="'$k' ";
+		push(@ctchAr,$k);
 		$cnt++;
 		#die "$ctchStr\n" if ($cnt == 10);
 	}
@@ -578,10 +631,13 @@ sub protExtract{
 		}
 #		my $metaGD = `cat $map{$curSmpl}{wrdir}/assemblies/metag/assembly.txt`; chomp $metaGD;
 #		my $protIn = $metaGD."/".$path2aa;
-		open O,">$inD/tmp.txt";print O $ctchStr;close O;
-		attachProteins("$inD/tmp.txt",$protF,$protIn,$geneIdxH);
+#		open O,">$inD/tmp.txt";print O $ctchStr;close O;
+#		attachProteins("$inD/tmp.txt",$protF,$protIn,$geneIdxH);
+		attachProteins2(\@ctchAr,$protF,$protIn,$geneIdxH);
 	}
 	
+	unlink "$inD/tmp.txt";
+	print "rewritten $cnt proteins, expected $numGenes\n";
 	
 	#extra added proteins (not from MATAFILER assembly)
 	if ($protXtrF ne ""){
@@ -593,8 +649,6 @@ sub protExtract{
 	#new cluster numbers and one file with Idx
 	combineClstr("$inD/compl.incompl.95.fna.clstr","$inD/Matrix.genes2rows.txt") ;
 
-	unlink "$inD/tmp.txt";
-	print "rewritten $cnt proteins\n";
 }
 sub combineClstr(){
 	my ($clstr,$idx) = @_;
@@ -783,7 +837,7 @@ sub submCDHIT($ $ $ $ $){
 		my $newMapp = ""; $newMapp = "-oldMapStyle" if ($oldNameFolders);
 		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Matrix $newMapp -map $mapF -refD $assDirs\n"; #add flag -useCoverage to get coverage estimates instead
 		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Mat.cov -map $mapF -refD $assDirs -useCoverage\n"; #coverage mat
-		$cmd .= "gzip $OutD/Mat.cov* \n";
+		$cmd .= "$pigzBin -p $numCor $OutD/Mat.cov* \n";
 	}
 	
 	$cmd .= "$GCcalc $tmpDir/compl.incompl.$cdhID.fna $tmpDir/compl.incompl.$cdhID.fna.GC\n";
@@ -802,7 +856,7 @@ sub submCDHIT($ $ $ $ $){
 	#$cmd .= cleanUpGC($bdir,$OutD,$cdhID);
 	$cmd .= "rm -f $bdir/SAM/compl.$cdhID.fna.bw2*\n";
 	#cp relevant files to outdir and zip the rest
-	$cmd .= "gzip $bdir/*\n";
+	$cmd .= "$pigzBin -p $numCor $bdir/*\n";
 	$cmd .= "rm -f -r $tmpDir\n";
 	#add gc calcs
 	#these incompletes have to be added to big gene catalog in last step by themselves (avoid mis-center clustering
@@ -1151,72 +1205,91 @@ sub readSam($){
 
 
 
-sub splitFastas($ $ $ $){
-	my ($inF,$num, $DB , $path) = @_;
-	my $protN = `grep -c '^>' $inF`;chomp $protN;
-	system "mkdir -p $path" unless (-d $path);
-	my $pPerFile = int($protN/$num)+1;
-	my $fCnt = 0; my $curCnt=0;
-	$inF =~ m/\/([^\/]+)$/;
-	my $inF2 = $1;
-	my @nFiles = ("$path/$inF2.$DB.$fCnt");
-	open I,"<$inF"; 
-	open my $out,">".$nFiles[-1];
-	while (my $l = <I>){
-		if ($l =~ m/^>/){
-			$curCnt++;
-			if ($curCnt > $pPerFile){
-				$fCnt++; close $out; 
-				push(@nFiles,"$path/$inF2.$DB.$fCnt");
-				open $out,">$nFiles[-1]";
-				$curCnt=0;
-			}
-		}
-		print $out $l;
-	}
-	close I; close $out;
-	return \@nFiles;
-}
 sub eggNOGassign{
 	my ($GCd,$tmpD, $DB) = @_;
 	my $query = "$GCd/compl.incompl.95.prot.faa";
+	my $outD = $GCd."/Anno/Func/";
+	system "mkdir -p $outD" unless (-d $outD);
 	#my $DB = "NOG";
-	my $ncore = 20; my $fastaSplits=5;
+	my $ncore = 40; my $fastaSplits=5;
 	my $globalDiamondDependence = "";
-	unless (-e "$eggDB.db.dmnd"){
+	my $calcDia = 1;
+	
+	my $curDB = "NOG";#CZy,ABRc,KGM,NOG
+	
+	
+	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB,1);
+	if (0 && !-e "$eggDB.db.dmnd"){
 		my $DBcmd .= "$diaBin makedb --in $eggDB -d $eggDB.db -p $ncore\n";
 		my ($jN, $tmpCmd) = qsubSystem($qsubDir."DiamondDBprep.sh",$DBcmd,$ncore,"2G","diaDB","","",1,[],$QSBoptHR);
 		$globalDiamondDependence = $jN;
 	}
-	my $ar = splitFastas($query,$fastaSplits,$DB,$GLBtmp."DB/");
+	
+	print "Splitting catalog into $fastaSplits\n";
+	my $ar = splitFastas($query,$fastaSplits,$GLBtmp."/");
 	my @subFls = @{$ar};
 	my @jdeps; my @allFiles;
+	my $allAss = "$outD/DIAass_$shrtDB.srt.gz";
+	$calcDia = 0 if (-e $allAss);
 	#my $N = 20;
 	my $jdep="";
+	#die "$calcDia\n$allAss\n";
 	for (my $i =0 ; $i< @subFls;$i++){
 		my $cmd = "mkdir -p $tmpD\n";
-		my $outF = "$GCd/DiaAssignment.sub.$i";
-		$cmd = "$diaBin blastp -f tab --compress 1 --sensitive --quiet -d $eggDB.db -q $subFls[$i] -k 3 -e 0.001 -o $outF -p $ncore\n";
+		#my $outF = "$GCd/DiaAssignment.sub.$i";
+		my $outF = "$tmpD/DiaAs.sub.$i.$shrtDB.gz";
+		$cmd .= "$diaBin blastp -f tab --compress 1 --quiet -t $tmpD -d $DBpath$refDB.db -q $subFls[$i] -k 5 -e 1e-5 --sensitive -o $outF -p $ncore\n";
+		#$cmd = "$diaBin blastp -f tab --compress 1 --sensitive --quiet -d $eggDB.db -q $subFls[$i] -k 3 -e 0.001 -o $outF -p $ncore\n";
 		#$cmd .= "$diaBin view -a $outF.tmp -o $outF -f tab\nrm $outF.tmp* $subFls[$i] \n";
 		my $tmpCmd;
-		my ($jobName,$mptCmd) = qsubSystem($qsubDir."Diamond$i.sh",$cmd,$ncore,"3G","DIA$i",$globalDiamondDependence,"",1,[],$QSBoptHR); #$jdep.";".
-		#print $qsubDir."Diamond.sh\n";
-		push(@jdeps,$jobName);
-		push(@allFiles,$outF.".gz");
+		if ($calcDia){
+			my ($jobName,$mptCmd) = qsubSystem($qsubDir."D$i$shrtDB.sh",$cmd,$ncore,"3G","D$shrtDB$i",$globalDiamondDependence,"",1,[],$QSBoptHR); #$jdep.";".
+			#print $qsubDir."Diamond.sh\n";
+			push(@jdeps,$jobName);
+			push(@allFiles,$outF);
+		}
 		#if ($i==5){die;}
 	}
 	#last job that converges all
-	my $allAss = "$GCd/DIAass_pre.txt";
-	$allAss.=".gz" if ($allFiles[0] =~ m/\.gz$/);
-#	my $cmd= "cat ".join(" ",@allFiles). " > $allAss\n";   #
-	my $cmd= "cat ".join(" ",@allFiles). " > $allAss\n";
-	$cmd .= "rm -f ".join(" ",@allFiles) . "\n";
-	#tr [:blank:] \\t
-	$cmd .= "$secCogBin $allAss $DB 1\n"; #mode==1 to write genecats
+	my $cmd = "";
+	if (!$calcDia){
+	
+	} elsif (0 && @allFiles == 1){
+		$allAss = $allFiles[0];
+	} else {
+		$allAss.=".gz" if ($allAss !~ m/\.gz$/ && $allFiles[0] =~ m/\.gz$/);
+		#my $cmd= "cat ".join(" ",@allFiles). " > $allAss\n";   #
+		$cmd .= "cat ".join(" ",@allFiles). " > $allAss\n";
+		$cmd .= "rm -f ".join(" ",@allFiles) . "\n";
+	}
+	#$cmd .= "$secCogBin $allAss $DB 1\n"; #mode==1 to write genecats
+
+	my $tarAnno = "${allAss}geneAss.gz";
+	#my $finTA = "$outD/$shrtDB.geneA.txt";
+	$cmd .= "$secCogBin -i $allAss -DB $shrtDB -singleSpecies 1  -KOfromNOG 0 -calcGeneLengthNorm 0 -lenientCardAssignments 2 -mode 2 -CPU $ncore -percID 25 -LF $DBpath/$refDB.length -DButil $DBpath -tmp $tmpD -eggNOGmap 0 -minPercSbjCov 0.3 -minBitScore 60 -minAlignLen 60 -eval 1e-7\n";
+	#$cmd.= "cp $tarAnno $finTA\n";
+	#push(@assFiles,$tarAnno);
+	my $tmpP2 = "$tmpD/CNT_1e-7_25//";
+	#copy interesting files to final dir
+	#if ($curDB eq "ABRc"){
+#		$cmd.= "zcat $tmpP2/ABRcparse.ALL.cnt.CATcnts.gz > $outD/ABR_res.txt\n" ;
+#	}
+#	if ($curDB eq "CZy"){
+#		$cmd.= "zcat $tmpP2/CZyparse.ALL.cnt.CATcnts.gz > $outD/CZySubstrates.txt\n";
+#		$cmd.= "zcat $tmpP2/CZyparse.CZy.ALL.cnt.cat.cnts.gz > $outD/CZyEnzymes.txt\n";
+#	}
+#	if ($curDB eq "TCDB"){
+#		$cmd.= "zcat $tmpP2/TCDBparse.ALL.cnt.CATcnts.gz > $outD/TCDB.cats.txt\n";
+#	}
+
+	
 	#create actual COG table
-	$cmd .= "gunzip $GCd/NOGparse.NOG.GENE2NOG.gz\n$rareBin sumMat -i $GCd/Matrix.mat -o $GCd/COGL1.mat -refD $GCd/NOGparse.NOG.GENE2NOG; gzip $GCd/NOGparse.NOG.GENE2NOG.gz\n";
-	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $GCd/COG.mat -refD $allAss\ngzip $allAss\n";
-	$jdep = qsubSystem($qsubDir."collectDIA.sh",$cmd,1,"40G","ColDIA",join(";",@jdeps),"",1,[],$QSBoptHR);
+	$cmd .= "gunzip $tarAnno\n";
+	$tarAnno =~ s/\.gz$//;
+	#$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/${shrtDB}L1.mat -refD $GCd/NOGparse.NOG.GENE2NOG; gzip $GCd/NOGparse.NOG.GENE2NOG.gz\n";
+	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/$shrtDB.mat -refD $tarAnno\ngzip $tarAnno\n";
+	#die "$cmd";
+	$jdep = qsubSystem($qsubDir."colDIA$shrtDB.sh",$cmd,1,"40G","ColDIA",join(";",@jdeps),"",1,[],$QSBoptHR);
 	#return $jdep,$outF;
 }
 
@@ -1224,7 +1297,7 @@ sub FOAMassign{
 	my ($GCd,$tmpD, $DB) = @_;
 	my $query = "$GCd/compl.incompl.95.prot.faa";
 	my $fastaSplits=10;
-	my $ar = splitFastas($query,$fastaSplits,$DB,$GLBtmp."DB/");
+	my $ar = splitFastas($query,$fastaSplits,$GLBtmp."DB/");
 	my @subFls = @{$ar};
 	my @jdeps; my @allFiles;
 	my $N = 20;my $jdep=""; my $colSel = 4;

@@ -7,14 +7,14 @@ use FileHandle;
 use Data::Dumper;
 
 
-use Mods::TamocFunc qw(sortgzblast readTabbed readTabbed2 uniq);
-use Mods::GenoMetaAss qw(gzipwrite gzipopen);
+use Mods::TamocFunc qw(sortgzblast readTabbed readTabbed2 readTabbed3 uniq);
+use Mods::GenoMetaAss qw(gzipwrite gzipopen convertNT2AA);
 use Mods::IO_Tamoc_progs qw(getProgPaths );
 use Getopt::Long qw( GetOptions );
 
 
 sub main;
-sub readGene2COG; sub readNogKingdom;
+sub readGene2COG; sub readNogKingdom; sub createNOGKgd;
 sub readCOGdef; sub readTCDBdef;
 sub readGene2KO;sub readKeggTax;
 sub check_files; sub remove_file;
@@ -52,6 +52,9 @@ my $Card_leniet = 1; #take more CARD hits: eval^(1/$Card_leniet)
 my $calcGL = 1;
 my $noTax=0;
 my $KOfromNOG=0;
+my $checkTaxNog = ""; #reads in NOG assignments of genes and determines tax from these (used for AB production, to check it's not bacterial gene)
+my $writeFastaOut = 0; #extracts the domains that are matching to a hit
+
 
 die "no input args!\n" if (@ARGV == 0 );
 GetOptions(
@@ -63,6 +66,7 @@ GetOptions(
 	"minBitScore=f" => \$minScore,
 	"minAlignLen=i"      => \$minAlLen,
 	"minPercSbjCov=f"      => \$quCovFrac,
+	"minFractQueryCov=f"      => \$quCovFrac,
 	"tmp=s"      => \$tmpD,
 	"DButil=s"	=> \$DButil,
 	"LF=s"	=> \$lengthF,
@@ -73,6 +77,8 @@ GetOptions(
 	"calcGeneLengthNorm=i" => \$calcGL,
 	"singleSpecies=i" => \$noTax,
 	"CPU=i" => \$ncore,
+	"reportDomains=i" => \$writeFastaOut,
+	"NOGtaxChk=s" => \$checkTaxNog, 
 	"percID=i" => \$percID, #percent id similiarity, from 0 - 100
 ) or die("Error in command line arguments\n");
 
@@ -133,12 +139,17 @@ my @aminBLE = split /,/,$minBLE;
 #@aminBLE = ("1e-9") x scalar(@aminPID);
 my @aminPID = ($percID) x scalar(@aminBLE);
 
-my %TCdef; my %PTVdef;
-my %NOGkingd ; my %KEGGtax;
+my %TCdef; my %PTVcat;my %PTVgene;my %PTVgene_def;
+my %NOGkingd ; my %KEGGtax; my %read2NOGkgd;
 my %COGdef ;my %g2COG ; my %c2CAT ; 
 my %cardE; my %cardFunc; my %cardName; 
 my %cardFull;my %cardAux;
 my $tabCats = 0; my $cazyDB = 0; my $ACLdb = 0; my $KGMmode=0;
+
+if ($checkTaxNog ne "" ){
+	%read2NOGkgd = createNOGKgd($checkTaxNog);#0=BAC, 1= aRCH, 2=euks, 3=fung
+	#die;
+}
 if ($mode == 3 || $mode == 4){ #scan for all reads finished
 } elsif ( $DBmode eq "KGB" || $DBmode eq "KGE" || $DBmode eq "KGM"){
 	print "Reading KEGG DBs..\n";
@@ -160,22 +171,40 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	$hr1 = readCOGdef($cogDefF);
 	%COGdef = %{$hr1}; $tabCats = 1;
 	%NOGkingd = readNogKingdom($NOGtaxf);
-} elsif ($DBmode eq "TCDB"){
+
+} elsif ($DBmode eq "TCDB" || $DBmode eq "PTV" ){
 	@kgdOpts = qw (3);
-	my $hr = readTCDBdef($TCDBhir);
-	%TCdef = %{$hr};
 	@kgdName = ("","","","ALL");
 	@kgdNameShrt = ("","","","ALL");
-	print "transporter DB\n";
 	$tabCats =6;
-} elsif ($DBmode eq "PTV"){
-	@kgdOpts = qw (3);
-	my $hr = readTCDBdef($TCDBhir);
-	%PTVdef = %{$hr};
-	@kgdName = ("","","","ALL");
-	@kgdNameShrt = ("","","","ALL");
-	print "PATRIC virulence factors DB\n";
-	$tabCats =6;
+	if ($DBmode eq "TCDB"){
+		$tabCats =6;
+		my $hr = readTCDBdef($TCDBhir);
+		%TCdef = %{$hr};
+		print "transporter DB\n";
+	}
+	if ($DBmode eq "PTV"){
+		$tabCats=8;
+		print "PATRIC virulence factors DB\n";
+		my $hr = readTabbed3($PATRVIRanno,3);
+		%PTVcat = %{$hr};
+		$hr = readTabbed3($PATRVIRanno,1);
+		%PTVgene = %{$hr};
+		$hr = readTabbed3($PATRVIRanno,2);
+		%PTVgene_def = %{$hr};
+		foreach my $k (keys %PTVgene){
+			if ($PTVgene{$k} eq ""  ){
+				if ($PTVgene_def{$k} ne ""){
+					$PTVgene_def{$k} =~ m/^(\S+)/;
+					$PTVgene{$k} = $1;
+				} else {
+					$PTVgene{$k} = "unknwn";
+				}
+			}
+		}
+		#die $PTVcat{'fig|984235.3.peg.1162|VBISalEnt284594_1162|'}."\n";
+	}
+
 } elsif ($DBmode eq "CZy"){
 	@kgdOpts = qw (0 1 2 3 4 5);
 	my $hr = readMohTax($DButil."/MohCzy.tax");
@@ -195,6 +224,12 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	@kgdNameShrt = ("PLA","PRO","VIR","UNC");
 	$ACLdb = 1;
 	print "aclame database\n";
+} elsif ($DBmode eq "PAB"){
+	@kgdOpts = qw (3);
+	@kgdName = ("","","","Fungi");
+	@kgdNameShrt = ("","","","FNG");
+	print "Fungi AntiBiotics production domains DB\n";
+	$tabCats=7;
 } elsif ($DBmode eq "ABRc"){
 	@kgdOpts = qw (3);
 	@kgdName = ("","","","All");
@@ -238,12 +273,26 @@ if ($noTax){
 my $readLim = 1000000; my $lcnt=0;my $lastQ=""; my $stopInMiddle=0; my $reportGeneCat=0;
 my $mergeDiaHit =0;  my $noMerge=0;
 my %COGhits; my %CAThits; my %GENEhits; my $O2; my %OEM;
+my %rds2xtrct;
 my %emFiles ; my %emFilesFinal;
+my %FAO;
+
 for (my $i=0; $i<@aminBLE ; $i++){$COGhits{$i} = {}; $CAThits{$i} = {}; $GENEhits{$i} = {};}
+
 if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 2: write for each gene higher lvl cat
 	#die "$blInf\n";
 	$reportGeneCat = $mode if ($mode >= 1);
 	#insert here KEGG BAC ? EUK fix
+	if ($writeFastaOut){
+		foreach my $x (@kgdOpts){ #open outstream for fasta output
+			for (my $i=0; $i<@aminBLE ; $i++){
+				my $pathXtra = "/CNT_".$aminBLE[$i]."_".$aminPID[$i]."/";
+				my $outPath = $inP.$pathXtra;
+				system "mkdir -p $outPath" unless (-d $outPath);
+				open $FAO{$i}{$x},">$outPath/$DBmode.faa";
+			}
+		}
+	}
 	if ($KGMmode && !-e $blInf){
 		#zcat dia.KGB.blast.gz dia.KGE.blast.gz | sort | gzip > dia.KGM.blast.gz
 		my $KGBf = $blInf; my $KGEf = $blInf; 
@@ -322,7 +371,13 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 	
 	if ($reportEggMapp){foreach my $kk (keys %OEM){	close $OEM{$kk}}}
 	
-	
+	if ($writeFastaOut){
+		foreach my $x (@kgdOpts){
+			for (my $i=0; $i<@aminBLE ; $i++){
+				close $FAO{$i}{$x};
+			}
+		}
+	}
 	if ($writeSumTbls){
 		print"writing Tables\n";
 		for (my $i=0; $i<@aminBLE ; $i++){
@@ -356,9 +411,6 @@ if ($mode == 0 || $mode==1 || $mode == 2){ #mode1 = write gene assignment, mode 
 		remove_file($DBmode."parse",$inP.$pathXtra,$aminBLE[$i]);
 	}
 } else {die"unkown run mode!!!\n";}
-
-if ($mode ==3){
-}
 
 #print "all done\n";
 exit(0);
@@ -521,7 +573,7 @@ sub check_files{
 sub writeAllTable(){
 	my ($outF,$outD,$minBLE,$minPID,$pos) = @_;#,$hr1,$hr2,$hr3) = @_;
 	#die "X";
-	system "mkdir -p $outD" ;#or die "Failed to create out dir $outD\n";
+	system "mkdir -p $outD" unless (-d $outD);#or die "Failed to create out dir $outD\n";
 	my $out = $outD."/".$outF;
 	system "rm -f $out*";
 	my %COGabundance=%{$COGhits{$pos}}; my %CATabundance=%{$CAThits{$pos}}; my %funHit=%{$GENEhits{$pos}};
@@ -540,7 +592,7 @@ sub writeAllTable(){
 				foreach my $k (@kk){print $O $k."\t".$funHit{$normMethod}{$y}{$k}."\n";}
 				close $O;
 			}
-			if ($tabCats != 2 ){#all but KO & CZy
+			if ($tabCats != 2 ){#all but KO & CZy & Patric viru
 				@kk = sort { $COGabundance{$normMethod}{$y}{$b} <=> $COGabundance{$normMethod}{$y}{$a} } keys(%{$COGabundance{$normMethod}{$y}});
 				$O = gzipwrite("$out.$DBmode.$kgdNameShrt[$y].$normMethod.cat.cnts","Dia cat $y Counts");
 				#open O,">$out.$DBmode.cat.cnts"; 
@@ -601,11 +653,16 @@ sub main(){
 	my $bestSbj="";my $bestID=0; my $bestAlLen=0;my $bestQuery = ""; my $bestIDever=0;
 	my $COGexists=0; 
 	my $bestScore = 0; my $CBMmode = 0; my $bestE=1000; my $bestBitScpre=0;
-	
+	my $bestQseq = "";
+	#print "XXX .".@blRes."\n";
 	for( ;$ii<@blRes;$ii++){
 		#print "@{$blRes[$ii]}\n";
+		my $Qseq = "";
+		#$Qseq = pop @{$blRes[$ii]} if ($writeFastaOut);
+		#die "$Qseq\n\n@{$blRes[$ii]}\n";
 		my ($Query,$Subject,$id,$AlLen,$mistmatches,$gapOpe,$qstart,$qend,$sstart,$send,$eval,$bitSc) = @{$blRes[$ii]};
-		#print $Query."\n";
+		$Qseq = @{$blRes[$ii]}[-1] if ($writeFastaOut);
+		#print $Query."  $bitSc\n";
 		#sort by eval #changed from bestE -> bestScore
 		#die "\n".($cardE{$Subject}**(1/$Card_leniet))."\n$cardE{$Subject}\n";
 		#die "Can't find ABRc ID $Subject\n" if ($tabCats==5 && !exists($cardFull{$Subject}) );#|| $cardFull{$Subject}->[2] eq "");
@@ -634,7 +691,9 @@ sub main(){
 						$bestSbj =$Subject; 
 						$bestAlLen=$AlLen;$bestE = $eval; $bestQuery = $Query;
 						$bestBitScpre=$bitSc;
-						$bestID = $id;  
+						$bestID = $id;
+						$bestQseq = ">${bestQuery}__$qstart:$qend:$id\n".convertNT2AA($Qseq)."\n" if ($writeFastaOut);
+						#die "$bestQseq\n";
 						if ($bestID > $bestIDever){$bestIDever=$bestID;}
 			}
 		} #else { print "NOT HIT";}
@@ -655,6 +714,9 @@ sub main(){
 	} elsif ($cazyDB || $tabCats==0 || $tabCats == 6) {
 		@splC = split /\|/,$bestSbj;
 	} 
+	
+	##########################################
+	#take care of tax assignments / splits
 	if ($noTax){
 		;
 	} elsif ($cazyDB){
@@ -679,23 +741,19 @@ sub main(){
 			$curKgd = $KEGGtax{$splC[0]};
 		}  #else {print "X";}
 	} elsif ($tabCats == 1){ #NOG
-		$bestSbj =~ m/^(\d+)\./; my $taxid = $1;
+		my $taxid = "";
+		$bestSbj =~ m/^(\d+)\./; $taxid = $1;
 		if (!exists $NOGkingd{$taxid}){print "Can't find $taxid in ref tax\n";}
 		$curKgd = $NOGkingd{$taxid} if (!$CBMmode);
 	}
 	
 	#print $curKgd."SSS\n";
-	
-	if ($tabCats == 1){
-		unless (exists( $g2COG{$bestSbj} )){
-			$COGfail++;	return;
-		}
-		$curCOG = $g2COG{$bestSbj};
-		$curDef = $COGdef{$curCOG} if (exists $COGdef{$curCOG});
-	}
 	if ($reportEggMappNow){
 		print  {$OEM{$curKgd}} "$bestQuery\t$bestSbj\t$bestE\t$bestBitScpre\n" ;
 	}
+
+	##############################
+	# merged read pair? double the score!
 	my $lpCnt=0;
 	my $score = 0;
 	if ($bestQuery =~ m/\/[12]$/){
@@ -705,8 +763,31 @@ sub main(){
 		$mergeDiaHit ++ ; $score = 2 ;
 		#print "HIT";
 	}
+
+
 	
-	if ($tabCats==5){#ABR CARD
+	##############################
+	# hierachy assignments etc
+	if ($tabCats == 1){
+		unless (exists( $g2COG{$bestSbj} )){
+			$COGfail++;	return;
+		}
+		$curCOG = $g2COG{$bestSbj};
+		$curDef = $COGdef{$curCOG} if (exists $COGdef{$curCOG});
+	} elsif ($tabCats==7){#AB production
+		$bestSbj =~ m/;ID=([0-9\.]+);od=(\S+);ud=(\S+)$/;
+		if ($bestID< $1 ){return;}
+		$curCOG = $3;
+		$curCat = $2;
+		my $bestQueryK = $bestQuery; $bestQueryK =~ s/\/\d$//;
+		
+		if (exists($read2NOGkgd{$bestQueryK})){
+			if ( $read2NOGkgd{$bestQueryK} < 2){
+				return;
+			}
+		}
+		#die "$bestSbj\n$1\n$2\n$3\n$bestID\n";
+	} elsif ($tabCats==5){#ABR CARD
 		#$curCOG = $cardName{$bestSbj};
 		$curCOG = $cardFull{$bestSbj}->[1];
 	}elsif ($tabCats == 2){ #KEGG
@@ -736,7 +817,25 @@ sub main(){
 		}
 		#print "$curDef  $curCatDef\n"
 		#die $curCOG."\n";
+	} elsif($tabCats==8){ #PATRIC virulence
+		unless (exists($PTVcat{$bestSbj})){
+			die "Can't find PATRICK cat for $bestSbj\n";
+		}
+		$curCat = $PTVcat{$bestSbj};
+		$curDef = $PTVgene_def{$bestSbj};
+		$curCOG = $PTVgene{$bestSbj};
+		#die "$curCOG\n";
 	}
+	
+	if ($writeFastaOut ){
+		die "writeFastaOut: key $pos $curKgd not found\n" unless (exists($FAO{$pos}{$curKgd}));
+		my @preSeq = split /\n/,$bestQseq;
+		$preSeq[0] .= ":$curCat";
+		
+		print {$FAO{$pos}{$curKgd}} join("\n",@preSeq)."\n";
+	}
+
+	#all info parsed, now add up matrices
 	foreach my $normMethod (@normMethods){
 		$totalCOG++; $lpCnt++;
 		#die "can't find length entry for $bestSbj\n" unless (exists $DBlen{$bestSbj});
@@ -760,11 +859,18 @@ sub main(){
 				print $O2 "$bestQuery\t$curCOG\t$curCat\t$curDef\n" if ($reportGeneCat ==2);
 			}
 		
-		} elsif ($tabCats == 2){ #KEGG
+		} elsif ($tabCats == 2 ){ #KEGG
 			$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
 			#print "$bestQuery\t$curCat\n";
 			if ($lpCnt==1 && $curCat ne "" ){
 				print $O2 "$bestQuery\t$curCat\n" if ($reportGeneCat  );
+			}
+		} elsif ($tabCats == 8){ # PTV
+			$CATabundance{$normMethod}{$curKgd}{$curCat} += $score;
+			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			#print "$bestQuery\t$curCat\n";
+			if ($lpCnt==1 && $curCat ne "" ){
+				print $O2 "$bestQuery\t$curCOG\t$curDef\t$curCat\n" if ($reportGeneCat  );
 			}
 		} elsif ($tabCats==5){#ABR CARD
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
@@ -783,6 +889,19 @@ sub main(){
 			if ($lpCnt==1){
 				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
 				print $O2 "$bestQuery\t$curCOG\t$curDef\t$curCat\t$curCatDef\n" if ($reportGeneCat ==2);
+			}
+		} elsif ($tabCats==7){#AB production PAB
+			#$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
+			$CATabundance{$normMethod}{$curKgd}{$curCat}+= $score;
+			my @curCogs = split(/,\s*/,$curCOG);
+			#die "@curCats\n";
+			foreach my $cCt (@curCogs){
+				$COGabundance{$normMethod}{$curKgd}{$cCt}+= $score;
+			}
+
+			if ($lpCnt==1){
+				print $O2 "$bestQuery\t$curCOG\n" if ($reportGeneCat ==1);
+				print $O2 "$bestQuery\t$curCOG\t$curCat\n" if ($reportGeneCat ==2);
 			}
 		} elsif ($tabCats==3){  #CAZy
 			$COGabundance{$normMethod}{$curKgd}{$curCOG}+= $score;
@@ -942,11 +1061,63 @@ sub readMohTax(){
 	close I;
 	return \%ret;
 }
+sub createNOGKgd($){
+	my ($diaIn) = @_;
+	my %rd2Ng;
+	my $diaInBest = "$diaIn.Kgd";
+	if (-e $diaInBest.".gz"){
+		print "Reading pre calc NOG KGD DB\n";
+		my $hr = readTabbed3($diaInBest,1);
+		%rd2Ng = %{$hr};
+		return %rd2Ng;
+	}
+	#die "Wrong\n";
+	#print "$NOGtaxf";
+	my %NOGkingd = readNogKingdom($NOGtaxf);
+	my ($IE,$OK);
+	($IE,$OK) = gzipopen($diaIn,"diamond output file [in]",1); 
+	my @splX;
+	my $lastQ = ""; my $bEval= 1; my $bSubj = "";
+	my $cntKgdHits = 0;
+	while ( my $line = <$IE> ) {
+		chomp $line; 
+		@splX = split (/\t/,$line);
+		my $query = $splX[0];
+		$query =~ s/\/\d$//;
+		if ($lastQ eq ""){$lastQ = $query; 
+		} elsif ($lastQ ne $query){
+			$bEval = 1;
+			#print "$query   $bSubj\n";
+			$bSubj =~ m/^(\d+)\./; my $taxid = $1;
+			if (!exists $NOGkingd{$taxid}){die "Can't find $taxid in NOG ref tax\n";}
+			$rd2Ng{$lastQ} = $NOGkingd{$taxid} ;
+			$lastQ = $query; $bSubj = "";
+			$cntKgdHits++;
+		}
+		#print "$bEval > $splX[10]\n";
+		if ($bEval > $splX[10]){
+			$bEval = $splX[10]; $bSubj = $splX[1];
+		}
 
+	}
+	close $IE;
+	$bSubj =~ m/^(\d+)\./; my $taxid = $1;
+	if (!exists $NOGkingd{$taxid}){print "Can't find $taxid in NOG ref tax\n";}
+	$rd2Ng{$lastQ} = $NOGkingd{$taxid} ; $cntKgdHits++;
+
+	print "Created new NOG Kgd Hits DB, found $cntKgdHits hits\n";
+	my ($OE,$OK2) = gzipwrite($diaInBest,"Best NOG hit file",1);
+	foreach my $k (keys %rd2Ng){
+		print $OE "$k\t$rd2Ng{$k}\n";
+	}
+	close $OE;
+	#and save this table
+	return %rd2Ng;
+}
 sub readNogKingdom($){
 	my ($inT) = @_;
 	my %ret;
-	open I,"<$inT" or die "Can't open NOG tax file\n";;
+	open I,"<$inT" or die "Can't open NOG tax file $inT\n";;
 	while (my $line = <I>){
 		my $cls = 0; #bacteria
 		$cls = 1 if ($line =~ m/Archaea/);
