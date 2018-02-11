@@ -3,7 +3,7 @@
 #1) creates a gene catalog from predicted genes using cd-hit-est
 #2) sums up diamond tables -> moved to helper script "combine_DIA.pl"
 #3) makes marker genes to proteins
-#4) assigns eggNOG / FOAM to gene finished gene catalog
+#4) assigns diamond(FuncAssign) / FOAM to gene finished gene catalog
 #usage: ./geneCat.pl [mappingFile] [in/outdir]
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/MM_at_v5_T2subset.txt /g/scb/bork/hildebra/SNP/GCs/T2_HM3_GNM3_ABR 1 95
 #ex ./geneCat.pl /g/bork5/hildebra/data/metaGgutEMBL/MM_at_v3.txt,/g/bork5/hildebra/data/metaGgutEMBL/ABRtime.txt /g/scb/bork/hildebra/SNP/GCs/GNM3_ABR 1 95
@@ -16,7 +16,7 @@
 #ex ./geneCat.pl ? /g/bork1/hildebra/SNP/GC/T2_GNM3_ABR protExtract 
 #./geneCat.pl ? /g/scb/bork/hildebra/SNP/GNMass2_singl/ 1 95
 #./geneCat.pl MGS /g/scb/bork/hildebra/SNP/GCs/  #canopy clustering
-#./geneCat.pl eggNOG /g/scb/bork/hildebra/SNP/GCs/ #FAOM eggNOG assignment of genes
+#./geneCat.pl FuncAssign /g/scb/bork/hildebra/SNP/GCs/ #FAOM eggNOG assignment of genes
 #./geneCat.pl FMG_extr /g/scb/bork/hildebra/SNP/GCs/SimuGC/  #gets FMGs in separate folder
 use warnings;
 use strict;
@@ -25,6 +25,7 @@ use Cwd; use English;
 use Mods::GenoMetaAss qw( splitFastas readMapS qsubSystem emptyQsubOpt systemW readGFF);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::TamocFunc qw(attachProteins attachProteins2 getSpecificDBpaths);
+use Mods::FuncTools qw(assignFuncPerGene);
 
 sub readSam; sub readCDHITCls;sub readFasta; 
 sub writeBucket; sub submCDHIT;
@@ -36,7 +37,11 @@ sub combineClstr;#rewrites cd-hit cluster names to my gene Idx numbers
 sub readGeneIdx;
 sub rewriteFastaHdIdx; #replaces ">MM2__C122;_23" with number from gene catalog
 sub FOAMassign;
+sub geneCatFunc;
+
 sub canopyCluster; #MGS creation
+sub krakenTax; #assign tax to each gene via kraken
+sub kaijuTax; #assign tax to each gene via kraken
 sub writeMG_COGs;
 
 #.27: added external genes support
@@ -46,6 +51,7 @@ my $version = 0.30;
 die "Not enough Args\n" if (@ARGV < 2);
 my $baseOut = $ARGV[1];#"/g/scb/bork/hildebra/SNP/GNMass/";
 my $mapF = $ARGV[0];#"/g/bork5/hildebra/data/metaGgutEMBL/MM.txt";
+#die $mapF."\n@ARGV\n";
 my $BIG = $ARGV[2];
 my $cdhID = 0.95; my $minGeneL = 100;
 $cdhID = $ARGV[3] if (@ARGV > 3);
@@ -54,14 +60,14 @@ $extraRdsFNA = $ARGV[4] if (@ARGV > 4);#FNA with (predicted) genes, that are to 
 my $extraRdsFAA = "";
 $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $extraRdsFNA
 #die $cdhID."\n";
-my $justCDhit = 1;
+my $justCDhit = 0;
 my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
 my $doSubmit = 1; my $qsubNow = 0;
-my $oldNameFolders= 0;
+my $oldNameFolders= -1;
 my $doFMGseparation = 1; #cluster FMGs separately?
 my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
-my $numCor = 87; my $totMem = 700; #in G
+my $numCor = 20; my $totMem = 700; #in G
 
 $baseOut.="/" unless ($baseOut =~ m/\/$/);
 my $toLclustering=0;#just write out, no sorting etc
@@ -69,7 +75,6 @@ my $toLclustering=0;#just write out, no sorting etc
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
 my $cdhitBin = getProgPaths("cdhit");#/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
 my $vsearchBin = "";#"/g/bork5/hildebra/bin/vsearch1.0/bin/vsearch-1.0.0-linux-x86_64";
-my $diaBin = getProgPaths("diamond");#"/g/bork5/hildebra/bin/diamond/./diamond";
 my $bwt2Bin = getProgPaths("bwt2");#"/g/bork5/hildebra/bin/bowtie2-2.2.9/bowtie2";
 my $samBin = getProgPaths("samtools");#"/g/bork5/hildebra/bin/samtools-1.2/samtools";
 my $hmmBin3 = getProgPaths("hmmer3");#"/g/bork5/hildebra/bin/hmmer-3.0/hmm30/bin/hmmsearch";
@@ -81,7 +86,6 @@ my $pigzBin = getProgPaths("pigz");
 my $rareBin = getProgPaths("rare");#"/g/bork3/home/hildebra/dev/C++/rare/rare";
 my $GCcalc = getProgPaths("calcGC_scr");#"perl $thisDir/secScripts/calcGC.pl";
 my $sortSepScr = getProgPaths("sortSepReLen_scr");#"perl $thisDir/secScripts/sepReadLength.pl";
-my $secCogBin = getProgPaths("secCogBin_scr");#"perl $thisDir/secScripts/parseBlastFunct2.pl";
 my $extre100Scr = getProgPaths("extre100_scr");#"perl $thisDir/helpers/extrAllE100GC.pl";
 my $hmmBestHitScr = getProgPaths("hmmBestHit_scr");
 my $genelengthScript = getProgPaths("genelength_scr");#= "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/geneLengthFasta.pl";
@@ -91,7 +95,6 @@ my $genelengthScript = getProgPaths("genelength_scr");#= "/g/bork3/home/hildebra
 
 #databases
 my $FOAMhmm = getProgPaths("FOAMhmm_DB");#"/g/bork3/home/hildebra/DB/FUNCT/FOAM/FOAM-hmm_rel1.hmm";
-my $eggDB = getProgPaths("eggNOG_DB");#"/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/eggnog4.proteins.all.fa";
 my $ABresHMM = getProgPaths("ABresHMM_DB");#"/g/bork/forslund/morehmms/Resfams.hmm";
 
 
@@ -129,16 +132,17 @@ COG0124=>94.5,COG0184=>98.2,COG0185=>99,COG0186=>99,COG0197=>99,COG0200=>98.4,CO
 my $selfScript=Cwd::abs_path($PROGRAM_NAME);#dirname($0)."/".basename($0);
 my $OutD = $baseOut;#."GeneCatalog/";
 system "mkdir -p $OutD" unless (-d $OutD);
-print $mapF."\n";
 if ($mapF =~ m/^\??$/){
 	if (-e "$baseOut/LOGandSUB/GCmaps.inf"){
 		$mapF = `cat $baseOut/LOGandSUB/GCmaps.inf`;
+		die "extracted mapf from $baseOut/LOGandSUB/GCmaps.inf\n does not exist:\n$mapF\n" if (!-e $mapF);
 	} else {
 		die "Can't find expected copy of inmap in GC outdir: $baseOut\n";
 		#$mapF = "$baseOut/LOGandSUB/inmap.txt";
 	}
 }
 #die $mapF;
+print "MAP=".$mapF."\n";
 my $qsubDir = $OutD."qsubsAlogs/";
 system "echo \'$version\' > $OutD/version.txt";
 
@@ -148,6 +152,7 @@ my $bucketCnt = 0; my $cnt = 0;
 my @bucketDirs = ();
 my $bdir = $OutD."B$bucketCnt/";#dir where to write the output files..
 my $QSBoptHR = emptyQsubOpt($doSubmit,"");
+$QSBoptHR->{qsubDir} = $qsubDir;
 
 #$defaultsCDH = "-d 0 -c 0.$cdhID -g 0 -T $numCor -M ".int(($totMem+30)*1024) if (@ARGV>3);
 
@@ -162,6 +167,15 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	#die "$numCor2\n";
 	canopyCluster($OutD,$tmpDir,$numCor2);
 	exit(0);
+}elsif ($mapF eq "kraken" | $mapF eq "kaiju" ){
+	my $numCor2 = $numCor;
+	if (@ARGV > 2){$numCor2 = $ARGV[2];}
+	if ($mapF eq "kraken"){
+		krakenTax($OutD,$tmpDir,$numCor2);
+	} else {
+		kaijuTax($OutD,$tmpDir,$numCor2);
+	}
+	exit(0);
 }elsif ($mapF eq "FMG_extr"){
 	die "deprecated, use helpers/extrAllE100GC.pl\n";
 	writeMG_COGs($OutD);
@@ -169,10 +183,11 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 } elsif($mapF eq "FOAM" || $mapF eq "ABR"){ #FOAM functional assignment
 	FOAMassign($OutD,$tmpDir,$mapF);
 	exit(0);
-} elsif($mapF eq "eggNOG"){ #eggNOG functional assignment
-	eggNOGassign($OutD,$tmpDir,"NOG");
+} elsif($mapF eq "FuncAssign"){ #eggNOG functional assignment
+	geneCatFunc($OutD,$tmpDir,"NOG");
 	exit(0);
 } else { #start building new gene cat
+	if (!-f $mapF){die"Could not find map file (first arg): $mapF\n";}
 	#die $mapF."\n";
 	my ($hr,$hr2) = readMapS($mapF,$oldNameFolders);
 	%map = %{$hr};
@@ -471,7 +486,47 @@ exit(0);
 #####################################################################
 #####################################################################
 
-
+sub krakenTax{
+	my ($GCd,$tmpD,$NC) = @_;
+	my $krkBin = getProgPaths("kraken");#"/g/scb/bork/hildebra/DB/kraken/./kraken";
+	my $oriKrakDir = getProgPaths("Kraken_path_DB");
+	my $outD = $GCd."/Anno/Tax/";
+	system "mkdir -p $outD" unless (-d $outD);
+	system "mkdir -p $tmpD" unless (-d $tmpD);
+	my @thrs = (0.01,0.02,0.04,0.06,0.1,0.2,0.3);
+	my $geneFNA = "$GCd/compl.incompl.95.fna";
+	my $curDB = "$oriKrakDir/minikraken_2015";
+	#die $curDB."\n";
+	#paired read tax assign
+	my $cmd .= "$krkBin --preload --threads $NC --fasta-input  --db $curDB  $geneFNA >$tmpD/rawKrak.out\n";
+	for (my $j=0;$j< @thrs;$j++){
+		$cmd .= "$krkBin-filter --db $curDB  --threshold $thrs[$j] $tmpD/rawKrak.out | $krkBin-translate --mpa-format --db $curDB > $outD/krak_$thrs[$j]".".out\n";
+	}
+	print "Starting kraken assignments of the gene catalog\n";
+	systemW $cmd;
+	print "All kraken assignments are done\n";
+}
+sub kaijuTax{#different tax assignment for gene catalog
+	my ($GCd,$tmpD,$NC) = @_;
+	my $kaijD = getProgPaths("kaijuDir");
+	my $kaijBin = "$kaijD/./kaiju";
+	my $KaDir = getProgPaths("Kaiju_path_DB");
+	my $outD = $GCd."/Anno/Tax/";
+	system "mkdir -p $outD" unless (-d $outD);
+	system "mkdir -p $tmpD" unless (-d $tmpD);
+	my @thrs = (0.01,0.02,0.04,0.06,0.1,0.2,0.3);
+	my $geneFNA = "$GCd/compl.incompl.95.fna";
+	#die $curDB."\n";
+	#paired read tax assign
+	my $kaDB = "-t $KaDir/nodes.dmp -f $KaDir/kaiju_db.fmi";
+	my $cmd .= "$kaijBin $kaDB -z $NC -i  $geneFNA -o $tmpD/rawKaiju.out\n";
+	$kaDB = "-t $KaDir/nodes.dmp -n $KaDir/names.dmp";
+	$cmd .= "$kaijD/./addTaxonNames $kaDB -i $tmpD/rawKaiju.out -o $tmpD/Kaiju1.anno -u -p \n";
+	$cmd .= "sort $tmpD/Kaiju1.anno > $outD/Kaiju.anno\n";
+	print "Starting kaiju assignments of the gene catalog\n";
+	systemW $cmd;
+	print "All kaiju assignments are done\n";
+}
 sub canopyCluster{
 	my ($GCd,$tmpD,$NC) = @_;
 	my $canBin = "/g/bork3/home/hildebra/bin/canclus/cc_x64.bin";
@@ -529,7 +584,8 @@ sub rewriteFastaHdIdx($ $){
 	my ($inf,$hr) = @_;
 	my %gene2num = %{$hr};
 	my $numHd =0;
-	open I,"<$inf"; open O,">$inf.tmp";
+	open I,"<$inf" or die "Can't open fasta file $inf\n"; 
+	open O,">$inf.tmp" or die "can't open tmp fasta out $inf.tmp\n";
 	while (my $l = <I>){
 		if ($numHd > 100){
 			print "Seems like $inf heads were already reformated to number sheme!\n";
@@ -848,9 +904,12 @@ sub submCDHIT($ $ $ $ $){
 	$cmd .= "cp $tmpDir/COG/*.fna.clstr $tmpDir/FMGclusN.log $qsubDir\n" if (@COGlst > 0);
 
 	#get protein sequences for each gene & rewrite seq names to numbers
-	$cmd .= "$selfScript ? $baseOut protExtract \"$extraRdsFAA\"\n";
+	$cmd .= "perl $selfScript ? $baseOut protExtract \"$extraRdsFAA\"\n";
 	$cmd .= "$extre100Scr $OutD $oldNameFolders\n";
 	$cmd .= "$selfScript MGS $OutD\n";
+	$cmd .= "$selfScript kraken $OutD\n";
+	$cmd .= "$selfScript kaiju $OutD\n";
+	
 	
 	$cmd .= "mv $tmpDir/log/Cluster.log $qsubDir\n";
 	#$cmd .= cleanUpGC($bdir,$OutD,$cdhID);
@@ -1151,6 +1210,7 @@ sub readCDHITCls(){
 	return(\%retCls,\%retRepSeq,$clNum, $totMem,\%clsIDs);
 }
 
+
 sub readSam($){
 	my ($iF,$OO) = @_;#$fref,
 	#my %fas = %{$fref};
@@ -1205,71 +1265,27 @@ sub readSam($){
 
 
 
-sub eggNOGassign{
+sub geneCatFunc{
 	my ($GCd,$tmpD, $DB) = @_;
 	my $query = "$GCd/compl.incompl.95.prot.faa";
 	my $outD = $GCd."/Anno/Func/";
-	system "mkdir -p $outD" unless (-d $outD);
 	#my $DB = "NOG";
 	my $ncore = 40; my $fastaSplits=5;
-	my $globalDiamondDependence = "";
-	my $calcDia = 1;
+	
 	
 	my $curDB = "NOG";#CZy,ABRc,KGM,NOG
 	
-	
-	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB,1);
-	if (0 && !-e "$eggDB.db.dmnd"){
-		my $DBcmd .= "$diaBin makedb --in $eggDB -d $eggDB.db -p $ncore\n";
-		my ($jN, $tmpCmd) = qsubSystem($qsubDir."DiamondDBprep.sh",$DBcmd,$ncore,"2G","diaDB","","",1,[],$QSBoptHR);
-		$globalDiamondDependence = $jN;
-	}
-	
-	print "Splitting catalog into $fastaSplits\n";
-	my $ar = splitFastas($query,$fastaSplits,$GLBtmp."/");
-	my @subFls = @{$ar};
-	my @jdeps; my @allFiles;
-	my $allAss = "$outD/DIAass_$shrtDB.srt.gz";
-	$calcDia = 0 if (-e $allAss);
-	#my $N = 20;
-	my $jdep="";
-	#die "$calcDia\n$allAss\n";
-	for (my $i =0 ; $i< @subFls;$i++){
-		my $cmd = "mkdir -p $tmpD\n";
-		#my $outF = "$GCd/DiaAssignment.sub.$i";
-		my $outF = "$tmpD/DiaAs.sub.$i.$shrtDB.gz";
-		$cmd .= "$diaBin blastp -f tab --compress 1 --quiet -t $tmpD -d $DBpath$refDB.db -q $subFls[$i] -k 5 -e 1e-5 --sensitive -o $outF -p $ncore\n";
-		#$cmd = "$diaBin blastp -f tab --compress 1 --sensitive --quiet -d $eggDB.db -q $subFls[$i] -k 3 -e 0.001 -o $outF -p $ncore\n";
-		#$cmd .= "$diaBin view -a $outF.tmp -o $outF -f tab\nrm $outF.tmp* $subFls[$i] \n";
-		my $tmpCmd;
-		if ($calcDia){
-			my ($jobName,$mptCmd) = qsubSystem($qsubDir."D$i$shrtDB.sh",$cmd,$ncore,"3G","D$shrtDB$i",$globalDiamondDependence,"",1,[],$QSBoptHR); #$jdep.";".
-			#print $qsubDir."Diamond.sh\n";
-			push(@jdeps,$jobName);
-			push(@allFiles,$outF);
-		}
-		#if ($i==5){die;}
-	}
-	#last job that converges all
-	my $cmd = "";
-	if (!$calcDia){
-	
-	} elsif (0 && @allFiles == 1){
-		$allAss = $allFiles[0];
-	} else {
-		$allAss.=".gz" if ($allAss !~ m/\.gz$/ && $allFiles[0] =~ m/\.gz$/);
-		#my $cmd= "cat ".join(" ",@allFiles). " > $allAss\n";   #
-		$cmd .= "cat ".join(" ",@allFiles). " > $allAss\n";
-		$cmd .= "rm -f ".join(" ",@allFiles) . "\n";
-	}
-	#$cmd .= "$secCogBin $allAss $DB 1\n"; #mode==1 to write genecats
-
+	my %optsDia = (eval=>1e-7,percID=>25,minPercSbjCov=>0.3,fastaSplits=>$fastaSplits,ncore=>$ncore,
+			splitPath=>$GLBtmp,keepSplits=>1);
+	my ($allAss,$jdep) = assignFuncPerGene($query,$outD,$tmpD,$curDB,\%optsDia,$QSBoptHR);
 	my $tarAnno = "${allAss}geneAss.gz";
-	#my $finTA = "$outD/$shrtDB.geneA.txt";
-	$cmd .= "$secCogBin -i $allAss -DB $shrtDB -singleSpecies 1  -KOfromNOG 0 -calcGeneLengthNorm 0 -lenientCardAssignments 2 -mode 2 -CPU $ncore -percID 25 -LF $DBpath/$refDB.length -DButil $DBpath -tmp $tmpD -eggNOGmap 0 -minPercSbjCov 0.3 -minBitScore 60 -minAlignLen 60 -eval 1e-7\n";
-	#$cmd.= "cp $tarAnno $finTA\n";
-	#push(@assFiles,$tarAnno);
 	my $tmpP2 = "$tmpD/CNT_1e-7_25//";
+	#create actual COG table
+	my $cmd = "";
+	$cmd	.= "gunzip $tarAnno\n";
+	$tarAnno =~ s/\.gz$//;
+	#$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/${shrtDB}L1.mat -refD $GCd/NOGparse.NOG.GENE2NOG; gzip $GCd/NOGparse.NOG.GENE2NOG.gz\n";
+	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/$curDB.mat -refD $tarAnno\ngzip $tarAnno\n";
 	#copy interesting files to final dir
 	#if ($curDB eq "ABRc"){
 #		$cmd.= "zcat $tmpP2/ABRcparse.ALL.cnt.CATcnts.gz > $outD/ABR_res.txt\n" ;
@@ -1282,15 +1298,6 @@ sub eggNOGassign{
 #		$cmd.= "zcat $tmpP2/TCDBparse.ALL.cnt.CATcnts.gz > $outD/TCDB.cats.txt\n";
 #	}
 
-	
-	#create actual COG table
-	$cmd .= "gunzip $tarAnno\n";
-	$tarAnno =~ s/\.gz$//;
-	#$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/${shrtDB}L1.mat -refD $GCd/NOGparse.NOG.GENE2NOG; gzip $GCd/NOGparse.NOG.GENE2NOG.gz\n";
-	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/$shrtDB.mat -refD $tarAnno\ngzip $tarAnno\n";
-	#die "$cmd";
-	$jdep = qsubSystem($qsubDir."colDIA$shrtDB.sh",$cmd,1,"40G","ColDIA",join(";",@jdeps),"",1,[],$QSBoptHR);
-	#return $jdep,$outF;
 }
 
 sub FOAMassign{

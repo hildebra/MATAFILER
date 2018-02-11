@@ -7,10 +7,11 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(runRaxML prep40MGgenomes getE100 getGenoGenes getFMG renameFMGs fixHDs4Phylo
-			runFasttree runQItree);
-use Mods::GenoMetaAss qw(systemW readFasta renameFastHD);
+our @EXPORT_OK = qw(runRaxML prep40MGgenomes prepNOGSETgenomes getE100 getGenoGenes getFMG renameFMGs 
+			runFasttree runQItree fixHDs4Phylo);
+use Mods::GenoMetaAss qw(systemW readFasta renameFastHD gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
+use Mods::FuncTools qw(assignFuncPerGene);
 
 sub getGenoGenes;
 
@@ -44,25 +45,45 @@ sub fixHDs4Phylo ($){
 }
 
 sub runQItree{
-	my ($inMSA,$treeOut,$ncore,$outgr,$bootStrap,$useAA,$fast) = @_;
+	my ($inMSA,$treeOut,$ncore,$outgr,$bootStrap,$useAA,$fast,$autoModel) = @_;
 	my $iqTree  = getProgPaths("iqtree");
+	$treeOut =~ s/\.nwk$//;
+	my $treNM = "IQtree";
 	my $cmd = "$iqTree -s $inMSA -nt $ncore -pre $treeOut ";
-	$cmd .= "-o $outgr " unless ($outgr eq "");
-	$cmd .= "-fast " unless ($fast eq "");
+	$cmd .= "-o $outgr " unless ($outgr eq "" && $outgr !~ m/,/);
+	unless ($fast == 0){$cmd .= "-fast "; print "IQtree - fast\n"; $treNM .= "_fast";}
+	if ($autoModel){$treNM .= "_autoMOD";}
 	if ($useAA){
-		$cmd .= "-m LG "; #needs to be HKY for nts
+		if ($autoModel){
+			$cmd .= "-m TEST  "; 
+		} else{
+			$cmd .= "-m LG+F+G "; #needs to be HKY for nts
+		}
 	} else {
-		$cmd .= "-m HKY "; 
+		if ($autoModel){
+			$cmd .= "-m TEST ";#-mset HKY,HKY+F,HKY+F+I,HKY+F+I+G4,JC,F81,K2P,K3P,K81uf,GTR "; 
+		} else {
+			$cmd .= "-m HKY+F+G "; 
+		}
 	}
 	if ($bootStrap >0){
-		if ($bootStrap < 1000){print "can't perform ultrafast bootstrap (bootstrap need to be >= 1000)\n"; exit(0);}
-		$cmd .= "-bb $bootStrap " ;
+		if ($bootStrap < 1000){
+			print "standard non parametric bootstrap ($bootStrap). Use >1000 bootstraps to do ultrafast bootstrap\n";
+			die  "normal bootstrap requires >= 100 iterations ($bootStrap given)\n" if ($bootStrap <100);
+			$cmd .= "-b $bootStrap " ;
+		} else {
+			print " ultrafast bootstrap $bootStrap\n";
+			$cmd .= "-bb $bootStrap " ;
+		}
 		#also consider -b >=100 for std bootstrap
 	} else {
 		$cmd .= "-alrt 1000 ";
 	}
+	$cmd .= "";
 	#die $cmd;
 	systemW $cmd;
+	$treNM .= ".nwk";
+	#"mv $treeOut/IQtree_fast_allsites.treefile $treeOut/$treNM";
 }
 sub runFasttree{
 	my ($inMSA,$treeOut,$ncore) = @_;
@@ -70,6 +91,9 @@ sub runFasttree{
 	my $cmd = "$fsttreeBin $inMSA > $treeOut\n";
 	systemW $cmd;
 }
+
+
+sub getGenoName($){my $GenomeN = $_[0];$GenomeN =~ s/\.f[n]?a$//; $GenomeN =~ s/^.*\///;  $GenomeN =~ s/-/_/; return $GenomeN;}
 
 #routine to format marker genes with naming etc to work with buildTree script
 sub prep40MGgenomes{ 
@@ -93,14 +117,12 @@ sub prep40MGgenomes{
 	my $cogCats = $cogCats1; if ($cogCats eq ""){$cogCats = $finalD."$tag.cats.txt";} else {$cogCats =~ s/\.([^\.]+)$/\.$tag\.$1/;}
 	if (-e $fnFna1){system("cat $fnFna1 > $fnFna");} else {system "rm -f $fnFna";}#shortFNAhd($fnFna);}
 	if (-e $aaFna1){system("cat $aaFna1 > $aaFna");} else {system "rm -f $aaFna";}
-
 	my %COGgenes; my %allGenomes;
-
 	#assumes ref genome, no genes called
 	for (my $i=0;$i<@refGenos;$i++){
 		my $refG = $refGenos[$i];
 		next if ($refG eq "");
-		my $GenomeN = $refGenos[$i];$GenomeN =~ s/\.f[n]?a$//; $GenomeN =~ s/^.*\///;  $GenomeN =~ s/-/_/;
+		my $GenomeN = getGenoName($refGenos[$i]);
 		
 		if (exists($allGenomes{$GenomeN})){
 			print "Genome $GenomeN already exists; assumming double entry and skipping genome\n";next;
@@ -115,8 +137,6 @@ sub prep40MGgenomes{
 		#my $prodigal_cmd .= "$prodigalBin -i $refG -a $proteins -d $ntGenes -f gff -p single > /dev/null\n";
 		#die $prodigal_cmd."\n$rewrite || !-e $proteins || !-e $ntGenes\n";
 		#system $prodigal_cmd if ($rewrite || !-e $proteins || !-e $ntGenes);
-
-		
 		#fetch mg
 		my $cmd ;
 		my $GenomeDir = $proteins; $GenomeDir =~ s/[^\/]+$//;
@@ -129,7 +149,6 @@ sub prep40MGgenomes{
 		}
 		my $hr = renameFMGs($outDFMG,$GenomeN,"allFMG",1);
 		#system "$FMGrwkScr $outDFMG" ;
-
 		my %COGg = %{$hr};
 		foreach my $k (keys %COGg){
 			push (@{$COGgenes{$k}},$COGg{$k});
@@ -140,18 +159,14 @@ sub prep40MGgenomes{
 		#	if (!exists($COGgenes{$spl[1]})){$COGgenes{$spl[1]}=$spl[0];}else{$COGgenes{$spl[1]}.= "\t".$spl[0];  }
 		#}
 		#close I;
-
 		#now add this info to the existing ete input files
-
 		system("cat $outDFMG/*.fna >> $fnFna");#shortFNAhd($fnFna);}
 		system("cat $outDFMG/*.faa >> $aaFna") ;#shortFNAhd($aaFna);
 	}
-
 	#open genecat file 
 	my $cogcatstr = "";my $catCnt=0;
 	if (-e $cogCats1){
 		open I,"<$cogCats1";
-		
 		while(<I>){
 			chomp;my @spl = split /\t/;
 			$spl[0] =~ m/_([^_]+)$/;
@@ -177,6 +192,141 @@ sub prep40MGgenomes{
 		$ogrpStr = "-outgroup $outGrp";
 	}
 	my $cmd = "$buildTreeScr -fna $fnFna -aa $aaFna -cats $cogCats -outD $finalD -cores $ncore -NTfilt 0.15 -bootstrap 100  $ogrpStr > $finalD/tree_build.log";
+	return $cmd;
+}
+#similar to prep40MGgenomes, but extended to more genes (as given by NOG annotation)
+sub prepNOGSETgenomes{ 
+	#\@refGenos,$rewrite,$ncore,$fnFna1,$aaFna1,$cogCats1)
+	my @refGenos = @{$_[0]};my @NOGs = @{$_[1]};
+	my $finalD=$_[2]; my $tag= $_[3];
+	my $rewrite = $_[4]; my $ncore=$_[5];
+	my ($fnFna1,$aaFna1,$cogCats1) = ("","","");
+	my $outGrp = "";
+	$outGrp = $_[6] if (@_ > 6);
+	#these files will be added on top of the newly derrived genes
+	if (@_ > 7){$fnFna1= $_[7];$aaFna1= $_[8];$cogCats1= $_[8];}
+	print "Collating ".@NOGs." NOG genes for tree building\n";
+	print "Using outgroup $outGrp\n" if ($outGrp ne "");
+	
+	my $buildTreeScr = getProgPaths("buildTree_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree.pl";
+	my $FMGd = getProgPaths("FMGdir");#"/g/bork5/hildebra/bin/fetchMG/";
+	my $FMGrwkScr = getProgPaths("FMGrwk_scr");
+
+	#system "$renameCtgScr $refGenos $GenomeN";
+	system "mkdir -p $finalD" unless (-d $finalD);
+	my $tmpP = $finalD."tmp/";
+	system "mkdir -p $tmpP" unless (-d $tmpP);
+	
+	my $fnFna = $fnFna1; if ($fnFna eq ""){$fnFna = $finalD."$tag.fna";} else {$fnFna =~ s/\.([^\.]+)$/\.$tag\.$1/;}
+	my $aaFna = $aaFna1; if ($aaFna eq ""){$aaFna = $finalD."$tag.faa";} else {$aaFna =~ s/\.([^\.]+)$/\.$tag\.$1/;}
+	my $cogCats = $cogCats1; if ($cogCats eq ""){$cogCats = $finalD."$tag.cats.txt";} else {$cogCats =~ s/\.([^\.]+)$/\.$tag\.$1/;}
+	if ( -e $fnFna1){system("cat $fnFna1 > $fnFna");} else {system "rm -f $fnFna";}#shortFNAhd($fnFna);}
+	if ( -e $aaFna1){system("cat $aaFna1 > $aaFna");} else {system "rm -f $aaFna";}
+
+	my %COGgenes; my %allGenomes;
+	
+
+	#assumes ref genome, no genes called
+	for (my $i=0;$i<@refGenos;$i++){
+		my $refG = $refGenos[$i];
+		next if ($refG eq "");
+		my $GenomeN = getGenoName($refGenos[$i]);
+		
+		if (exists($allGenomes{$GenomeN})){
+			print "Genome $GenomeN already exists; assumming double entry and skipping genome\n";next;
+		} else {
+			$allGenomes{$GenomeN} = 1;
+		}
+		#die "$GenomeN\n";
+		my ($ntGenes,$proteins) = getGenoGenes($refG);
+		#die "$proteins\n";
+		#functional annotation via NOG
+		my $GenomeDir = $proteins; $GenomeDir =~ s/[^\/]+$//;
+		my $outDNOG = $GenomeDir."NOGs$GenomeN/";
+		my %optsDia = (eval=>1e-12,percID=>35,minPercSbjCov=>0.6,fastaSplits=>1,ncore=>$ncore,splitPath=>$tmpP,bacNOG=>1);
+		my ($outF,$jdep) = assignFuncPerGene($proteins,$outDNOG,$tmpP,"NOG",\%optsDia);
+		my $tarAnno = "${outF}geneAss.gz";
+		#print "XX $tarAnno\n";
+		
+		my %COG2Gn;
+		my ($I,$OK) = gzipopen($tarAnno,"Func anno",1); 
+		while (<$I>){
+			chomp;
+			my @spl = split /\t/;
+			$COG2Gn{$spl[1]} = $spl[0];
+			#print;
+		}
+		close $I;
+		#print "$tarAnno\n";
+		#next; #DEBUG
+		#now load AA and NT file, and rename genes to fit
+		my $hr = readFasta($ntGenes,1);
+		my %FAS = %{$hr};
+		$hr = readFasta($proteins,1);
+		my %FASAA = %{$hr};
+		#print "Read NT AA\n";
+		my %COGg ;
+		open O,">>$fnFna" or die "Can't open $fnFna\n";
+		open O2,">>$aaFna" or die "Can't open $aaFna\n";
+		my $hitcnt=0;
+		my $cnt=0;
+		foreach my $tag (@NOGs){
+			my $newName = "${GenomeN}_${tag}";
+			#print $tag."\n" if ($cnt<5);; $cnt++;
+			#if ($tag =~ m//)
+			if (exists($COG2Gn{$tag})){
+				#print "$COG2Gn{$tag}\n";
+				die "Can't find $COG2Gn{$tag} in nt's\n" unless(exists $FAS{$COG2Gn{$tag}});
+				die "Can't find $COG2Gn{$tag} in AA's\n" unless(exists $FASAA{$COG2Gn{$tag}});
+				print O ">$newName\n$FAS{$COG2Gn{$tag}}\n";
+				print O2 ">$newName\n$FASAA{$COG2Gn{$tag}}\n";
+				$COGg{$tag} = $newName;
+				$hitcnt++;
+			}
+		}
+		close O;
+		close O2;
+		print "Found $hitcnt core genes in genome $GenomeN\n";
+		
+		foreach my $k (keys %COGg){
+			push (@{$COGgenes{$k}},$COGg{$k});
+		}
+		#die "$fnFna\n";
+		#last if ($i==10);
+	}
+
+	#open genecat file 
+	my $cogcatstr = "";my $catCnt=0;
+	if (-e $cogCats1){
+		open I,"<$cogCats1" or die "Can't open $cogCats1\n";
+		
+		while(<I>){
+			chomp;my @spl = split /\t/;
+			$spl[0] =~ m/_([^_]+)$/;
+			die "Can't find category $1 in ref gene set\n" unless (exists($COGgenes{$1}));
+			push (@spl,@{$COGgenes{$1}});
+			$cogcatstr .= join ("\t",@spl) . "\n";
+			$catCnt++;
+		}
+		close I;
+	} else { #make anew
+		foreach my $k (keys %COGgenes){
+			$cogcatstr .= join ("\t",@{$COGgenes{$k}}) . "\n";
+			$catCnt++;
+		}
+	}
+	open O,">$cogCats";
+	print O $cogcatstr;
+	close O;
+	print "Found $catCnt / ".scalar(keys %COGgenes)." gene cats\n";
+	#and run tree building
+	#die "$cogCats\n";
+	my $ogrpStr="";
+	if ($outGrp ne ""){
+		$ogrpStr = "-outgroup $outGrp";
+	}
+	my $cmd = "$buildTreeScr -fna $fnFna -aa $aaFna -cats $cogCats -outD $finalD -cores $ncore -NTfilt 0.15 -bootstrap 100  $ogrpStr > $finalD/tree_build.log";
+	system "rm -r $tmpP" ;
 	return $cmd;
 }
 

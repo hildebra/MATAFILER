@@ -38,6 +38,7 @@ clustalo	/g/bork3/home/hildebra/bin/clustalo/clustalo-1.2.4-Ubuntu-x86_64
 fasttree	/g/bork3/home/hildebra/bin/fasttree/./FastTreeMP
 fasta2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
+vsearch	/g/bork3/home/hildebra/bin/vsearch-2.6.2-linux-x86_64/bin/./vsearch
 
 #     experimental
 sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
@@ -98,6 +99,7 @@ nucmer	/g/bork3/home/hildebra/bin/MUMmer3.23/./nucmer
 metPhl2	/g/bork3/home/hildebra/bin/metaphlan2/metaphlan2.py
 metPhl2Merge	/g/bork3/home/hildebra/bin/metaphlan2/utils/merge_metaphlan_tables.py
 kraken	/g/scb/bork/hildebra/DB/kraken/./kraken
+kaijuDir	/g/bork3/home/hildebra/bin/kaiju/bin/
 microCens	python /g/bork3/home/hildebra/bin/MicrobeCensus-1.1.0/scripts/run_microbe_census.py
 
 #functional profiling
@@ -176,4 +178,7 @@ ACL_path_DB	/g/bork3/home/hildebra/DB/FUNCT/Aclame/
 TCDB_path_DB	/g/bork3/home/hildebra/DB/FUNCT/TCDB/
 PATRIC_VIR_path_DB	/g/bork3/home/hildebra/DB/FUNCT/PATRIC/VirFac_KF/
 ABprod_path_DB	/g/bork3/home/hildebra/DB/FUNCT/ABprod_v1/
+
+Kraken_path_DB	/g/scb/bork/hildebra/DB/kraken/
+Kaiju_path_DB	/g/scb/bork/hildebra/DB/kaiju/
 

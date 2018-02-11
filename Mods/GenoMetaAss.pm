@@ -32,7 +32,7 @@ sub splitFastas($ $ $){
 	$inF =~ m/\/([^\/]+)$/;
 	my $inF2 = $1;
 	my @nFiles = ("$path/$inF2.$fCnt");
-	print "$nFiles[-1]\n";
+	#print "$nFiles[-1]\n";
 	if ($num < 2){
 		print "No split required!\n";
 		system "rm $nFiles[-1];ln -s  $inF $nFiles[-1]";
@@ -230,7 +230,7 @@ sub convertNT2AA($){
 	print "Detecting de novo 16S\n";
 	
 	my $newGff = "$outfile.gff";
-	system "rm -f $newGff" if (-e$newGff);
+	system "rm -f $newGff" if (-e $newGff);
 	my $rnaBin = getProgPaths("rnammer");
 	my $cmd = "$rnaBin -S bac -m ssu -gff $newGff < $fasFile";
 	system $cmd."\n";
@@ -807,7 +807,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		if ($memory > 250001){$queues = "\"bigmem\"";}
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
 		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH --cpus-per-task  $ncores\n#SBATCH -o $tmpsh.otxt\n"; #\n#SBATCH -n  $ncores
-		print O "#SBATCH --tmp=$tmpSpace\n#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
+		print O "#SBATCH --tmp=$tmpSpace\n" if ($tmpSpace>0);
+		print O "#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
 		print O "#SBATCH -p $queues\n";
 		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";##\$ -v TMPDIR=/dev/shm\n";
 		print O "#\$ -V\n";
@@ -827,7 +828,9 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 			$xtra .= " -m \"".join(" ",@restrHosts)."\" ";
 			$queues = "\"medium_priority scb\"";
 		}
-		$xtra .= "-n $ncores -oo $tmpsh.otxt -eo $tmpsh.etxt -q $queues -M $memory -R \"select[(mem>=$memory)] rusage[tmp=$tmpSpace] span[hosts=1]\" -R \"rusage[mem=$memory]\" "; #
+		$xtra .= "-n $ncores -oo $tmpsh.otxt -eo $tmpsh.etxt -q $queues -M $memory -R \"select[(mem>=$memory)] ";
+		$xtra .= "rusage[tmp=$tmpSpace] " if ($tmpSpace>0);
+		$xtra .= "span[hosts=1]\" -R \"rusage[mem=$memory]\" "; #
 	}
 	#set abortion on program fails
 	print O "set -e\n";

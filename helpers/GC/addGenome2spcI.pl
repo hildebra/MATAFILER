@@ -13,7 +13,7 @@ use Mods::phyloTools qw( getGenoGenes getFMG);
 my $tarDir = "/g/bork5/hildebra/results/TEC2/v5/Genomes/T2/";
 my $genoN = "6666666.214148.fna";
 my $name = "TEC2";
-my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/"; my $freeze11=1;
+my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_f11/"; my $freeze11=0;
 #my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_2017";my $freeze11=0;
 
 my %FMGcutoffs = (COG0012=>94.8,COG0016=>95.8,COG0018=>94.2,COG0172=>94.4,COG0215=>95.4,COG0495=>96.4,COG0525=>95.3,COG0533=>93.1,COG0541=>96.1,
@@ -62,8 +62,12 @@ foreach my $COG (keys %FMGcutoffs){
 	push(@mvtars,$DBnt.".bk",$DBaa.".bk");
 }
 
-open OC,">>$SpecID/progenomes.specIv2_2";
-print OC "$name\t$geneNameConsistent\n";
+#open OC,">>$SpecID/progenomes.specIv2_2";
+open OC,">>$SpecID/prok-refdb-v11.0.0_specI-v2_clusters-v1.map";
+print OC "$name\t$geneNameConsistent\trepresentative\n";
+close OC;
+open OC,">>$SpecID/specI.tax2";
+print OC "$name\tBacteria\tFirmicutes\tClostridia\tClostridiales\tEriseae\tBorkfalki\tBorkfalki ceftriaxensis\n";
 close OC;
 
 foreach my $mvv (@mvtars){

@@ -58,7 +58,7 @@ sub metphlanMapping; sub mergeMP2Table;
 sub genoSize;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
-#bjobs | grep 'SDM' | cut -f1 -d' ' | xargs -t -i bkill {}
+#bjobs | grep 'SDM' | cut -f11 -d' ' | xargs -t -i bkill {}
 #squ | grep cIn | cut -f12 -d' ' | xargs  -t -i scancel {}
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
@@ -82,6 +82,7 @@ my $logDir = "";
 my $sharedTmpDirP = "/scratch/MATAFILER/";
 $sharedTmpDirP = "/g/scb/bork/hildebra/tmp/" if (`hostname` !~ m/submaster/);
 my $nodeTmpDirBase = "/tmp/MATAFILER/";
+my $nodeHDDspace = 30720;
 
 #die $sharedTmpDirP;
 
@@ -168,7 +169,7 @@ my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",
 my $unfiniRew=0; my $redoCS=0; my $removeInputAgain=1; my $remove_reads_tmpDir=0;
 
 
-my $readsRpairs=1; #are reads given in pairs?
+my $readsRpairs=-1; #are reads given in pairs? default: -1 = no clue
 my $useTrimomatic=1;
 my $unzipCores = 3;
 my $splitFastaInput = 0; #assembly as input..
@@ -181,7 +182,8 @@ my $unpackZip = 0; #only goes through with read filtering, needed to get files f
 my $filterFromSource=0;
 my $DoMetaPhlan = 0; my $metaPhl2FailCnts=0; #non-asembly based tax + functional assignments
 my $DoRibofind = 0; my $doRiboAssembl = 0; my $RedoRiboFind = 0; my $riboFindFailCnts=0; #ITS/SSU/LSU detection
-my $RedoRiboAssign = 0; my $checkRiboNonEmpty=0;
+my $RedoRiboAssign = 0; my $checkRiboNonEmpty=0; 
+my $RedoRiboThatFailed=  0;#this option is used for debugging: redo ribo completely, if something failed in run
 my $DoBinning = 0;
 my $doReadMerge = 0;
 my $DoAssembly = 1;  my $SpadesAlwaysHDDnode = 1;my $spadesBayHam = 0; my $useSDM = 2;my $spadesMisMatCor = 0; my $redoAssembly =0 ;
@@ -231,9 +233,10 @@ GetOptions(
 	#flow related
 	"rm_tmpdir_reads=i" => \$remove_reads_tmpDir,
 	"rm_tmpInput=i" => \$removeInputAgain,
-	"globalTmpDir=s" => \$sharedTmpDirP,
-	"nodeTmpDir=s" => \$nodeTmpDirBase,
-	"legacyFolders=i" => \$oldStylFolders,
+	"globalTmpDir=s" => \$sharedTmpDirP,#absolute path to global shared tmp dir (like a scratch dir)
+	"nodeTmpDir=s" => \$nodeTmpDirBase,#absolute path to tmp dir on local HDD of each executing node
+	"nodeHDDspace=s" => \$nodeHDDspace,#HDD tmp space to be requested for each node. Some systems don't support this
+	"legacyFolders=i" => \$oldStylFolders, #legacy option, controls if output folders will use the read dir as name (1) or the name in the mapping file (0). Default=0
 	"submSystem=s" => \$submSytem,  #qsub,SGE,bsub,LSF
 	"submit=i" => \$doSubmit,
 	"from=i" => \$from,
@@ -261,7 +264,7 @@ GetOptions(
 	"spadesKmers=s" => \$Assembly_Kmers, #comma delimited list
 	"binSpeciesMG=i" => \$DoBinning,
 	"reAssembleMG=i" => \$redoAssembly,
-	"assembleMG=i" => \$DoAssembly,
+	"assembleMG=i" => \$DoAssembly, #1=Spades, 2=MegaHIT
 	#mapping related (asselmbly)
 	"remap2assembly=i" => \$redoAssMapping,
 	"mapReadsOntoAssembly=i" => \$map2Assembly ,  #map original reads back on assembly, to estimate abundance etc
@@ -303,14 +306,13 @@ GetOptions(
 	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
 	#D2s distance
 	"calcInterMGdistance=i" => \$DoCalcD2s,
-
-  );
+);
   
-  $map2Assembly=0 if (!$DoAssembly);
  
 # die "$DoAssembly\n";
  # ------------------------------------------ options post processing ------------------------------------------
 die "No mapping file provided (-map)\b" if ($mapF eq "");
+$map2Assembly=0 if (!$DoAssembly);
 $MappingMem .= "G"unless($MappingMem =~ m/G$/);
 if ($DoDiamond && $reqDiaDB eq ""){die "Functional profiling was requested (-profileFunct 1), but no DB to map against was defined (-diamondDBs)\n";}
 $Assembly_Kmers = "-k $Assembly_Kmers" unless ($Assembly_Kmers =~ m/^-k/);
@@ -318,7 +320,7 @@ $sdm_opt{minSeqLength}=$tmpSdmminSL if ($tmpSdmminSL > 0);
 $sdm_opt{maxSeqLength}=$tmpSdmmaxSL if ($tmpSdmmaxSL > 0);
 $remove_reads_tmpDir = 1 if ($DoFreeGlbTmp || $rmScratchTmp);
 $filterFromSource=1 if ($unpackZip );
-
+#$nodeHDDspace .= "G" unless($nodeHDDspace =~ m/G$/);
 
 #say hello to user 
 annoucnce_MATAFILER();
@@ -333,6 +335,7 @@ my $JNUM=0;
 $submSytem = findQsubSys($submSytem);
 my $QSBoptHR = emptyQsubOpt($doSubmit,"",$submSytem);
 my %QSBopt = %{$QSBoptHR};
+$QSBopt{tmpSpace} = $nodeHDDspace;
 my @Spades_Hosts = (); my @General_Hosts = ();
 #figure out if only certain node subset has enough HDD space
 if (0 && $Spades_HDspace > 100){
@@ -814,7 +817,11 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	
 	#die "$calcRibofind $calcRiboAssign\n";
 	if ($calcRibofind || $calcRiboAssign){
-		#system "rm -r $curOutDir/ribos";
+		if ($RedoRiboThatFailed ){
+			system "rm -r $curOutDir/ribos/";
+			$calcRibofind = 1;
+			
+		}
 		$riboFindFailCnts ++ ;
 	} elsif ($DoRibofind && !$calcRiboAssign) { #copy files to central dir for postprocessing..
 		my @RFtags = ("SSU","LSU");#"ITS",
@@ -919,7 +926,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 #die "X";
 	
 	#next;
-	system("mkdir -p $GlbTmpPath\nmkdir -p $DBpath\nmkdir -p $assDir\n mkdir -p $logDir");
+	system("mkdir -p $DBpath\nmkdir -p $assDir\n mkdir -p $logDir"); #mkdir -p $GlbTmpPath\n
 	#435590.58253.NC_009614
 	$QSBopt{LocationCheckStrg} = checkDrives(\@checkLocs);
 #print $finalCommAssDir."\n";
@@ -1169,7 +1176,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			$metaGassembly = $finAssLoc;
 #		die $AsGrps{$cAssGrp}{PostAssemblCmd}."\n";
 	} else {
-		print "No Assembly routines required\n";
+		print "No Assembly routines required\n" if ($DoAssembly!=0);
 		$metaGassembly = $finAssLoc;
 		$AsGrps{$cAssGrp}{AssemblJobName} = $jdep;
 		if (!$boolGenePredOK && $AssemblyGo){
@@ -1366,10 +1373,14 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	if ($MappingGo && @bwt2outD==0){ #sync clean of tmp with scnd mapping..
 		#push(@cleans , $GlbTmpPath);# $GlbTmpPath,$metagAssDir."seqClean/filter*",
 	}
+	
+	#all dependencies before deleting tmp dirs
+	my $totJdeps = $AsGrps{$cAssGrp}{MapDeps} . ";". $AsGrps{$cAssGrp}{scndMapping}.";".$AsGrps{$cAssGrp}{readDeps}.";".$AsGrps{$cAssGrp}{prodRun};
+	#die "$totJdeps\n";
 	#print $AsGrps{$cAssGrp}{ClSeqsRm}." FF ".$AsGrps{$cMapGrp}{ClSeqsRm}."\n";
 	if ($MappingGo && exists($AsGrps{$cAssGrp}{ClSeqsRm})){push(@cleans,split(/;/,$AsGrps{$cAssGrp}{ClSeqsRm} )); $AsGrps{$cMapGrp}{ClSeqsRm} = "";}
-	if ($rmScratchTmp ){push(@cleans,$GlbTmpPath);}
-	if ($DoFreeGlbTmp){push(@cleans,$GlbTmpPath."/rawRds");}
+	if ($rmScratchTmp ){if (-d $GlbTmpPath || length($totJdeps)>8){push(@cleans,$GlbTmpPath);}
+	} elsif ($DoFreeGlbTmp){push(@cleans,$GlbTmpPath."/rawRds");}
 	
 	#die "\n@cleans\n";
 	
@@ -1380,8 +1391,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	if (1){
 		if (!$remove_reads_tmpDir){@cleans =();}
 		$cln1 = clean_tmp(\@cleans,\@copies, \@copiesNoDels,
-			#all dependencies before deleting tmp dirs
-			$AsGrps{$cAssGrp}{MapDeps} . ";". $AsGrps{$cAssGrp}{scndMapping}.";".$AsGrps{$cAssGrp}{readDeps}.";".$AsGrps{$cAssGrp}{prodRun},
+			$totJdeps,
 			$curOutDir,"");#$AsGrps{$cAssGrp}{CSfinJobName}); #.";".$contRun
 	}
 	$QSBopt{LocationCheckStrg}="";
@@ -1741,7 +1751,9 @@ sub detectRibo(){
 	#first detect LSU/SSU/ITS in metag
 	my $tmpDY = "$tmpP/SMRNA/";
 	my $cmd = "\n\n";
-	if ($readsRpairs){
+	#die "$readsRpairs\n";
+	my $readConfig = 1;
+	if (@re1 > 0){
 		$cmd .= "$cLSUSSUscript '".join(";",@re1)."' '". join(";",@re2)."' ";
 		if (@singl>0){
 			$cmd .= "'".join(";",@singl) . "' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
@@ -1749,13 +1761,14 @@ sub detectRibo(){
 			$cmd .="'-1' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
 		}
 	} else {
-		$cmd .= "$cLSUSSUscript '".join(";",@singl)."' '-1' '-1' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
+		$readConfig = 0;
+		$cmd .= "$cLSUSSUscript '-1' '-1' '".join(";",@singl)."' $tmpDY $outP $numCore $SMPN $doRiboAssembl $DBrna\n\n"; #tmpP < scratch too slow
 	}
 	#this part assigns tax
 	my $tmpDX = "$tmpP/LCA/";
 	my $numCoreL = $numCore2 ;
-	my $readConfig =$readsRpairs;
-	$readConfig=2 if (@singl>0 && $readsRpairs);
+	#my $readConfig =$readsRpairs;
+	$readConfig=2 if (@singl>0 && $readConfig);
 	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL $DBrna2 $tmpDX $readConfig\n\n";
 	#die $cmd2."\n";
 	my $jobName="";
@@ -1763,7 +1776,8 @@ sub detectRibo(){
 	#die $doRiboAssembl."\n".$cmd."\n";
 	#die "$outP/reads_LSU.log\n";
 	my $allLCAstones = 0; 
-	$allLCAstones = 1 if ( -e "$outP//ltsLCA/LSU_ass.sto" && -e "$outP//ltsLCA/SSU_ass.sto" && -e "$outP//ltsLCA/ITS_ass.sto");
+	$allLCAstones = 1 if ( -e "$outP//ltsLCA/LSU_ass.sto" && -e "$outP//ltsLCA/SSU_ass.sto" );#&& -e "$outP//ltsLCA/ITS_ass.sto");
+
 	if (-d $outP  && -e "$outP/SSU_pull.sto" && -e "$outP/LSU_pull.sto" &&  #&& -e "$outP/ITS_pull.sto"
 		-s "$outP//ltsLCA/LSUriboRun_bl.hiera.txt" && $allLCAstones &&
 		($doRiboAssembl && -e $outP."/Ass/allAss.sto" ) ){
@@ -2430,18 +2444,18 @@ sub scaffoldCtgs(){
  sub get_sdm_outf($ $ $ $){
 	my ($ifastas, $mi_ifastas,$finD,$singlReadMode) = @_;
 	my @ret1;my @ret2;my @sret;
-	my $fEnd = "fastq";
+	my $fEnd = "fq";
  	if ($gzipSDMOut){
-		$fEnd = "fastq.gz";
-	}
-	if ($mi_ifastas ne ""){
-		push(@ret1,$finD."filtered_mi.1.$fEnd");push( @ret2, ($finD."filtered_mi.2.$fEnd"));push(@sret, ($finD."filtered_mi.singl.$fEnd"));
+		$fEnd = "fq.gz";
 	}
 	
 	if ($ifastas ne "" && !$singlReadMode){
 		push(@ret1,$finD."filtered.1.$fEnd");push( @ret2, ($finD."filtered.2.$fEnd"));push(@sret, ($finD."filtered.singl.$fEnd"));
 	} elsif ($ifastas ne "" && $singlReadMode){
 		push(@sret, $finD."filtered.s.$fEnd");
+	}
+	if ($mi_ifastas ne ""){
+		push(@ret1,$finD."filtered_mi.1.$fEnd");push( @ret2, ($finD."filtered_mi.2.$fEnd"));push(@sret, ($finD."filtered_mi.singl.$fEnd"));
 	}
 	
 	return (\@ret1,\@ret2,\@sret);
@@ -2481,7 +2495,7 @@ sub mergeReads(){
 	my $outT = "sdmCln";
 	my %ret = (mrg => "", pair1 => "", pair2 => "");
 	#print "XSADS\n!$doMerge || !$readsRpairs || !$runThis\n";
-	if (!$doMerge || !$readsRpairs || !$runThis){return (\%ret,"");}
+	if (!$doMerge || !$readsRpairs || @{$arp2} == 0 || !$runThis){return (\%ret,"");}
 	#print "XSADS1\n";
 	if (@{$arp1} > 1 ){die "Array with reads provided to merging routine is too large!\n@{$arp1}\n";}
 	my $mergCmd = "$flashBin -M 250 -z -o $outT -d $outdir -t $numCores ${$arp1}[0] ${$arp2}[0]\n";
@@ -2506,7 +2520,7 @@ sub mergeReads(){
 }
  
 sub sdmClean(){
-	my ($curOutDir,$ar1,$ar2,$ars,$libInfoAr,$tmpD,$mateD,$finD,$sdmO,$jobd,$runThis) = @_;
+	my ($curOutDir,$ar1,$ar2,$ars,$libInfoAr,$tmpDX,$mateD,$finD,$sdmO,$jobd,$runThis) = @_;
 	#create ifasta path
 	#die "cllll\n";
 	my $comprCores=1;
@@ -2520,12 +2534,14 @@ sub sdmClean(){
 		for (my $i=1;$i<@{$ars};$i++){if ($i>0){$ifastasPre .= ";".${$ars}[$i];}}
 		$singlReadMode=1;
 	}
+	my $stone = "$finD/filterDone.stone";
 	open O,">$curOutDir/input_fil.txt"; print O $ifastasPre; close O;
 
-	system("mkdir -p $finD");
+	#system("mkdir -p $finD");
 	my $cmd = "";
-	$cmd .= "mkdir -p $tmpD\n" unless ($tmpD eq "");
-	$cmd .= "mkdir -p $finD\n" unless ($tmpD eq "");
+	#$cmd .= "mkdir -p $tmpD\n" unless ($tmpD eq "");
+	$cmd .= "mkdir -p $finD\n" unless ($finD eq "");
+	$cmd .= "rm -f $stone\n";
 	
 	my ($ifastas, $mi_ifastas, $singlAddAr, $matAr, $jdep) = get_ifa_mifa($ifastasPre,$libInfoAr,$mateD,0,$jobd,$singlReadMode);
 	$jobd = $jdep; #replaces old dep
@@ -2537,58 +2553,82 @@ sub sdmClean(){
 	#$baseSDMoptMiSeq;
 	my $ofiles = "";
 	my $mi_ofiles = "";
-	system("mkdir -p $logDir/sdm/");
+	system("mkdir -p $logDir/sdm/") unless (-d "$logDir/sdm/");
 	my $useLocalTmp = 1;
-	if ($tmpD eq ""){$useLocalTmp = 0;$tmpD = $finD;}
+	#if ($tmpD eq ""){$useLocalTmp = 0;$tmpD = $finD;}
 	my $nsdmPair = 2;
 	my $sdm_def= " -ignore_IO_errors 1 -i_qual_offset auto -binomialFilterBothPairs 1 ";
 	my $catCmd = "cat ";
-	$catCmd = "$pigzBin -p $comprCores -c " if ($gzipSDMOut);
+	#$catCmd = "$pigzBin -p $comprCores -c " if ($gzipSDMOut);
 	if ($ifastas ne ""){
 		if ($singlReadMode){
-			$ofiles = $tmpD."/filtered.s.fastq"; $nsdmPair=1;
+			$ofiles = $sret[0];#$finD."/filtered.s.fq"; 
+			$nsdmPair=1;
+			#$ofiles = $finD."/filtered.s.fq.gz" if ($gzipSDMOut);
 		}else {
-			$ofiles = $tmpD."/filtered.1.fastq,".$tmpD."/filtered.2.fastq";
+			$ofiles = $ret1[0].",".$ret2[0];# $finD."/filtered.1.fq,".$finD."/filtered.2.fq";
+			#$ofiles = $finD."/filtered.1.fq.gz,".$finD."/filtered.2.fq.gz" if ($gzipSDMOut);
 		}
-		$cmd .= "touch $tmpD/filtered.1.fastq $tmpD/filtered.1.fastq.singl  $tmpD/filtered.2.fastq $tmpD/filtered.2.fastq.singl\n" if (!$singlReadMode);
+		#$cmd .= "touch $tmpD/filtered.1.fastq $tmpD/filtered.1.fastq.singl  $tmpD/filtered.2.fastq $tmpD/filtered.2.fastq.singl\n" if (!$singlReadMode);
 		$cmd .= "$sdmBin -i \"$ifastas\" -o_fastq $ofiles -options $sdmO -paired $nsdmPair  -log $logDir/sdm/filter.log $sdm_def\n\n";
 		#push(@ret1,$finD."filtered.1.fastq");push( @ret2, ($finD."filtered.2.fastq"));push(@sret, ($finD."filtered.singl.fastq"));
-		
-		$cmd .= "$catCmd $tmpD/filtered.1.fastq.singl  $tmpD/filtered.2.fastq.singl >  $sret[-1]\n" if (!$singlReadMode);
+		if (!$singlReadMode){
+			my $cmdSA = "$catCmd $ret1[0]  $ret2[0] " ;
+			if ($gzipSDMOut){
+				$cmdSA =~ s/\.fq\.gz/\.singl\.fq\.gz/g ;
+			} else {
+				$cmdSA =~ s/\.fq/\.singl\.fq/g ;
+			}
+			my @tmp = split /\s+/,$cmdSA;
+			$cmd .= $cmdSA . ">>  $sret[0]\n" ;
+			$cmd .= "rm $tmp[1] $tmp[2]\n";
+		}
 	}
 	if ($mi_ifastas ne ""){
-		$mi_ofiles =  $tmpD."/filtered_mi.1.fastq,".$tmpD."/filtered_mi.2.fastq";
-		$cmd .= "touch $tmpD/filtered_mi.1.fastq.singl  $tmpD/filtered_mi.2.fastq.singl\n";
+		$mi_ofiles =  $ret1[1].",".$ret2[1];#$tmpD."/filtered_mi.1.fastq,".$tmpD."/filtered_mi.2.fastq";
+		#$cmd .= "touch $tmpD/filtered_mi.1.fastq.singl  $tmpD/filtered_mi.2.fastq.singl\n";
 		$cmd .= " $sdmBin -i \"$mi_ifastas\" -o_fastq $mi_ofiles -options $baseSDMoptMiSeq -paired 2  -log $logDir/sdm/filter_xtra.log $sdm_def\n\n";
 		#$cmd .= "/g/bork3/home/hildebra/dev/C++/sdm/./sdm -i_fastq \"$mi_ifastas\" -o_fastq $ofiles -options $baseSDMoptMiSeq -paired 2 -i_qual_offset auto -log $logDir/sdm/filter.log -binomialFilterBothPairs 1\n\n";
 		#push(@ret1,$finD."filtered_mi.1.fastq");push( @ret2, ($finD."filtered_mi.2.fastq"));push(@sret, ($finD."filtered_mi.singl.fastq"));
-		$cmd .= "$catCmd $tmpD/filtered_mi.1.fastq.singl  $tmpD/filtered_mi.2.fastq.singl > $sret[0]\n";
+#		$cmd .= "$catCmd $tmpD/filtered_mi.1.fastq.singl  $tmpD/filtered_mi.2.fastq.singl > $sret[1]\n";
+		if (!$singlReadMode){
+			my $cmdSA = "$catCmd $ret1[1]  $ret2[1] ";
+			if ($gzipSDMOut){
+				$cmdSA =~ s/\.fq\.gz/\.singl\.fq\.gz/g ;
+			} else {
+				$cmdSA =~ s/\.fq/\.singl\.fq/g ;
+			}
+			$cmd .= $cmdSA . ">>  $sret[1]\n" ;
+		}
 	}
 	#die $cmd."\n";
-	my $stone = "$finD/filterDone.stone";
-	if ($useLocalTmp){
-		if ($unpackZip || $gzipSDMOut){#zip output
-			foreach my $of (split(/,/,$ofiles)){
-				$of =~ m/\/([^\/]+$)/; my $fname = $1;
-				$cmd .= "$pigzBin -p $comprCores -c $of > $finD/$fname.gz\n";
-			}
-			if (!$singlReadMode){
-				$sret[-1] =~ m/\/([^\/]+$)/; my $fname = $1;
-				#$cmd .= "$pigzBin -p $comprCores -c ".$sret[-1]." > $finD/$fname.gz\n" ;
-			}
-		} else {
-			$cmd .= "mv -f ".join(" ",(split(/,/,$ofiles),split(/,/,$mi_ofiles)))." $finD\n";
-			$cmd .= "rm -rf $tmpD\n";
-		}
-	} elsif ($unpackZip || $gzipSDMOut){#zip output
-		foreach my $of (split(/,/,$ofiles)){
-			$of =~ m/\/([^\/]+$)/; my $fname = $1;
-			$cmd .= "$pigzBin -p $comprCores $of \n";
-		}
-		if (!$singlReadMode){
-			$sret[-1] =~ m/\/([^\/]+$)/; my $fname = $1;
-			#$cmd .= "$pigzBin -p $comprCores ".$sret[-1]." \n" ;
-		}
+#	if ($useLocalTmp){
+#		if ($unpackZip || $gzipSDMOut){#zip output
+#			foreach my $of (split(/,/,$ofiles)){
+#				$of =~ m/\/([^\/]+$)/; my $fname = $1;
+#				$cmd .= "$pigzBin -p $comprCores -c $of > $finD/$fname.gz\n";
+#			}
+#			if (!$singlReadMode){
+#				$sret[-1] =~ m/\/([^\/]+$)/; my $fname = $1;
+#				#$cmd .= "$pigzBin -p $comprCores -c ".$sret[-1]." > $finD/$fname.gz\n" ;
+#			}
+#		} else {
+#			$cmd .= "mv -f ".join(" ",(split(/,/,$ofiles),split(/,/,$mi_ofiles)))." $finD\n";
+#			$cmd .= "rm -rf $tmpD\n";
+#		}
+#	} elsif ($unpackZip || $gzipSDMOut){#zip output
+#		foreach my $of (split(/,/,$ofiles)){
+#			$of =~ m/\/([^\/]+$)/; my $fname = $1;
+#			$cmd .= "$pigzBin -p $comprCores $of \n";
+#		}
+#		if (!$singlReadMode){
+#			$sret[-1] =~ m/\/([^\/]+$)/; my $fname = $1;
+#			#$cmd .= "$pigzBin -p $comprCores ".$sret[-1]." \n" ;
+#		}
+#	}
+	if (!$singlReadMode){
+		$sret[-1] =~ m/\/([^\/]+$)/; my $fname = $1;
+		#$cmd .= "$pigzBin -p $comprCores ".$sret[-1]." \n" ;
 	}
 	$cmd .= "touch $stone\n";
 	#die "$cmd\n";
@@ -2739,14 +2779,16 @@ sub seedUnzip2tmp(){
 #				@pas = grep {not exists $h{$_}} @pas;
 				#die "@pas\n@pa1\n";
 			}
-			if ($readsRpairs){
+			if ($readsRpairs!=0){
 				@pa2 = sort ( grep { /$smplPrefix$rawFileSrchStr2/ && -e "$fastp/$_" } readdir(DIR) );	rewinddir DIR;
 				@pa1 = sort ( grep { /$smplPrefix$rawFileSrchStr1/  && -e "$fastp/$_"} readdir(DIR) );	rewinddir(DIR);
 				#print "@pa2  XX\n";
 				my %h;
-				@h{(@pas)} = undef;
-				@pa1 = grep {not exists $h{$_}} @pa1;
-				@pa2 = grep {not exists $h{$_}} @pa2;
+#				@h{(@pas)} = undef;
+#				@pa1 = grep {not exists $h{$_}} @pa1;
+#				@pa2 = grep {not exists $h{$_}} @pa2;
+				@h{(@pa1,@pa2)} = undef;
+				@pas = grep {not exists $h{$_}} @pas;
 				#die "@pas\n@pa1\n@pa2\n";
 			}
 			close(DIR);
@@ -2763,7 +2805,7 @@ sub seedUnzip2tmp(){
 	}
 	#die "@pa1\n@pas\n";
 	#import xtra long rds
-	if (@pa1 != @pa2 && $readsRpairs){die "For dir $fastp, unequal fastq files exist:\nP1\n".join("\n",@pa1)."\nP2:\n".join("\n",@pa2)."\n";}
+	if (@pa1 != @pa2 && $readsRpairs!=0){die "For dir $fastp, unequal fastq files exist:\nP1\n".join("\n",@pa1)."\nP2:\n".join("\n",@pa2)."\n";}
 	#check for date of files (special filter)
 	if ($doDateFileCheck){
 		my @pa1t = @pa1; my @pa2t = @pa2; undef @pa1; undef @pa2;
@@ -2829,7 +2871,7 @@ sub seedUnzip2tmp(){
 
 	#make sure input is unzipped
 	#die ($tmpPath."\n");
-	system("mkdir -p $finDest/rawRds/");# my $newRDf ="";
+	#system("mkdir -p $finDest/rawRds/");# my $newRDf ="";
 	my $testf1 = "";my $testf2 = "";
 	
 	for (my $i=0; $i<@pa1; $i++){
@@ -2947,7 +2989,8 @@ sub seedUnzip2tmp(){
 
 sub prepKraken($){
 	#my ($DBdir) = @_;
-	my $oriKrakDir = "/g/scb/bork/hildebra/DB/kraken/";
+	#my $oriKrakDir = "/g/scb/bork/hildebra/DB/kraken/";
+	my $oriKrakDir = getProgPaths("Kraken_path_DB");
 	my %DBname;
 	$DBname{"hum1stTry"} = 1 if ($humanFilter);
 	$DBname{"minikraken_2015"} = 1 if ($DO_EUK_GENE_PRED);
@@ -3432,7 +3475,6 @@ sub bamDepth{
 	my $outstat = check_map_done($doCram, $finalD, $baseN, $mappDir);
 	#die "$outstat";
 	if ($outstat>=1){return ("","",$outstat);}
-	die"toofar\n";
 	#die "$mappDir/$baseN-smd.bam.coverage.gz\n$finalD/$baseN-smd.bam.coverage.gz\n" ;#if (-e "$finalD/$baseN-smd.bam.coverage.gz");
 	
 	
@@ -3552,6 +3594,8 @@ sub clean_tmp{#routine moves output from temp dirs to final dirs (that are IO li
 	my @clDa = @{$clDar};
 	my @cps = @{$cpref};
 	my @cpsND = @{$cpnodel};
+	#die "@cps ==0 && @clDa ==0 && @cpsND\n";
+	if (@cps ==0 && @clDa ==0 && @cpsND==0){return $jDepe;}
 	my $cmd = "";
 	for (my $i=0;$i<@cps;$i+=2){
 		next if (length($cps[$i+1] ) < 5);

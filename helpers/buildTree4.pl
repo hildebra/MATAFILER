@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
-#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree2.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 1 -SynTree 1
-#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree2.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 0 -SynTree 0 -runRAxML 0 -runGubbins 0
+#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree4.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/testMSA/ -cores 12 -useEte 0 -NTfilt 0.8 -runIQtree 1 -calcDistMat 1 -continue 1
+#perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/buildTree4.pl -fna /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFNAs.fna -aa /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//allFAAs.faa -cats /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2//renameTEC2//categories4ete.txt -outD /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5//T2/tesssst/ -cores 12 -useEte 0 -NTfilt 0.8 -NonSynTree 0 -SynTree 0 -runRAxML 0 -runGubbins 0
 #ARGS: ./buildTree.pl -fna [FNA] -faa [FAA] -cat [categoryFile] -outD [outDir] -cores [CPUs] -useEte [1=ETE,0=this script] -NTfilt [filter]
 #versions: ver 2 makes a link to nexus file formats, to be used in MrBayes and BEAST etc
 #8.12.17: added mod3 from Mechthild
@@ -24,8 +24,10 @@ sub convertMultAli2NT;
 sub mergeMSAs;
 sub synPosOnly;
 sub calcDisPos;#gets only the dissimilar positions of an MSA, as well as %id similarity
+sub calcDisPos2;#de novo aligns pairwise via vsearch and calcs id (iddef 2)
 sub runCodeml;
 sub runFastgear;
+sub mergePids;
 
 my $doPhym= 0;
 
@@ -51,9 +53,12 @@ my $fastgearReorderBin = "/g/bork3/home/luetge/softs/fastGearPostprocessingLinux
 #trimal -in /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/COG0185.faa -out /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/MSA/tst.fna -backtrans /g/scb/bork/hildebra/SNP/GNMass3/TECtime/v5/T2/tesssst/inMSA0.fna -keepheader -keepseqs -noallgaps -automated1 -ignorestopcodon
 #some runtim options...
 #my $ncore = 20;#RAXML cores
- my $ntFrac =2; 
- my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
- if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
+my $ntFrac =2; 
+my $clustalUse = 1; #do MSA with clustal (1) or msaprobs (0) 
+if ($clustalUse == 0){print "Warning:  MSAprobs with trimal gives warnings (ignore them)\n";}
+my $calcDistMat = 0; #distmat of either AA or NT (depending on MSA)
+my $calcDistMatExt = 0; #distmat of other AA or NT (depending on MSA), e.g. running two times an MSA
+my $calcDistMatExtGo = 0;
 
 my $ntCnt =0; my $bootStrap=0;
 my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn,
@@ -88,6 +93,8 @@ GetOptions(
 	"outgroup=s"	=> \$outgroup,
 	"NonSynTree=i"	=> \$calcNonSyn,
 	"AAtree=i" => \$useAA4tree,
+	"calcDistMat=i" => \$calcDistMat,
+	"calcDistMatExt=i" => \$calcDistMatExt,
 	"SynTree=i"	=> \$calcSyn,
 	"continue=i" => \$continue,
 	"bootstrap=i" => \$bootStrap,
@@ -110,6 +117,8 @@ if ($aaFna eq "" || $useAA4tree){	$calcSyn=0;$calcNonSyn=0;}
 if ($filt <1){$ntFrac=$filt; print "Using filter with $ntFrac fraction of nts\n";}
 if ($outgroup ne ""){print "Using outgroup $outgroup\n";}
 if ($bootStrap>0){print "Using bootstrapping in tree building\n";}
+if (($calcDistMat || $calcDistMatExt) && $isAligned || !$clustalUse){die"Can't calc distance mat, unless clustalO is being used for MSA\n";}
+
 else {$ntCnt = $filt;}
 my $tmpD = $outD;
 system "mkdir -p $tmpD" unless (-d $tmpD);
@@ -120,7 +129,6 @@ my $outD_clust = "";
 if($clusterName eq ""){$outD_clust = "$outD/MSA_FG";}
 else {my $outD_clust = "/g/bork5/luetge/$clusterName";}
 
-#die "$Ete\n";
 #------------------------------------------
 #sorting by COG, MSA & syn position extraction
 if ($Ete){
@@ -147,7 +155,7 @@ if ($fixHeaders){
 my $treeD = "$outD/phylo/";#raxml, fasttree, phyml tree output dir
 #my $treeDFT = "$outD/FTtree/";#fasttree output
 
-system "rm -fr $treeD" if (-d $treeD && !$continue);
+system "rm -fr $treeD $outD/MSA/" if (!$continue);
 system "mkdir -p  $outD/MSA/" unless(-d "$outD/MSA/");
 system "mkdir -p  $treeD/" unless(-d "$treeD");
 my $multAli = "$outD/MSA/MSAli.fna";
@@ -156,6 +164,11 @@ my $multAliNonSyn = $multAli.".nonsyn.fna";
 
 my $MSAcat = "$outD/MSA/MSAcat.fna";
 
+
+#DEBUG
+#mergePids("$outD/MSA/",40, "NT") ;die;
+#my $tmp = "/g/bork5/hildebra/results/TEC2/v5/T2dphylo/rDNA2/fullGenomes/ini16S.fna";
+#calcDisPos2($tmp,"$outD/MSA/percID_syn.txt",1); die;
 
 my $phylipD = "$outD/phylip/";
 system "mkdir -p  $phylipD" unless(-d $phylipD || !$doGenesToPh);
@@ -186,7 +199,7 @@ if ($doMSA && $cogCats ne ""){
 			$length = length($FNA{$FNAseq});
 			$div = $length/3;
 			#$div = 12.7;
-			die "AA seq can not divided by 3 in $FNAseq\n" if($div =~ /\D/);
+			print "AA seq can not divided by 3 in $FNAseq\n" if($div =~ /\D/);
 			#die "$div\n";
 		}
 
@@ -195,10 +208,10 @@ if ($doMSA && $cogCats ne ""){
 
 	#############################################################################################
 
-	open I,"<$cogCats" or die "Can't open cogcats $cogCats\n";
 	my $cnt = 0; 
 	my %samples; my $ogrpCnt=0;#my %genCats; 
-	while (<I>){
+	open my $xI,"<$cogCats" or die "Can't open cogcats $cogCats\n";
+	while (<$xI>){
 		chomp; my @spl = split /\t/;
 		@spl = grep !/^NA$/, @spl;#remove NAs
 		if (@spl ==0){print "No categories in cat file line $cnt\n";next;}
@@ -228,6 +241,8 @@ if ($doMSA && $cogCats ne ""){
 		my $tmpOutMSAnonsyn = "$tmpD/MSA/$spl2[1].$cnt.nonsyn.fna";
 		open O,">$tmpInMSA" or die "Can;t open tmp faa file for MSA: $tmpInMSA\n";
 		open O2,">$tmpInMSAnt" or die "Can;t open tmp fna file for MSA: $tmpInMSAnt\n";
+		my $seqType = "AA";my $seqTypeOth = "NT";
+		my $seqLength = 0;
 		foreach my $seq (@spl){ 								### $seq = genomeX_NOGY
 			#print "$seq\n";
 			#my @spl2 = split /$smplSep/,$seq; 
@@ -246,16 +261,46 @@ if ($doMSA && $cogCats ne ""){
 			if (!$useAA4tree){
 				print O2 ">$seq2\n$FNA{$seq}\n";
 			}
+			$seqLength += length($FNA{$seq});
 		}
+		$seqLength /= @spl;
 		#die "@genomeList\n";
 		close O;close O2;
+		#dist mat related
+		my $tmpDMatOth = "$outD/MSA/${seqTypeOth}_clustalo_percID_${cnt}_".int($seqLength).".txt";
+		my $tmpDMat = "$outD/MSA/${seqType}_clustalo_percID_${cnt}_".int($seqLength).".txt";
+		my $inFastaOth = $tmpInMSAnt;
+		
 		if ($clustalUse){
-			$cmd = $clustaloBin." -i $tmpInMSA -o $tmpOutMSA2 --outfmt=fasta --threads=$ncore --force\n";
+			if (1 || !$calcDistMat){
+				$cmd = $clustaloBin." -i $tmpInMSA -o $tmpOutMSA2 --outfmt=fasta --threads=$ncore --force\n";
+			} elsif (0) {
+			#do not use this path any longer, but vsearc implementation
+			#--use-kimura
+				$cmd = $clustaloBin." -i $tmpInMSA -o $tmpOutMSA2 --outfmt=fasta --percent-id --distmat-out $tmpDMat --threads=$ncore --force --full\n";
+				
+				if ($calcDistMatExt && -e $inFastaOth){
+					$cmd .= $clustaloBin." -i $inFastaOth -o $tmpOutMSA2.tmp --outfmt=fasta --percent-id --distmat-out $tmpDMatOth --threads=$ncore --force --full\n";
+					$cmd .= "rm $tmpOutMSA2.tmp\n";
+					$calcDistMatExtGo=1
+				}
+			}
+
 		} else {
 			$cmd = "$msapBin -num_threads $ncore $tmpInMSA > $tmpOutMSA2";
 		}
 		#die $cmd;
-		system $cmd unless (-s $tmpOutMSA2);
+		systemW $cmd unless (-s $tmpOutMSA2 && $continue);
+		
+		if ($calcDistMat){ #for dmat: calc each gene spearately and merge scores later
+			my $status  = calcDisPos2($tmpInMSA,$tmpDMat,0);
+#			if ($calcDistMatExt && -e $inFastaOth){
+			if (-e $inFastaOth){ #no flow control..
+				$status = calcDisPos2($inFastaOth,$tmpDMatOth,1);
+				$calcDistMatExtGo = $status;
+			} else { $calcDistMatExtGo = 0;}
+
+		}
 		#die;
 		#die "@MSAs\n";
 		if (!$useAA4tree){
@@ -289,10 +334,14 @@ if ($doMSA && $cogCats ne ""){
 		#die;
 
 		$cnt ++;
-		print "$cnt ";
+		print "$cnt "; 
 
 	}
-	close I;
+	close $xI;
+	
+	mergePids("$outD/MSA/",$cnt, "AA",1) if ($calcDistMat); #merge different percIDs
+	mergePids("$outD/MSA/",$cnt, "NT",1) if ($calcDistMat); #merge different percIDs
+	
 	#$seqCount = $cnt;		
 	#die "$seqCount\n";
 
@@ -313,38 +362,71 @@ if ($doMSA && $cogCats ne ""){
 } elsif ($doMSA) {#no marker way, single gene
 	print "No gene categories given, assumming 1 gene / species in input\n";
 	my $tmpInMSA = $aaFna;
-	my $tmpInMSAnt = $fnFna;
+	#my $tmpInMSAnt = $fnFna;
 	my $tmpOutMSA2 = "$tmpD/outMSA.faa";
 	my $tmpOutMSAsyn = $multAliSyn;#"$tmpD/outMSA.syn.fna";
 	my $tmpOutMSAnonsyn = $multAliNonSyn;
 	#print "$tmpInMSAnt\n";
 	my $numFas;
-	if (-e $tmpInMSA){
-		$numFas = `grep -c '^>' $tmpInMSA`;
+	if (-e $aaFna){ #just faster to use aa file..
+		$numFas = `grep -c '^>' $aaFna`;
 	} else {
-		$numFas = `grep -c '^>' $tmpInMSAnt`;
+		$numFas = `grep -c '^>' $fnFna`;
 	}
 	chomp $numFas;
-	my $inFasta = $tmpInMSA;
-	$inFasta = $tmpInMSAnt if ($tmpInMSA eq "");
+	#die "$fnFna $numFas\n"; 
+	my $seqType = "AA";
+	my $seqTypeOth = "NT";
+	my $inFasta = $aaFna;
+	my $inFastaOth = $fnFna;
+	my $mainTypeIsAA=1;
+	if ($aaFna eq ""){ #always choose AA as default alignment, nt is only fallback
+		$inFasta = $fnFna ;
+		$inFastaOth = $aaFna;
+		$seqType = "NT";
+		$seqTypeOth = "AA";
+		$mainTypeIsAA = 0;
+	}
 	if ($numFas <= 1){print "Not enough Sequences\n"; exit(0);}
 	if ($isAligned){
 		#if ($aaFna ne ""){die "AA input can not be defined, if input is specified as being aligned!\n";}
 		#just cp infile to MSA location
 		system "cp $inFasta $tmpOutMSA2";
 	} elsif ($clustalUse){
-		$cmd = $clustaloBin." -i $inFasta -o $tmpOutMSA2 --outfmt=fasta --threads=$ncore --force\n";
+		if (1 || !$calcDistMat){
+			$cmd = $clustaloBin." -i $inFasta -o $tmpOutMSA2 --outfmt=fasta --threads=$ncore --force\n";
+		} elsif (0) {
+		#--use-kimura
+			$cmd = $clustaloBin." -i $inFasta -o $tmpOutMSA2 --outfmt=fasta --percent-id  --distmat-out $outD/MSA/${seqType}_clustalo_percID_0_1.txt --threads=$ncore --force --full\n";
+			if (!$calcDistMatExt && -e $inFastaOth){
+				$cmd .= $clustaloBin." -i $inFastaOth -o $tmpOutMSA2.tmp --outfmt=fasta --percent-id  --distmat-out $outD/MSA/${seqTypeOth}_clustalo_percID_0_1.txt --threads=$ncore --force --full\n";
+				$cmd.="rm $tmpOutMSA2.tmp\n";
+			}
+		}
+
 	} else {
-		$cmd = "sed -i 's/\\*//g' $tmpInMSA\n";
+		#$cmd = "sed -i 's/\\*//g' $inFasta\n";
 		$cmd .= "$msapBin -num_threads $ncore $inFasta > $tmpOutMSA2\n";
 	}
+	if ($calcDistMat){
+		if (-e $tmpInMSA){
+			calcDisPos2($tmpInMSA,"$outD/MSA/${seqType}_vsearch_percID.txt",!$mainTypeIsAA);
+		}
+		if (-e $inFastaOth){
+			calcDisPos2($inFastaOth,"$outD/MSA/${seqTypeOth}_vsearch_percID.txt",$mainTypeIsAA);
+		}
+	}
+
 	unless ($continue && -e  $tmpOutMSA2){
 		systemW $cmd ; print "finished MSA\n";
+		#mergePids("$outD/MSA/",1, $seqType) if ($calcDistMat); #merge different percIDs
+		#mergePids("$outD/MSA/",1, $seqTypeOth) if ($calcDistMatExt); #merge different percIDs
 	}
+
 	if ($tmpInMSA ne "" && !$useAA4tree){
-		convertMultAli2NT($tmpOutMSA2,$tmpInMSAnt,$multAli);
+		convertMultAli2NT($tmpOutMSA2,$fnFna,$multAli);
 		synPosOnly($multAli,$tmpOutMSA2,$tmpOutMSAsyn,$tmpOutMSAnonsyn,0,"",$calcSyn,$calcNonSyn);
-		#system "rm $tmpInMSA $tmpInMSAnt $tmpOutMSA2";
+		#system "rm $tmpInMSA $fnFna $tmpOutMSA2";
 		system "rm $tmpOutMSA2";
 		push (@MSAs,$multAli);
 	} elsif (!$useAA4tree) {
@@ -401,7 +483,7 @@ if ($doGubbins){
 
 #distamce matrix, this is fast
 #system "$trimalBin -in $multAli -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID.txt\n";
-if (!$useAA4tree){
+if (0 && !$useAA4tree){ #this is outdated
 	calcDisPos($multAli,"$outD/MSA/percID.txt",1) unless(-e "$outD/MSA/percID.txt" && $continue);
 	if ($calcSyn){
 	#		system "$trimalBin -in $multAliSyn -gt 0.1 -cons 100 -out /dev/null -sident 2> /dev/null > $outD/MSA/percID_syn.txt\n";
@@ -423,9 +505,10 @@ if ($doFastTree){
 	}
 }
 if ($doIQTree){
-	my $IQtree = "$treeD/IQtree_fast_allsites";
+	my $IQtree = "$treeD/IQtree.nwk";
 	unless ($continue && -e "$IQtree.treefile"){
-		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap,$useAA4tree,1);
+		my $iqFast=0;my$iqAutoModel=1;
+		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap,$useAA4tree,$iqFast,$iqAutoModel);
 	}
 	$IQtree = "$treeD/IQtree_allsites";
 	unless ($continue && -e "$IQtree.treefile"){ #and slow..
@@ -614,15 +697,123 @@ exit(0);
 ##########################################################################################
 ##########################################################################################
 
+sub mergePids($ $ $){
+	my ($dir,$max,$seqType,$inFmt) = @_;
+	#$outD/MSA/${seqType}_clustalo_percID_$cnt.txt
+	#my $seqType = "AA";  
+	opendir(DIR, $dir) or die $!;
+    my @subfls  = grep { /$seqType.*_percID_.*\.txt/ } readdir(DIR); #_percID_.*\.txt
+	close DIR;
+	return if (@subfls == 0);
+	#die "@subfls\n$dir\n";
+	my %bigMat; my %bigCnt;
+	for (my $j=0;$j<$max;$j++){
+		my $disM = $subfls[$j]; #"$outD/MSA/${seqType}_clustalo_percID_$j.txt";
+		$disM =~ m/_(\d+)\.txt$/;
+		my $curL = $1;
+		die "can't find distance matrix $dir$disM\n" unless (-e "$dir/$disM");
+		my $cc=-2;
+		my @IDS; my %cL;
+		#print "$disM\n";
+		open I ,"<$dir/$disM";
+		while (my $line = <I>){
+			$cc++;
+			next if ($cc==-1);
+			chomp $line;
+			my @spl = split /\s+/,$line;
+			my $id = shift @spl;
+			push (@IDS,$id);
+			$cL{$cc} = \@spl;
+		}
+		close I;
+		system "rm $dir/$disM";
+		#matrix in mem, now relate to actual dist matrix
+		for (my $j=0;$j<@IDS;$j++){
+			$IDS[$j] =~ m/([^_]+)_/;
+			my $id1 = $1;
+			for (my $k=$j;$k<@IDS;$k++){
+				my $curPID = $cL{$j}[$k];
+				$IDS[$k] =~ m/([^_]+)_/;
+				my $id2 = $1;
+				#print "$id1 $id2 $curPID\n";;
+				$bigMat{$id1}{$id2} += $curPID * $curL;
+				$bigCnt{$id1}{$id2} += $curL;
+			}
+		}
+		#die;
+	}
+	my $oMat = "$dir/${seqType}_clustalo_percID.txt";
+	open O,">$oMat" or die "Can't open out dis mat $oMat\n";
+	my @IDS = sort(keys %bigMat);
+	print O "\t".join("\t",@IDS)."\n";
+	for (my $j=0;$j<@IDS;$j++){
+		my $id1 = $IDS[$j];
+		print O $id1;
+		for (my $k=0;$k<@IDS;$k++){
+			my $id2 = $IDS[$k];
+			if (exists($bigMat{$id1}{$id2} )){
+				print O "\t".$bigMat{$id1}{$id2} / $bigCnt{$id1}{$id2};
+			} elsif (exists($bigMat{$id2}{$id1} ) ) {
+				print O "\t".$bigMat{$id2}{$id1} / $bigCnt{$id2}{$id1};
+			} else {
+				print O "\tNA"
+				#die "$id1 $id2\n";
+			}
+		}
+		print O "\n";
+	}
+	
+	close O;
+	#die $oMat;
+}
 
+#de novo aligns pairwise via vsearch and calcs id (iddef 2)
+sub calcDisPos2($ $ $){
+	my ($MSA,$opID, $isNT) = @_;
+	my $vsBin  = getProgPaths("vsearch");
+	if (!$isNT){
+		#die $MSA ;
+		print "No AA perc ID support (yet)\n";
+		return 0;
+	}
+	my $cmd="";
+	$cmd = "$vsBin --threads $ncore --quiet --allpairs_global $MSA --acceptall --blast6out $tmpD/tmp.b6 --iddef 2 \n";
+	#$cmd = $clustaloBin." -i $MSA -o $MSA.tmp --outfmt=fasta --percent-id --use-kimura --distmat-out $opID --threads=$ncore --force --full\n";
+	#$cmd .= "rm -f $MSA.tmp\n";
+	#die $cmd."\n";
+	systemW $cmd;
+	#die $cmd;
+	my %perID;
+	open I,"<$tmpD/tmp.b6" or die "Can't find $tmpD/tmp.b6\n";
+	while (<I>){
+		chomp;
+		my @spl = split /\t/;
+		$perID{$spl[0]}{$spl[1]} = $spl[2];
+		$perID{$spl[1]}{$spl[0]} = $spl[2];
+	}
+	close I;
+	open O,">$opID" or die "Can't open dist mat output $opID\n";
+	my @smpls = sort keys %perID;
+	print O "percID\t".join("\t",@smpls)."";
+	foreach my $k1 (@smpls){
+		print O "\n$k1\t";
+		foreach my $k2 (@smpls){
+			if ($k1 eq $k2){print O "\t100";
+			} else {
+				if (!exists($perID{$k1}{$k2})){die "Can;t locate keys $k1 $k2\n";}
+				print O "\t".$perID{$k1}{$k2};
+			}
+		}
+	}
+	close O;
+	unlink "$tmpD/tmp.b6";
+	return 1;
+}
 
 sub calcDisPos($ $ $){
 	my ($MSA,$opID, $isNT) = @_;
-	
-	$cmd = $clustaloBin." -i $MSA -o $MSA.tmp --outfmt=fasta --percent-id --distmat-out $opID --threads=$ncore --force --full\n";
-	$cmd .= "rm -f $MSA.tmp\n";
-	systemW $cmd;
-	return;
+	#$cmd = $clustaloBin." -i $MSA -o $MSA.tmp --outfmt=fasta --percent-id --use-kimura --distmat-out $opID --threads=$ncore --force --full\n";
+	#$cmd .= "rm -f $MSA.tmp\n";
 	
 	#too slow
 	my $kr = readFasta($MSA);

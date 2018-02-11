@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 #annotates specI's in the dataset
 #also creates specI abundance tables
+#dont forget to add custom genomes to specI database!!
 #  ./annotateMGwMotus.pl /g/bork3/home/hildebra/data/SNP/GCs/T2_HM3_GNM3_ABR 12
 
 

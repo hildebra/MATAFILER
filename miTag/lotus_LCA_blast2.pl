@@ -135,7 +135,6 @@ for (my $i=0;$i<@tags;$i++){
 		my $inFilX = $inD."reads_$tags[$i].fq";
 		$inFilX = $inD."reads_$tags[$i].fq.gz" if (-e $inD."reads_$tags[$i].fq.gz" && !-e $inFilX);
 		if ($readsRpairs>0){
-		#die "X";
 			$go = flashed($inD."reads_$tags[$i].r1.fq",$inD."reads_$tags[$i].r2.fq",$mergeD,$tags[$i],$inD); 
 			if ($go==3 && !-z $inFilX){
 				$readsRpairs=0; 
@@ -151,13 +150,8 @@ for (my $i=0;$i<@tags;$i++){
 		}
 		system "touch $curStone";
 	}
-#	die;
 }
 
-#die();
-
-
-#die();
 #cleanup
 system "rm -rf $tmpD" if ($tmpD ne "");
 
@@ -208,10 +202,12 @@ sub fastq2fna($ $){
 	#return $in;
 	print $in."\n";
 	my $out = $in;
-	$out =~ s/\.fastq$/\.fna/;
-	$out =~ s/\.fq$/\.fna/;
+	$out =~ s/\.f[^\.]*q$/\.fna/g;
+	die "Couldn't convert $in to .fna ending\n" if ($in eq $out);
+	#die $out;
+	#$out =~ s/\.fq$/\.fna/g;
 	open I,"<$in" or die "Input fastq file $in not available";
-	my $l = <I>; close I; if ($l =~ m/^>/){return $out;}
+	my $l = <I>; close I; if ($l =~ m/^>/){return $in;}
 	systemW "cat $in | paste - - - - | sed 's/^@/>/g'| cut -f1-2 | tr '\\t' '\\n' > $out";
 	system "rm $in" if ($doDel && $in ne $out);#;;mv $out $in";
 	return $out;
@@ -287,6 +283,10 @@ sub runBlastLCA(){
 
 	if (!$readsRpairs){
 		die "can't find single read input file: $queryO\n" unless (-e $queryO);
+		#jsut check by default if this is fna
+		$queryO = fastq2fna($queryO,0);
+		push(@allSingleIn,$queryO);
+			#die "$queryO\n";
 		#$queryO = fastq2fna($queryO);
 		#die "$queryO\n";
 	}elsif ($queryO !~ m/\.fna$/){#merged fastq that need to be processed
@@ -330,7 +330,7 @@ sub runBlastLCA(){
 	my @taxouts=(); my @taxouts_inter = ();
 	for (my $DBi=0;$DBi<@DBa; $DBi++){
 		my $DB = $DBa[$DBi]; my $DBtax = $DBtaxa[$DBi];
-		print "Running sim search $doblast..\n";
+		#print "Running sim search $doblast..\n";
 		my $taxblastf = $taxblastf_base.".$DBi.m8.gz";
 		my $taxblastf2=$taxblastf_base.".$DBi.i.m8.gz";
 		push @taxouts, $taxblastf;
@@ -339,7 +339,7 @@ sub runBlastLCA(){
 		if ($interLeave ne "" && -e $interLeave){$doInter=1;} else {$doInter=0;}
 		if (!-e $query){$doQuery=0;} else {$doQuery=1;}
 		#die "$doQuery $doInter\n$interLeave\n";
-		if ($doblast==1){
+		if ($doblast == 1){
 			die "using blast is deprecated and no longer supported!\n";
 			$taxblastf.=".blast"; $simName="blast";
 			print "Running Blast\n";
@@ -374,8 +374,7 @@ sub runBlastLCA(){
 			my $tmptaxblastf = "$outdir/tax.m8";
 			$tmptaxblastf = "$tmpD/tax.m8" unless ($tmpD eq "");
 			my $cmd = "";
-			$cmd = "";
-			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-5 -so 7 -sl 14 -sd 1 -b 5 -pd on ";
+			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-12 -so 7 -sl 14 -sd 1 -b 5 -pd on ";
 			if ($doInter){
 				system "cat $interLeave >> $query; rm $interLeave";
 				#$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";
@@ -389,12 +388,14 @@ sub runBlastLCA(){
 			
 			#takes too long, first check how many reads (and if this can be reduced)
 			my $hr = readFasta($query,0);
-			print "Found ". keys(%{$hr})." candidates in $query\nUsing max 500000 (random) of these.\n";
-			writeFasta($hr,$query,500000);
+			my $maxRds = 50000;
+			print "Found ". keys(%{$hr})." candidates in $query\n";
+			print "Using max maxRds $maxRds of these.\n" if (scalar(keys(%{$hr})) > $maxRds);
+			writeFasta($hr,$query,$maxRds);
 			
 			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
 			#die "$doQuery \n$cmd\n";
-			#print "\n\n$cmd\n\n";
+			print "\n\n$cmd\n\n";
 			systemW($cmd);
 			#} else {	print "Blast output $taxblastf2 does exist\n";}}
 			#systemW $cmd ;#or die "\n$cmd\n failed\n";
@@ -424,7 +425,7 @@ sub runBlastLCA(){
 		}
 
 	}
-
+		#die;
 	print "Running LCA..\n";
 	my $LCcmd = "";
 	

@@ -54,7 +54,7 @@ my $noTax=0;
 my $KOfromNOG=0;
 my $checkTaxNog = ""; #reads in NOG assignments of genes and determines tax from these (used for AB production, to check it's not bacterial gene)
 my $writeFastaOut = 0; #extracts the domains that are matching to a hit
-
+my $useBacNOG = 0; #use bacNOGs instead of LUCA level COGs
 
 die "no input args!\n" if (@ARGV == 0 );
 GetOptions(
@@ -77,6 +77,7 @@ GetOptions(
 	"calcGeneLengthNorm=i" => \$calcGL,
 	"singleSpecies=i" => \$noTax,
 	"CPU=i" => \$ncore,
+	"bacNOG=i" => \$useBacNOG,
 	"reportDomains=i" => \$writeFastaOut,
 	"NOGtaxChk=s" => \$checkTaxNog, 
 	"percID=i" => \$percID, #percent id similiarity, from 0 - 100
@@ -112,6 +113,7 @@ my $KEGGlink ;my $KEGGtaxDb ; my $TCDBhir;
 my $PATRVIRanno;
 if ($DButil ne ""){
 	$bl2dbF = "$DButil/NOG.members.tsv";
+	$bl2dbF = "$DButil/bactNOG.members.tsv" if ($useBacNOG);
 	$cogDefF = "$DButil/NOG.annotations.tsv";
 	$NOGtaxf = "$DButil/all_species_data.txt";
 	$KEGGlink = "$DButil/genes_ko.list";
@@ -484,7 +486,7 @@ sub eggMap_interpret($){ #higher level annotations with egg nog mapper
 	} else {
 		$cmd .= "$emBin -d none --cpu $ncore --no_search --temp_dir $tmpD --no_file_comments --override --no_refine --annotate_hits_table $tmpEM -o $oFil.1\n" ;
 	}
-	system $cmd ;#unless (-e "$oFil.1.emapper.annotations");
+	systemW $cmd ;#unless (-e "$oFil.1.emapper.annotations");
 	
 	#objects to count on higher level
 	my %GOs; my %Kmaps; my %COGcats; my %KOs;
@@ -999,7 +1001,7 @@ sub readTCDBdef($){
 sub readKeggTax{
 	my ($inF) = @_;
 	my %ret; my $eukCnt=0; my $proCnt=0;
-	open I,"<$inF";
+	open I,"<$inF" or die "Can't open $inF\n";
 	while (<I>){
 		chomp; my @spl = split /\t/;
 		my $taxI = 0; 
@@ -1013,7 +1015,7 @@ sub readKeggTax{
 sub readGene2KO(){
 	my ($inF) = @_;
 	my %c2cat;
-	open I,"<$inF";
+	open I,"<$inF"or die "Can't open $inF\n";
 	print "reading gene -> KO file.. " or die "gene2ko file not present\n";
 	while (my $line=<I>){
 		chomp $line;
@@ -1028,7 +1030,7 @@ sub readGene2KO(){
 sub readGene2COG(){
 	my ($inF) = @_;
 	my %g2c; my %c2cat;
-	open I,"<$inF";
+	open I,"<$inF" or die "Can't open $inF\n";
 	print "reading gene -> COG file.. ";
 	while (my $line=<I>){
 		chomp $line;

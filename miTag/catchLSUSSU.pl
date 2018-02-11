@@ -46,13 +46,13 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 	my @r1i = split(";",$ARGV[0]); my $r1="$tmpP/read1.tmp.fq";
 	my @r2i = split(";",$ARGV[1]); my $r2="$tmpP/read2.tmp.fq";
 	my @rSi = split(";",$ARGV[2]); my $rS="$tmpP/readSingl.tmp.fq";
-	if ($r2i[0] eq "-1"){$singlMode=1;}
+	if ( @r2i == 0 || $r2i[0] eq "-1" ){$singlMode=1;}
 	if ($rSi[0] eq "-1"){$rS="";}
 	#die $singlMode."\n";
 	#die "$r1i[0]\n";
 	my $interLeave = "$tmpP/interleave.fq";
 	system "rm -f $r1 $r2 $interLeave";
-	if ($r2i[0] ne "-1"){
+	if (!$singlMode){
 		print "File prep stage 1\n";
 		for (my $i=0;$i<@r1i;$i++){
 			# merge the files & prepare
@@ -91,16 +91,15 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 
 	my $curStone = "$alignPath/ITS_pull.sto";
 	unless (-e $curStone){ #ITS seems to be in general unreliable (too diverse?)
-		
 		if (-e "$path2DB/$ITSDBfa" && -e "$path2DB/$ITSDBidx"){
 			my $ltag = "reads_ITS";
 			my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBits,$interLeave,$alignPath,$singlMode);print $runner."\n";
 			$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBssu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
-			if (system $runner) {print "Error in $runner\n"; exit(90);}#unless (system $runner) {die "Failed\n$runner\n";}
+			systemW $runner;#unless (system $runner) {die "Failed\n$runner\n";}
 			#renameFastqCnts($alignPath."/reads_ITS.r1.fq",$smpN."__ITS"); renameFastqCnts($alignPath."/reads_ITS.r2.fq",$smpN."__ITS");
 			outfileCpy($tmpP."/$ltag",$alignPath);
-			system "rm -f $ltslcaP/ITS_ass.sto" if (-e " $ltslcaP/ITS_ass.sto"); #fwd destruction of assignments
-			system "touch $curStone" unless (`wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` != `wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` );
+			systemW "rm -f $ltslcaP/ITS_ass.sto" if (-e " $ltslcaP/ITS_ass.sto"); #fwd destruction of assignments
+			systemW "touch $curStone" unless (`wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` != `wc -l $alignPath/$ltag.r1.fq | cut -f1 -d' '` );
 		} else {
 			print "Skipping ITS since DB could not be found\n" 
 		}
@@ -112,7 +111,8 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBssu,$interLeave,$alignPath,$singlMode);#print $runner."\n";
 		$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBssu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
 		#die "$runner\n\n";
-		if (system $runner) {print "Error in $runner\n"; exit(88);}#unless (system $runner) {die "Failed\n$runner\n";}
+		#if (system $runner) {print "Error in $runner\n"; exit(88);}#unless (system $runner) {die "Failed\n$runner\n";}
+		systemW $runner;
 		outfileCpy($tmpP."/$ltag",$alignPath);
 		system "rm -f $ltslcaP/SSU_ass.sto" if (-e " $ltslcaP/SSU_ass.sto");
 		
@@ -124,9 +124,10 @@ if (-e "$alignPath/ITS_pull.sto" && -e "$alignPath/SSU_pull.sto" && -e "$alignPa
 		my $ltag = "reads_LSU";
 		my $runner = smrnaRunCmd($tmpP."/$ltag",$refDBlsu,$interLeave,$alignPath,$singlMode);
 		$runner .= "\n\n". smrnaRunCmd($tmpP."/$ltag",$refDBlsu,$rS,$alignPath,1) if ($rS ne "");#print $runner."\n";
-		print $runner."\n";
+		#print $runner."\n";
 		system "rm -f $ltslcaP/LSU_ass.sto" if (-e " $ltslcaP/LSU_ass.sto");
-		if (system $runner) {print "Error in $runner\n"; exit(89);}#unless (system $runner) {die "Failed\n$runner\n";}
+		systemW $runner;
+		#if (system $runner) {print "Error in $runner\n"; exit(89);}#unless (system $runner) {die "Failed\n$runner\n";}
 		outfileCpy($tmpP."/$ltag",$alignPath);
 		#renameFastqCnts($alignPath."/reads_LSU.r1.fq",$smpN."__LSU"); renameFastqCnts($alignPath."/reads_LSU.r2.fq",$smpN."__LSU");
 		system "touch $curStone";
@@ -169,10 +170,11 @@ if ($doRiboAssembl && (!-d $outP."/Ass_ITS" || !-e $outP."/Ass_ITS/scaffolds.fas
 
 sub smrnaRunCmd( $ $ $ $ $){
 	my ($outFile,$refDB,$interLeave,$finD, $isSingl) = @_;
-	my $cmd = "set -e\n$smrnaBin --best 1 --reads $interLeave ";
+	return "" unless (-e $interLeave);
+	my $cmd = "$smrnaBin --best 1 --reads $interLeave ";
 	my $pairOpt = ""; 
 	if (!$isSingl){$pairOpt = "--paired_in ";}
-	$cmd .= "--blast 1 -a $threads -e 0.00001 --log $pairOpt  --fastx --aligned '$outFile' --ref '$refDB'\n";
+	$cmd .= "--blast 1 -a $threads -e 1e-12 --log $pairOpt  --fastx --aligned '$outFile' --ref '$refDB'\n";
 	if (!$isSingl){
 		$cmd .= "rm -f $outFile.r*\n";
 		$cmd .= "$unmergeScript $outFile.fq $outFile.r1.fq $outFile.r2.fq\n";#rm -f $outFile.fq";
