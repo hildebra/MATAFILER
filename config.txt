@@ -39,6 +39,8 @@ fasttree	/g/bork3/home/hildebra/bin/fasttree/./FastTreeMP
 fasta2phylip_scr	perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl
 trimal	/g/bork3/home/hildebra/bin/trimal/source/trimal
 vsearch	/g/bork3/home/hildebra/bin/vsearch-2.6.2-linux-x86_64/bin/./vsearch
+swipe	/g/bork3/home/hildebra/bin/swipe/./swipe
+makeblastdb	/g/bork5/hildebra/dev/lotus//bin//ncbi-blast-2.2.29+/bin/makeblastdb
 
 #     experimental
 sinvict	/g/bork3/home/hildebra/bin/sinvict/./sinvict
@@ -59,7 +61,8 @@ gapfiller	perl /g/bork3/home/hildebra/bin/GapFiller/GapFiller_n.pl
 cdhit	[MFLRDir]/bin/cd-hit
 
 #		miTag related
-lambda	[MFLRDir]/bin/lambda
+#lambda	[MFLRDir]/bin/lambda2-1.9.4-Linux-x86_64/bin/./lambda2
+lambda	[MFLRDir]/bin/./lambda
 lambdaIdx	[MFLRDir]/bin/lambda_indexer
 #requires version 2.0 with databases in "srtMRNA_path/rRNA_databases/silva*"
 srtMRNA_path	/g/bork3/home/hildebra/bin/sortmerna-2.0/
@@ -105,6 +108,7 @@ microCens	python /g/bork3/home/hildebra/bin/MicrobeCensus-1.1.0/scripts/run_micr
 #functional profiling
 diamond	[MFLRDir]/bin/./diamond
 emapper	python /g/bork3/home/hildebra/bin/eggnog-mapper/emapper.py
+mp3	/g/bork3/home/hildebra/bin/mp3v1.0/
 
 #if read merge is attempted in any step (typically for miTag, profiling)
 flash	[MFLRDir]/bin/flash
@@ -151,6 +155,7 @@ cmpBinScr	[MFLRDir]/secScripts/compoundBinning.pl
 FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
 growth_scr	perl [MFLRDir]/helpers/growthRate.pl
 consCntupVCF_scr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/SNP/consFNA2vcf.pl
+mp3Prs	perl [MFLRDir]/secScripts/parseMP3.pl
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt

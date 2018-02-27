@@ -138,6 +138,7 @@ sub readTabbed2{
 
 sub getSpecificDBpaths($ $){
 	my ($curDB,$checkDBpreped) = @_;
+	if ($curDB eq "mp3"){return "","",$curDB;}
 	my $DBpath = "";	my $refDB = ""; my $shrtDB = "";
 	#if ($curDB eq "NOG"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/eggNOG10/";	$refDB = "eggnog4.proteins.all.fa"; $shrtDB = $curDB;}
 	#elsif ($curDB eq "MOH"){$DBpath = "/g/bork3/home/hildebra/DB/FUNCT/MohFuncts/"; $refDB = "Extra_functions.fna";$shrtDB = $curDB;}

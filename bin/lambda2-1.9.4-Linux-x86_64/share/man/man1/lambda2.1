@@ -1,0 +1,44 @@
+.TH LAMBDA2 1 "Feb  5 2018" "lambda2 1.9.4" ""
+.SH NAME
+lambda2 \- Lambda, the Local Aligner for Massive Biological DataA
+.SH SYNOPSIS
+\fBlambda2\fP [\fIOPTIONS\fP] COMMAND [\fICOMMAND-OPTIONS\fP]
+.SH DESCRIPTION
+Lambda is a local aligner optimized for many query sequences and searches in protein space. It is compatible to BLAST, but much faster than BLAST and many other comparable tools.
+.sp
+Detailed information is available in the wiki: <https://github.com/seqan/lambda/wiki>
+.SH REQUIRED ARGUMENTS
+.TP
+\fBCOMMAND\fP \fISTRING\fP
+The sub-program to execute. See below. One of \fIsearchp\fP, \fIsearchn\fP, \fImkindexp\fP, and \fImkindexn\fP.
+.SH OPTIONS
+.TP
+\fB-h\fP, \fB--help\fP
+Display the help message.
+.TP
+\fB--version-check\fP \fIBOOL\fP
+Turn this option off to disable version update notifications of the application.  One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fI1\fP.
+.TP
+\fB--version\fP
+Display version information.
+.TP
+\fB--copyright\fP
+Display long copyright information.
+.SH AVAILABLE COMMANDS
+\fBsearchp  \fP– Perform a protein search (BLASTP, BLASTX, TBLASTN, TBLASTX).
+.sp
+\fBsearchn  \fP– Perform a nucleotide search (BLASTN, MEGABLAST).
+.sp
+\fBmkindexp \fP– Create an index for protein searches.
+.sp
+\fBmkindexn \fP– Create an index for nucleotide searches.
+.sp
+To view the help page for a specific command, simply run 'lambda command --help'.
+.SH LEGAL
+\fBlambda2 Copyright:\fR 2013-2017 Hannes Hauswedell, released under the GNU AGPL v3 (or later); 2016-2017 Knut Reinert and Freie Universität Berlin, released under the 3-clause-BSDL
+.br
+\fBSeqAn Copyright:\fR 2006-2015 Knut Reinert, FU-Berlin; released under the 3-clause BSDL.
+.br
+\fBIn your academic works please cite:\fR Hauswedell et al (2014); doi: 10.1093/bioinformatics/btu439
+.br
+For full copyright and/or warranty information see \fB--copyright\fR.

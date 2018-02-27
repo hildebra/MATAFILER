@@ -9,7 +9,7 @@
 #./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/freeze11/freeze11.genes.representatives.fa frz11; ./MATAFILER.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/Tara/Tara.fna Tara; ./TAMOC.pl map2DB /g/bork3/home/hildebra/DB/GeneCats/IGC/1000RefGeneCat.fna IGC
 #./MATAFILER.pl map2tar /g/bork3/home/hildebra/results/TEC2/v5/TEC2.MM4.BEE.GF.rn.fa,/g/bork3/home/hildebra/results/TEC2/v5/T6/TEC6.ctgs.rn.fna T2d,T6d
 
-
+# GGC279
 
 use warnings;
 use strict;
@@ -167,7 +167,7 @@ my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",
 #more specific control: unfiniRew=rewrite unfinished sample dir; $redoCS = redo ContigStats completely; 
 #removeInputAgain=remove unzipped files from scratch, after sdm; remove_reads_tmpDir = leave cleaned reads on scratch after everything finishes
 my $unfiniRew=0; my $redoCS=0; my $removeInputAgain=1; my $remove_reads_tmpDir=0;
-
+my $silent = 0;
 
 my $readsRpairs=-1; #are reads given in pairs? default: -1 = no clue
 my $useTrimomatic=1;
@@ -243,6 +243,7 @@ GetOptions(
 	"to=i" => \$to,
 	"useTrimomatic=i" => \$useTrimomatic,
 	"rmRawRds=i" => \$DoFreeGlbTmp,
+	"silent" => \$silent,
 	"reduceScratchUse=i" => \$rmScratchTmp,
 	#input FQ related
 	"inputFQregex1=s" => \$rawFileSrchStr1,
@@ -308,7 +309,6 @@ GetOptions(
 	"calcInterMGdistance=i" => \$DoCalcD2s,
 );
   
- 
 # die "$DoAssembly\n";
  # ------------------------------------------ options post processing ------------------------------------------
 die "No mapping file provided (-map)\b" if ($mapF eq "");
@@ -523,12 +523,11 @@ if (@ARGV>0 && ($ARGV[0] eq "map2tar" || $ARGV[0] eq "map2DB")){
 
 #die "@DBbtRefGFF\n";
 #die "@{$make2ndMapDecoy{regions}}\n";
-#die "$bwt2ndMapDep\n";
-#my $baseOut = "/g/bork1/hildebra/SNP/GNMass/";
 
 #some base stats kept in vars
 my $sequencer = "hiSeq";#plattform the algos have to deal with
-my $DBpath=""; my $assDir=""; 
+#my $DBpath=""; 
+my $assDir=""; 
 my $continue_JNUM = 0; #debug, set to 0 for full run
 my $prevAssembly = ""; my $shortAssembly = "";#files with full length and short length assemblies
 my $mmpuOutTab = "";
@@ -645,7 +644,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	$totalChecked++;
 	
 	#die $SmplName."  $samplReadLength\n";
-	print "\n======= $dir2rd - $JNUM - $SmplName =======\n";
+	print "\n======= $dir2rd - $JNUM - $SmplName =======\n" unless($silent);
 	#my $dir2rd = "alien2-11-0-0";
 	my $GlbTmpPath = "$runTmpDirGlobal$dir2rd/"; #curTmpDir
 	my $nodeSpTmpD = "$nodeTmpDirBase/$SmplName";
@@ -653,7 +652,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my @checkLocs = ($GlbTmpPath);
 	push(@checkLocs,$curDir)  if ($curDir ne "");
 	my $mapOut = "$GlbTmpPath/mapping/";
-	$DBpath="$curOutDir/readDB/";
+	#$DBpath="$curOutDir/readDB/";
 	my $finalCommAssDir = "$curOutDir/assemblies/metag/";
 	my $finalMapDir = "$curOutDir/mapping";
 	my $KrakenOD = $curOutDir."Tax/kraken/$globalKraTaxkDB/";
@@ -684,7 +683,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			$AsGrps{$cAssGrp}{CSfinJobName} = "_XXCSpl$cAssGrp"."XX_" ;
 		}
 		$AsGrps{$cAssGrp}{CntAss} ++;
-		print $AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss};
+		print $AsGrps{$cAssGrp}{CntAss} .":".$AsGrps{$cAssGrp}{CntAimAss} unless ($silent);
 		if ($AsGrps{$cAssGrp}{CntAss}  >= $AsGrps{$cAssGrp}{CntAimAss} ){
 			#print "running assembluy";
 			$AssemblyGo = 1;
@@ -695,7 +694,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		
 		#mapping groups?
 		$AsGrps{$cMapGrp}{CntMap} ++;
-		print "  ".$AsGrps{$cMapGrp}{CntMap} .":".$AsGrps{$cMapGrp}{CntAimMap}."\n";
+		print "  ".$AsGrps{$cMapGrp}{CntMap} .":".$AsGrps{$cMapGrp}{CntAimMap}."\n"  unless ($silent);
 		if (!exists($AsGrps{$cMapGrp}{CntMap})){ die "Can;t find CntMap for $cMapGrp";}
 		if ($AsGrps{$cMapGrp}{CntMap}  >= $AsGrps{$cMapGrp}{CntAimMap} ){
 			#print "running mapping";
@@ -882,7 +881,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		my $CSfilesComplete = 1;
 		$CSfilesComplete = 0 if (!-s "$finalCommAssDir/ContigStats/scaff.pergene.GC3" || !-s "$finalCommAssDir/ContigStats/scaff.4kmer.gz" 
 				|| !-s "$curOutDir/assemblies/metag/ContigStats/Coverage.pergene" || !-s "$finalCommAssDir/ContigStats/FMG/FMGids.txt" 
-				|| !-s "$curOutDir/assemblies/metag/ContigStats/Coverage.count_pergene");
+				|| !-s "$curOutDir/assemblies/metag/ContigStats/Coverage.count_pergene" || !-e "$curOutDir/assemblies/metag/assembly.txt");
 		#die "$finalCommAssDir/genePred/genes.gff\n$curOutDir/assemblies/metag/ContigStats/Coverage.median.percontig\n".(stat("$finalCommAssDir/genePred/genes.gff"))[9]." > ".(stat("$curOutDir/assemblies/metag/ContigStats/Coverage.median.percontig"))[9]."\n";
 		if ($CSfilesComplete && (stat("$finalCommAssDir/genePred/genes.gff"))[9] > (stat("$curOutDir/assemblies/metag/ContigStats/Coverage.median.percontig"))[9]){
 			#die "$finalCommAssDir/genePred/genes.gff\n$finalCommAssDir/ContigStats/Coverage.median.percontig\n";
@@ -894,7 +893,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			#print "$finalCommAssDir/ContigStats/scaff.pergene.GC\n";
 			my $subprts = "agkes"; $subprts .= "m" if ($DoBinning);
 			contigStats($curOutDir ,"",$GlbTmpPath,$finalCommAssDir,$subprts,1,1,$samplReadLength);
-		} elsif (!$AssemblyGo && (!-s "$curOutDir/assemblies/metag/ContigStats/Coverage.pergene" || ($DoBinning && !-s "$curOutDir/Binning/MaxBin/MB.summary" )
+		} elsif (!$AssemblyGo && (!$CSfilesComplete || ($DoBinning && !-s "$curOutDir/Binning/MaxBin/MB.summary" )
 									|| ($DoBinning && !-s "$curOutDir/Binning/MetaBat/MeBa.sto") )){
 			print "Running Gene Coverage & Binning\n";
 			#die -s "$curOutDir/assemblies/metag/ContigStats/Coverage.pergene" .-s "$curOutDir/Binning/MaxBin/MB.summary" .-s "$curOutDir/Binning/MetaBat/MeBa.sto"."\n"; 
@@ -926,7 +925,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 #die "X";
 	
 	#next;
-	system("mkdir -p $DBpath\nmkdir -p $assDir\n mkdir -p $logDir"); #mkdir -p $GlbTmpPath\n
+	system("mkdir -p $logDir"); #mkdir -p $GlbTmpPath\n  mkdir -p $DBpath\n mkdir -p $assDir\n
 	#435590.58253.NC_009614
 	$QSBopt{LocationCheckStrg} = checkDrives(\@checkLocs);
 #print $finalCommAssDir."\n";
@@ -942,7 +941,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#set up dirs for this sample
 	my $metagAssDir = $assDir."metag/";
 	my $geneDir = $metagAssDir."genePred/";
-	system("mkdir -p $metagAssDir $geneDir");
+	#system("mkdir -p $metagAssDir $geneDir");
 	my $metaGassembly=$metagAssDir."scaffolds.fasta.filt"; 
 	my $finalCommScaffDir = "$finalCommAssDir/scaffolds/";
 	my $metaGscaffDir = "$metagAssDir/scaffolds/";
@@ -999,7 +998,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		}
 	}
 	my ($jdep,$cfp1ar,$cfp2ar,$cfpsar,$WT,$rawFiles, $mmpuNum, $libInfoRef, $jdepUZ) = 
-		seedUnzip2tmp($curDir,$map{$curSmpl}{prefix},$map{$curSmpl}{SupportReads},$curUnzipDep,$nodeSpTmpD,
+		seedUnzip2tmp($curDir,$curSmpl,$curUnzipDep,$nodeSpTmpD,
 		$GlbTmpPath,$waitTime,$importMocat,$AsGrps{$cMapGrp}{CntMap},$calcUnzip);
 	push(@inputRawFQs,$rawFiles);
 	if($scaffTarExtLibTar eq $curSmpl){
@@ -1753,6 +1752,7 @@ sub detectRibo(){
 	my $cmd = "\n\n";
 	#die "$readsRpairs\n";
 	my $readConfig = 1;
+	my $numCoreL = int($numCore / 2);
 	if (@re1 > 0){
 		$cmd .= "$cLSUSSUscript '".join(";",@re1)."' '". join(";",@re2)."' ";
 		if (@singl>0){
@@ -1766,10 +1766,10 @@ sub detectRibo(){
 	}
 	#this part assigns tax
 	my $tmpDX = "$tmpP/LCA/";
-	my $numCoreL = $numCore2 ;
+	my $numCoreL2 = int($numCore2) ;
 	#my $readConfig =$readsRpairs;
 	$readConfig=2 if (@singl>0 && $readConfig);
-	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL $DBrna2 $tmpDX $readConfig\n\n";
+	my $cmd2 = "$lotusLCA_cLSU $outP $SMPN $numCoreL2 $DBrna2 $tmpDX $readConfig\n\n";
 	#die $cmd2."\n";
 	my $jobName="";
 	my $Scmd = "";
@@ -2022,7 +2022,6 @@ sub runDiamond(){
 	
 	#die();
 	
-	#my $DBpath = "/g/bork3/home/hildebra/DB/eggNOGv9/";	my $refDB = "eggnogv4.proteins.core_periphery.fa";
 	my $clnCmd="";my $jobN2="";
 	#die;
 	system "mkdir -p $outD $tmpP" unless (-d $outD && -d $tmpP);
@@ -2032,7 +2031,6 @@ sub runDiamond(){
 	my $ncore = $dia_Cores;
 	foreach my $curDB (split /,/,$curDB_o){
 		#print "$curDB";
-		#my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB);
 		my ($refDB,$shrtDB,$clnCmd) = prepDiamondDB($curDB,$CLrefDBD,$ncore);
 		my $doInterpret = 1;
 		#$doInterpret = 0 if ($shrtDB eq "ABR");
@@ -2239,7 +2237,7 @@ sub GapFillCtgs(){
 	my $numCore = 16;
 	mkdir($GFdir_a.$prefi);
 	my $log = $GFdir_a.$prefi."/GapFiller.log";
-	system("mkdir -p $GFdir_a$prefi");
+	#system("mkdir -p $GFdir_a$prefi");
 	my $GFlib = ($GFdir_a."GFlib.opt");
 	my @libFiles;
 	for (my $i=0;$i<@pa1;$i++){
@@ -2542,6 +2540,7 @@ sub sdmClean(){
 	#$cmd .= "mkdir -p $tmpD\n" unless ($tmpD eq "");
 	$cmd .= "mkdir -p $finD\n" unless ($finD eq "");
 	$cmd .= "rm -f $stone\n";
+	$cmd .= "mkdir -p $logDir/sdm/\n";
 	
 	my ($ifastas, $mi_ifastas, $singlAddAr, $matAr, $jdep) = get_ifa_mifa($ifastasPre,$libInfoAr,$mateD,0,$jobd,$singlReadMode);
 	$jobd = $jdep; #replaces old dep
@@ -2553,7 +2552,7 @@ sub sdmClean(){
 	#$baseSDMoptMiSeq;
 	my $ofiles = "";
 	my $mi_ofiles = "";
-	system("mkdir -p $logDir/sdm/") unless (-d "$logDir/sdm/");
+	#system("mkdir -p $logDir/sdm/") unless (-d "$logDir/sdm/");
 	my $useLocalTmp = 1;
 	#if ($tmpD eq ""){$useLocalTmp = 0;$tmpD = $finD;}
 	my $nsdmPair = 2;
@@ -2689,6 +2688,7 @@ sub mocat_reorder(){
 }
 sub SEEECER(){
 	my ($p1ar,$p2ar,$tmpD) = @_;
+	die("SEECER deactive\n");
 	my @p1 = @{$p1ar}; my @p2 = @{$p2ar};
 	if ( $p1[0] =~ m/.*\.gz/){
 		system("gunzip -c ".join(" ",@p1)." > $tmpD/pair.1.fastq");	system("gunzip -c ".join(" ",@p2)." > $tmpD/pair.2.fastq");
@@ -2700,7 +2700,6 @@ sub SEEECER(){
 	my $SEEbin = "bash /g/bork5/hildebra/bin/SEECER-0.1.3/SEECER/bin/run_seecer.sh";
 	system("mkdir -p $tmpD/tmpS");
 	my $cmd = $SEEbin . " -t $tmpD/tmpS $p1[0] $p2[0]";
-	die("SEECER deactive\n");
 	#qsubSystem($logDir."SEECERCleaner.sh",$cmd,1,"30G",1);
 	my @ret1= ($tmpD."pair.1.fastq_corrected.fa");my @ret2= ($tmpD."pair.2.fastq_corrected.fa");
 	return (\@ret1,\@ret2);
@@ -2743,7 +2742,9 @@ sub outfiles_trimall($ $){
 }
 
 sub seedUnzip2tmp(){
-	my ($fastp,$smplPrefix,$xtrMapStr,$jDepe,$tmpPath,$finDest, $WT,$mocatImport,$libNum,$calcUnzp) = @_;
+	my ($fastp,$curSmpl,$jDepe,$tmpPath,$finDest, $WT,$mocatImport,$libNum,$calcUnzp) = @_;
+	my $smplPrefix = $map{$curSmpl}{prefix};
+	my $xtrMapStr = $map{$curSmpl}{SupportReads};
 	my $doMateCln = 1; #nxtrim  mate pairs ?
 	my $numCore=$unzipCores;
 	my $rawReads=""; my $mmpu = "";
@@ -2873,7 +2874,8 @@ sub seedUnzip2tmp(){
 	#die ($tmpPath."\n");
 	#system("mkdir -p $finDest/rawRds/");# my $newRDf ="";
 	my $testf1 = "";my $testf2 = "";
-	
+	my $illCLip = $himipeSeqAd;
+	if ($map{$curSmpl}{clip} ne ""){$illCLip = $map{$curSmpl}{clip};}
 	for (my $i=0; $i<@pa1; $i++){
 		#print $pa1[$i]."\n";
 		my $pp = $fastp."/";
@@ -2884,7 +2886,7 @@ sub seedUnzip2tmp(){
 			#trimomatic instead of unzip
 			my ($OFp1,$OFu1) = outfiles_trimall("$finDest/rawRds/",$pa1[$i]);
 			my ($OFp2,$OFu2) = outfiles_trimall("$finDest/rawRds/",$pa2[$i]);
-			$unzipcmd .= "java -jar $trimJar PE -threads $numCore $pp/$pa1[$i] $pp/$pa2[$i] $OFp1 $OFu1 $OFp2 $OFu2 ILLUMINACLIP:$himipeSeqAd:2:30:10\n";
+			$unzipcmd .= "java -jar $trimJar PE -threads $numCore $pp/$pa1[$i] $pp/$pa2[$i] $OFp1 $OFu1 $OFp2 $OFu2 ILLUMINACLIP:$illCLip:2:30:10\n";
 			#for now: discard of singletons
 			$unzipcmd .= "rm $OFu1 $OFu2\n";
 			$pa1[$i] = $OFp1; $pa2[$i] = $OFp2;
@@ -3261,7 +3263,7 @@ sub mapReadsToRef{
 		return ("","",\%params);
 	} 
 	
-	
+	my $NcoreL = int($Ncore);#correction for threads
 	my $nxtCRAM = "$tmpOut/$baseN-smd.cram";
 	my $tmpOut21 = $nodeTmp."/$baseN.iniAlignment.bam";
 	my $sortTMP = $nodeTmp."/$baseN.srt";
@@ -3288,7 +3290,7 @@ sub mapReadsToRef{
 	my $algCmd = "rm -rf $tmpOut $nodeTmp\nmkdir -p $tmpOut $nodeTmp\n"; 
 	#die "$algCmd\n@mappDir\n";
 	#my $algCmd = "rm -rf ".join(" ",split(/,/,$mappDir))."\nmkdir -p ".join(" ",split(/,/,$mappDir))." $tmpOut $nodeTmp\n"; 
-	system ("mkdir -p $logDir/mapStats/");
+	$algCmd .= "mkdir -p $logDir/mapStats/\n";
 	my $statsF = $logDir."mapStats/".$bashN."mapStats.txt";
 	
 	my @regs;#subset of DB seqs to filter for 
@@ -3298,11 +3300,11 @@ sub mapReadsToRef{
 	if ($decoyModeActive){
 		#first create a new ref DB, including the targets and the assemblies from this dir
 		my $bwtIdx = "$nodeTmp/$REFnm.decoyDB.fna";
-		$algCmd.= "\n$decoyDBscr $REF $make2ndMapDecoy{Lib} $bwtIdx $Ncore $outName $finalD\n";
+		$algCmd.= "\n$decoyDBscr $REF $make2ndMapDecoy{Lib} $bwtIdx $NcoreL $outName $finalD\n";
 		#die "$algCmd\n";
 		$bwtIdx .= ".bw2";
 		
-		$xtraSamSteps1 = "$smtBin sort -@ $Ncore -T $sortTMP - |";
+		$xtraSamSteps1 = "$smtBin sort -@ $NcoreL -T $sortTMP - |";
 		@regs = @{$make2ndMapDecoy{regions}};
 		@reg_lcs =  @{$make2ndMapDecoy{region_lcs}};
 		#for (my $k=0;$k<@regs;$k++){
@@ -3336,7 +3338,7 @@ sub mapReadsToRef{
 		$algCmd .= "rm -rf $mappDir[$kk]\nmkdir -p $mappDir[$kk]\n"; 
 
 		my @subBams; 
-		my $algCmdBase = "$bwt2Bin --no-unal --end-to-end -p $Ncore -x $bwtIdxs[$kk] ";
+		my $algCmdBase = "$bwt2Bin --no-unal --end-to-end -p $NcoreL -x $bwtIdxs[$kk] ";
 		if ($unaligned ne ""){
 			#die "IS${unaligned}SI\n";
 			#system "mkdir -p $unaligned $tmpUna\n";
@@ -3344,7 +3346,7 @@ sub mapReadsToRef{
 			$algCmdBase .= " --un-conc $tmpUna ";
 		}
 		if ($MapperProg==2){
-			$algCmdBase = "$bwaBin mem -t $Ncore ";
+			$algCmdBase = "$bwaBin mem -t $NcoreL ";
 		}
 		#--al-conc #prints pairs that hit
 		#my $tmpOut22 = $tmpOut."ali.2.sam";
@@ -3366,10 +3368,10 @@ sub mapReadsToRef{
 				my $rgID = "$smpl"; my $rgStr = "'\@RG\\tID:$1\\tSM:$smpl\\tPL:ILLUMINA";
 				$rgStr .= "\\tLB:lib1'";
 				die "single end mapping not implemented for bwa\n" if (!$usePairs);
-				$algCmd .= $algCmdBase." -R $rgStr $REF " .$pa1[$i]." ".$pa2[$i];#| $smtBin view -@ $Ncore -b - > $tmpOut21.$i\n  $smtBin flagstat $tmpOut21.$i > $statsF.$i \n";
+				$algCmd .= $algCmdBase." -R $rgStr $REF " .$pa1[$i]." ".$pa2[$i];#| $smtBin view -@ $NcoreL -b - > $tmpOut21.$i\n  $smtBin flagstat $tmpOut21.$i > $statsF.$i \n";
 			}
 			my $iTO = "$tmpOut21.$i.$kk";
-			$algCmd .= "| $xtraSamSteps1  $smtBin view -b1 -@ $Ncore -F 4 - > $iTO\n";
+			$algCmd .= "| $xtraSamSteps1  $smtBin view -b1 -@ $NcoreL -F 4 - > $iTO\n";
 			
 			if ($decoyModeActive){#remove unnecessary reads
 				$algCmd .= "$smtBin index $iTO\n";
@@ -3379,8 +3381,8 @@ sub mapReadsToRef{
 					if(check_map_done($doCram, $finalDS[$k], $outNms[$k], $mappDir[$k])){$subBams[$k]="";next;}
 
 					$algCmd .= "$bamHdFilt_scr $iTO $reg_lcs[$k] 0 > $iTO.decoy.sam.$k\n";
-					$algCmd.= "  $smtBin view -@ $Ncore $iTO $regs[$k] >> $iTO.decoy.sam.$k\n";
-					$algCmd.= "  $smtBin view -b -h -@ $Ncore $iTO.decoy.sam.$k > $iTO.decoy.$k\nrm $iTO.decoy.sam.$k \n";
+					$algCmd.= "  $smtBin view -@ $NcoreL $iTO $regs[$k] >> $iTO.decoy.sam.$k\n";
+					$algCmd.= "  $smtBin view -b -h -@ $NcoreL $iTO.decoy.sam.$k > $iTO.decoy.$k\nrm $iTO.decoy.sam.$k \n";
 					$subBams[$k] .= " $iTO.decoy.$k";  
 				}
 				
@@ -3430,7 +3432,7 @@ sub mapReadsToRef{
 	my $unalignCmd = "";
 	if ($unaligned ne "" && $MapperProg == 1 && !-e "$unaligned/unal.1.fq.gz"){
 		$unalignCmd .= "mkdir -p $unaligned\n";
-		$unalignCmd .= "$pigzBin -p $Ncore -c $tmpUna/un-conc-mate.1 > $unaligned/unal.1.fq.gz;\n$pigzBin -p $Ncore -c $tmpUna/un-conc-mate.2 > $unaligned/unal.2.fq.gz\n";
+		$unalignCmd .= "$pigzBin -p $NcoreL -c $tmpUna/un-conc-mate.1 > $unaligned/unal.1.fq.gz;\n$pigzBin -p $NcoreL -c $tmpUna/un-conc-mate.2 > $unaligned/unal.2.fq.gz\n";
 		$unalignCmd .= "rm -f $tmpUna/un-conc-mate.*\n";
 	}
 	print "$cntAli new alignments\n" if ($cntAli > 0);
@@ -3616,7 +3618,13 @@ sub clean_tmp{#routine moves output from temp dirs to final dirs (that are IO li
 	#add extra job dependency on d2star
 	my $xtraJDep = "";
 	#$xtraJDep = $QSBoptHR->{rTag}."_d2met";
-	my ($jdep,$tmpCmd) = qsubSystem($clnBash,$cmd,1,"1G",$curJname,$jDepe.";$xtraJDep","",1,[],\%QSBopt);
+	my ($jdep,$tmpCmd) = ("","");
+	if ($jDepe =~ m/^[\s;]+$/){
+		system $cmd;#." \$" if ($cmd ne "");
+	} else {
+	#die "X${jDepe}X\n";
+		($jdep,$tmpCmd) = qsubSystem($clnBash,$cmd,1,"1G",$curJname,$jDepe.";$xtraJDep","",1,[],\%QSBopt);
+	}
 	#die "jdeps: $jDepe\n$cmd\n";
 	return ($jdep );
 }
@@ -3967,7 +3975,7 @@ sub spadesAssembly(){
 	if ($JNUM > 1 && $helpAssembl ne ""){
 		#cluster short reads using CD-HIT, replaces scaffolds.fasta.filt2 file
 		my $secAss = $nodeTmp."secondary_shorts/";
-		system("mkdir -p $secAss");
+		$cmd .= "mkdir -p $secAss\n";
 		$cmd .= "cat $nodeTmp/scaffolds.fasta >> $nodeTmp/scaffolds.fasta2\n";
 		$cmd .= $spadesBin." -s $nodeTmp/scaffolds.fasta2 --only-assembler -m 1000 -t $nCores $K -o $secAss\n";
 		#cleanup
@@ -4077,7 +4085,7 @@ sub megahitAssembly(){
 	if ($JNUM > 1 && $helpAssembl ne ""){
 		#cluster short reads using CD-HIT, replaces scaffolds.fasta.filt2 file
 		my $secAss = $nodeTmp."secondary_shorts/";
-		system("mkdir -p $secAss");
+		$cmd .= "mkdir -p $secAss\n";
 		$cmd .= "cat $nodeTmp/scaffolds.fasta >> $nodeTmp/scaffolds.fasta2\n";
 		$cmd .= $spadesBin." -s $nodeTmp/scaffolds.fasta2 --only-assembler -m 1000 -t $nCores $K -o $secAss\n";
 		#cleanup
@@ -4127,11 +4135,12 @@ sub megahitAssembly(){
 #GenePrediction
 sub run_prodigal($ $ $ $) {
 	my ($inputScaff, $outDir, $jobDepend,$finDir,$specJname) = @_;
-	system("mkdir -p $outDir");
+	#system("mkdir -p $outDir");
 	my $prodigalBin = "/g/bork5/hildebra/bin/Prodigal-2.6.1/prodigal";
 	my $output_format_prodigal = "gff"; 
 	my $expectedD = "$finDir/assemblies/metag/genePred";
-	my $prodigal_cmd = ("$prodigalBin -i $inputScaff -o $outDir/genes.gff -a $outDir/proteins.faa -d $outDir/genes.fna -f $output_format_prodigal -p meta\n");
+	my $prodigal_cmd = "mkdir -p $outDir\n";
+	$prodigal_cmd .= ("$prodigalBin -i $inputScaff -o $outDir/genes.gff -a $outDir/proteins.faa -d $outDir/genes.fna -f $output_format_prodigal -p meta\n");
 	$prodigal_cmd .= "sleep 2;cut -f1 -d \" \" $outDir/proteins.faa > $outDir/proteins.shrtHD.faa\n" ;
 	$prodigal_cmd .= "cut -f1 -d \" \" $outDir/genes.fna > $outDir/genes.shrtHD.fna\n" ;
 	$prodigal_cmd .= "rm -f $outDir/proteins.faa $outDir/genes.fna";
@@ -4154,7 +4163,7 @@ sub run_prodigal($ $ $ $) {
 sub run_prodigal_augustus($ $ $ $) {
 	my ($inputScaff, $outDir, $jobDepend,$finDir,$specJname,$GlbTmpPath) = @_;
 	my $tmpGene = $outDir."/tmpCalls/";
-	system("mkdir -p $outDir");
+	#system("mkdir -p $outDir");
 	my $scrDir = "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/euk_gene_caller/bin";
 	my $output_format_prodigal = "gff"; 
 	my $expectedD = "$finDir/genePred";
@@ -4176,7 +4185,8 @@ sub run_prodigal_augustus($ $ $ $) {
 		#first split euk vs bac contigs
 		my $splCores = 10;
 		my ($refDB,$shrtDB,$clnCmd) = prepDiamondDB("NOG",$globaldDiaDBdir,$splCores);
-		my $scmd = "$splitKgdContig $inputScaff $GlbTmpPath $krakenDBDirGlobal $globaldDiaDBdir $splCores\n";
+		my $scmd = "mkdir -p $outDir\n";
+		$scmd .= "$splitKgdContig $inputScaff $GlbTmpPath $krakenDBDirGlobal $globaldDiaDBdir $splCores\n";
 		$scmd .= "touch $GlbTmpPath/bac.euk.split.sto\n";
 		#die $scmd."\n";
 		$inputBac = "$GlbTmpPath/bact.kraken.fasta";
@@ -4188,7 +4198,7 @@ sub run_prodigal_augustus($ $ $ $) {
 
 #die "toofar";
 	my $prodigal_cmd = "";
-	$prodigal_cmd .= "mkdir -p $tmpGene\n";
+	$prodigal_cmd .= "mkdir -p $tmpGene $outDir\n";
 		
 		$prodigal_cmd.="if [ ! -s $inputBac ];then\n";
 		$prodigal_cmd.="touch $tmpGene/proteins$bacmark.shrtHD.faa $tmpGene/genes$bacmark.per.ctg $tmpGene/genes$bacmark.shrtHD.fna $tmpGene/genes$bacmark.gff\n";

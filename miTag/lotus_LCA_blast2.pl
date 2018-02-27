@@ -20,7 +20,7 @@ sub rework_tmpLines;
 #binaries
 my $flashBin = getProgPaths("flash");#"/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash";
 my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
-my $lambdaIdxBin = $lambdaBin."_indexer";#getProgPaths("");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
+#my $lambdaIdxBin = $lambdaBin."_indexer";#getProgPaths("");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
 my $LCAbin = getProgPaths("LCA");#"/g/bork3/home/hildebra/dev/C++/LCA/./LCA";
 my $srtMRNA_path = getProgPaths("srtMRNA_path");
 
@@ -145,6 +145,7 @@ for (my $i=0;$i<@tags;$i++){
 			} elsif($go==2) {$inputOK=0;print"Problem with $tags[$i] primary input; run needs to be repeated";}
 		} 
 		if($readsRpairs==0 ) {#single reads, also have specific input fmt
+			$go =0 if (-z $inFilX);
 			runBlastLCA($inFilX,"",\@dbfa,\@dbtax,"$tags[$i]riboRun_bl",$blMode,$SmplID,$tags[$i],$go);
 			#$inD."reads_$tags[$i].fq"
 		}
@@ -200,7 +201,8 @@ sub fastq2fna($ $){
 	#deactivate, since lambda can just read fq...
 	#reactivate for merging of reads
 	#return $in;
-	print $in."\n";
+	#print $in."\n";
+	return $in if (-z $in);
 	my $out = $in;
 	$out =~ s/\.f[^\.]*q$/\.fna/g;
 	die "Couldn't convert $in to .fna ending\n" if ($in eq $out);
@@ -364,8 +366,9 @@ sub runBlastLCA(){
 		} elsif ($doblast==2){
 			$simName = "lambda";
 			if (0 && !-f $DB.".dna5.fm.sa.val"  ) { #don't do this at all from nodes
-				print "Building LAMBDA index anew (may take up to an hour)..\n";
-				my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
+				print "Building LAMBDA index anew (may take some time)..\n";
+#				my $cmdIdx = "$lambdaIdxBin -p blastn -t $BlastCores -d $DB";
+				my $cmdIdx = "$lambdaBin mkindexn -t $BlastCores -d $DB";
 				if (systemW($cmdIdx)){die ("Lamdba ref DB build failed\n$cmdIdx\n");}
 			} elsif (!-d "$DB.lambda" || !-f "$DB.lambda/index.lf.drp"){
 				die "Can not find required lambda index dir at $DB.lambda\n";
@@ -375,6 +378,7 @@ sub runBlastLCA(){
 			$tmptaxblastf = "$tmpD/tax.m8" unless ($tmpD eq "");
 			my $cmd = "";
 			my $defLopt = "-t $BlastCores -id 75 -nm 200 -p blastn -e 1e-12 -so 7 -sl 14 -sd 1 -b 5 -pd on ";
+			#my $defLopt = "searchn -t $BlastCores --percent-identity 75 -n 200 -e 1e-12 --seed-offset 7 --seed-length 14 --seed-delta 1 -b -3 --filter-putative-duplicates on ";
 			if ($doInter){
 				system "cat $interLeave >> $query; rm $interLeave";
 				#$cmd .= "$lambdaBin $defLopt -q $interLeave -i $DB.lambda -o $taxblastf2\n";

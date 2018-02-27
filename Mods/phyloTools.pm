@@ -86,9 +86,11 @@ sub runQItree{
 	#"mv $treeOut/IQtree_fast_allsites.treefile $treeOut/$treNM";
 }
 sub runFasttree{
-	my ($inMSA,$treeOut,$ncore) = @_;
+	my ($inMSA,$treeOut,$isAA,$ncore) = @_;
 	my $fsttreeBin  = getProgPaths("fasttree");
-	my $cmd = "$fsttreeBin $inMSA > $treeOut\n";
+	my $ntFlag = "";
+	$ntFlag = "-nt -gtr" if ($isAA);
+	my $cmd = "$fsttreeBin $ntFlag $inMSA > $treeOut\n";
 	systemW $cmd;
 }
 

@@ -568,6 +568,7 @@ sub readMap{
 	my $baseID = ""; my $mocatFiltPath = "";
 	my $inDirSet = 0;
 	my $cnt = -1;
+	my $illuminaClip ="";
 	my $infFoldClass = -1;
 	my @dir2dirsA;
 	my %trackMGs; my %trackAGs; #hashes to track the last (final) sample in each mapgroup.. important to know this to check if assembly / mapping is done 
@@ -582,6 +583,7 @@ sub readMap{
 			if (m/^#OutPath\s(\S+)/){$dir2out = $1; $inDirSet=0;$dir2out .= "/" if ($dir2out !~ m/\/$/);}
 			if (m/^#RunID\s(\S+)/){$baseID = $1; $inDirSet=0;}
 			if (m/^#mocatFiltPath\s(\S+)/){$mocatFiltPath = $1;}
+			if (m/^#illuminaClip\s(\S+)/){$illuminaClip = $1;}
 			if (!$inDirSet && $dir2out ne "" && $baseID ne ""){$dir2out.=$baseID unless ($dir2out =~ m/$baseID[\/]*$/); $inDirSet =1;}
 			$dir2out .= "/" if ($dir2out !~ m/\/$/);
 			next;
@@ -614,6 +616,7 @@ sub readMap{
 		my $cdir2= $cdir;
 		$ret{$curSmp}{dir} = $cdir;#this one should stay without a tag
 		$ret{$curSmp}{rddir} = $dir2dirs.$cdir;
+		$ret{$curSmp}{clip} = $illuminaClip;
 		$ret{$curSmp}{rddir} .="/" unless ($ret{$curSmp}{rddir} =~ m/\/$/);
 		#die "$ret{$curSmp}{rddir} $dirCol $cdir $curSmp\n $smplCol $dirCol\n";
 		if ($SmplPrefixCol>=0){$cdir2 = $spl[$SmplPrefixCol];; $ret{$curSmp}{prefix} = $cdir2;} else {$ret{$curSmp}{prefix} = "";}

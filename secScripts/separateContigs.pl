@@ -204,6 +204,7 @@ sub geneAbundance{
 	my $outF3fin = $outDab . "Coverage.window$fileEnd2";	my $outF4fin = $outDab . "GeneStats.txt";	
 	my $outF5fin = $outDab . "Coverage.count_pergene$fileEnd2";	my $outF6fin = $outDab . "Coverage.median.pergene$fileEnd2";
 	my $outF7fin = $outDab . "Coverage.median.percontig$fileEnd2";	
+	system "echo \"$assD\" > $inD/assemblies/metag/assembly.txt" unless (-e "$inD/assemblies/metag/assembly.txt");
 	if (-s $outFfin && -s $outF2fin&& -s $outF3fin&& -s $outF4fin && -s $outF5fin && -s $outF6fin){print "Gene abundance was already calculated\n";return;}
 	my $clnCmd = "";
 	my $inFG = $inF.".gz";
@@ -231,7 +232,6 @@ sub geneAbundance{
 	#die $cmd."\n";
 	#systemW $cmd;
 	#print "cont";
-	system "echo \"$assD\" > $inD/assemblies/metag/assembly.txt";
 	systemW($clnCmd);
 }
 

@@ -1,0 +1,138 @@
+.TH LAMBDA2 SEARCHN 1 "Feb  5 2018" "lambda2 searchn 1.9.4" ""
+.SH NAME
+lambda2 searchn \- the Local Aligner for Massive Biological DatA
+.SH SYNOPSIS
+\fBlambda2 searchn\fP [\fIOPTIONS\fP] \fI-q QUERY.fasta\fP \fI-i INDEX.lambda\fP [\fI-o output.m8\fP]
+.SH DESCRIPTION
+Lambda is a local aligner optimized for many query sequences and searches in protein space. It is compatible to BLAST, but much faster than BLAST and many other comparable tools.
+.sp
+Detailed information is available in the wiki: <https://github.com/seqan/lambda/wiki>
+.SH OPTIONS
+.TP
+\fB-h\fP, \fB--help\fP
+Display the help message.
+.TP
+\fB-hh\fP, \fB--full-help\fP
+Display the help message with advanced options.
+.TP
+\fB--version\fP
+Display version information.
+.TP
+\fB--copyright\fP
+Display long copyright information.
+.TP
+\fB-v\fP, \fB--verbosity\fP \fIINTEGER\fP
+Display more/less diagnostic output during operation: 0 [only errors]; 1 [default]; 2 [+run-time, options and statistics]. In range [0..2]. Default: \fI1\fP.
+.SS Input Options:
+.TP
+\fB-q\fP, \fB--query\fP \fIINPUT_FILE\fP
+Query sequences. Valid filetypes are: \fI.sam[.*]\fP, \fI.raw[.*]\fP, \fI.gbk[.*]\fP, \fI.frn[.*]\fP, \fI.fq[.*]\fP, \fI.fna[.*]\fP, \fI.ffn[.*]\fP, \fI.fastq[.*]\fP, \fI.fasta[.*]\fP, \fI.faa[.*]\fP, \fI.fa[.*]\fP, \fI.embl[.*]\fP, and \fI.bam\fP, where * is any of the following extensions: \fIgz\fP, \fIbz2\fP, and \fIbgzf\fP for transparent (de)compression.
+.TP
+\fB-i\fP, \fB--index\fP \fIINPUT_DIRECTORY\fP
+The database index (created by the 'lambda mkindexn' command). Valid filetype is: \fI.lambda\fP.
+.SS Output Options:
+.TP
+\fB-o\fP, \fB--output\fP \fIOUTPUT_FILE\fP
+File to hold reports on hits (.m* are blastall -m* formats; .m8 is tab-seperated, .m9 is tab-seperated with with comments, .m0 is pairwise format). Valid filetypes are: \fI.sam[.*]\fP, \fI.m9[.*]\fP, \fI.m8[.*]\fP, \fI.m0[.*]\fP, and \fI.bam\fP, where * is any of the following extensions: \fIgz\fP, \fIbz2\fP, and \fIbgzf\fP for transparent (de)compression. Default: \fIoutput.m8\fP.
+.TP
+\fB--output-columns\fP \fISTRING\fP
+Print specified column combination and/or order (.m8 and .m9 outputs only); call -oc help for more details. Default: \fIstd\fP.
+.TP
+\fB--percent-identity\fP \fIINTEGER\fP
+Output only matches above this threshold (checked before e-value check). In range [0..100]. Default: \fI0\fP.
+.TP
+\fB-e\fP, \fB--e-value\fP \fIDOUBLE\fP
+Output only matches that score below this threshold. In range [0..100]. Default: \fI1e-04\fP.
+.TP
+\fB-n\fP, \fB--num-matches\fP \fIINTEGER\fP
+Print at most this number of matches per query. In range [1..10000]. Default: \fI256\fP.
+.TP
+\fB--sam-with-refheader\fP \fIBOOL\fP
+BAM files require all subject names to be written to the header. For SAM this is not required, so Lambda does not automatically do it to save space (especially for protein database this is a lot!). If you still want them with SAM, e.g. for better BAM compatibility, use this option. One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIoff\fP.
+.TP
+\fB--sam-bam-seq\fP \fISTRING\fP
+Write matching DNA subsequence into SAM/BAM file. If set to uniq than the sequence is omitted iff it is identical to the previous match's subsequence. One of \fIalways\fP, \fIuniq\fP, and \fInever\fP. Default: \fIuniq\fP.
+.TP
+\fB--sam-bam-tags\fP \fISTRING\fP
+Write the specified optional columns to the SAM/BAM file. Call --sam-bam-tags help for more details. Default: \fIAS NM ae ai qf\fP.
+.TP
+\fB--sam-bam-clip\fP \fISTRING\fP
+Whether to hard-clip or soft-clip the regions beyond the local match. Soft-clipping retains the full sequence in the output file, but obviously uses more space. One of \fIhard\fP and \fIsoft\fP. Default: \fIhard\fP.
+.SS General Options:
+.TP
+\fB-t\fP, \fB--threads\fP \fIINTEGER\fP
+number of threads to run concurrently. In range [1..400]. Default: \fI40\fP.
+.SS Seeding / Filtration:
+.TP
+\fB--adaptive-seeding\fP \fIBOOL\fP
+Grow the seed if it has too many hits (low complexity filter). One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIoff\fP.
+.TP
+\fB--seed-length\fP \fIINTEGER\fP
+Length of the seeds. In range [3..50]. Default: \fI14\fP.
+.TP
+\fB--seed-offset\fP \fIINTEGER\fP
+Offset for seeding (if unset = seed-length/2). In range [1..50]. Default: \fI7\fP.
+.TP
+\fB--seed-delta\fP \fIINTEGER\fP
+maximum seed distance. In range [0..1]. Default: \fI1\fP.
+.TP
+\fB--seed-delta-increases-length\fP \fIBOOL\fP
+Seed delta increases the min. seed length (for affected seeds). One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIoff\fP.
+.TP
+\fB--seed-half-exact\fP \fIBOOL\fP
+Allow errors only in second half of seed. One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIon\fP.
+.SS Miscellaneous Heuristics:
+.TP
+\fB--pre-scoring\fP \fIINTEGER\fP
+evaluate score of a region NUM times the size of the seed before extension (0 -> no pre-scoring, 1 -> evaluate seed, n-> area around seed, as well; default = 1 if no reduction is used). In range [1..10]. Default: \fI2\fP.
+.TP
+\fB--pre-scoring-threshold\fP \fIDOUBLE\fP
+minimum average score per position in pre-scoring region. In range [0..20]. Default: \fI2\fP.
+.TP
+\fB--filter-putative-duplicates\fP \fIBOOL\fP
+filter hits that will likely duplicate a match already found. One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIon\fP.
+.TP
+\fB--filter-putative-abundant\fP \fIBOOL\fP
+If the maximum number of matches per query are found already, stop searching if the remaining realm looks unfeasible. One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIon\fP.
+.TP
+\fB--merge-putative-siblings\fP \fIBOOL\fP
+Merge seed from one region, stop searching if the remaining realm looks unfeasable. One of \fI1\fP, \fION\fP, \fITRUE\fP, \fIT\fP, \fIYES\fP, \fI0\fP, \fIOFF\fP, \fIFALSE\fP, \fIF\fP, and \fINO\fP. Default: \fIon\fP.
+.SS Scoring:
+.TP
+\fB--score-gap\fP \fIINTEGER\fP
+Score per gap character. In range [-1000..1000]. Default: \fI-2\fP.
+.TP
+\fB--score-gap-open\fP \fIINTEGER\fP
+Additional cost for opening gap. In range [-1000..1000]. Default: \fI-5\fP.
+.TP
+\fB--score-match\fP \fIINTEGER\fP
+Match score [only BLASTN]) In range [-1000..1000]. Default: \fI2\fP.
+.TP
+\fB--score-mismatch\fP \fIINTEGER\fP
+Mismatch score [only BLASTN] In range [-1000..1000]. Default: \fI-3\fP.
+.SS Extension:
+.TP
+\fB-x\fP, \fB--x-drop\fP \fIINTEGER\fP
+Stop Banded extension if score x below the maximum seen (-1 means no xdrop). In range [-1..1000]. Default: \fI30\fP.
+.TP
+\fB-b\fP, \fB--band\fP \fIINTEGER\fP
+Size of the DP-band used in extension (-3 means log2 of query length; -2 means sqrt of query length; -1 means full dp; n means band of size 2n+1) In range [-3..1000]. Default: \fI-3\fP.
+.TP
+\fB-m\fP, \fB--extension-mode\fP \fISTRING\fP
+Choice of extension algorithms. One of \fIauto\fP, \fIxdrop\fP, and \fIfullSerial\fP. Default: \fIauto\fP.
+.SH TUNING
+Tuning the seeding parameters and (de)activating alphabet reduction has a strong influence on both speed and sensitivity. We recommend the following alternative profiles for protein searches:
+.sp
+fast (high similarity):       --seed-delta-increases-length on
+.sp
+sensitive (lower similarity): --seed-offset 3
+.sp
+For further information see the wiki: <https://github.com/seqan/lambda/wiki>
+.SH LEGAL
+\fBlambda2 searchn Copyright:\fR 2013-2017 Hannes Hauswedell, released under the GNU AGPL v3 (or later); 2016-2017 Knut Reinert and Freie Universität Berlin, released under the 3-clause-BSDL
+.br
+\fBSeqAn Copyright:\fR 2006-2015 Knut Reinert, FU-Berlin; released under the 3-clause BSDL.
+.br
+\fBIn your academic works please cite:\fR Hauswedell et al (2014); doi: 10.1093/bioinformatics/btu439
+.br
+For full copyright and/or warranty information see \fB--copyright\fR.
