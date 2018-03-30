@@ -119,7 +119,7 @@ if ($DButil ne ""){
 	$KEGGlink = "$DButil/genes_ko.list";
 	$KEGGtaxDb = "$DButil/kegg.tax.list";
 	$TCDBhir = "$DButil/TCDBhir.txt";
-	$PATRVIRanno = "$DButil/PATRIC_VF.tab";
+	$PATRVIRanno = "$DButil/PATRIC_VF2.tab";
 }
 
 $blInf =~ m/(.*)\/([^\/]+$)/;

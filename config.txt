@@ -156,15 +156,15 @@ FMGrwk_scr	perl [MFLRDir]/secScripts/FMG_rwk.pl
 growth_scr	perl [MFLRDir]/helpers/growthRate.pl
 consCntupVCF_scr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/SNP/consFNA2vcf.pl
 mp3Prs	perl [MFLRDir]/secScripts/parseMP3.pl
+unsplitKrak_scr	perl [MFLRDir]/secScripts/unsplit_krak.pl
+specIGC_scr	perl [MFLRDir]/helpers/GC/annotateMGwMotus.pl
+
 
 #options for filters etc	ESSENTIAL
 baseSDMopt_rel	[MFLRDir]/data/sdm_opt_inifilter_relaxed.txt
 baseSDMopt	[MFLRDir]/data/sdm_opt_inifilter.txt
 baseSDMoptMiSeq	[MFLRDir]/data/sdm_opt_miSeq.txt
 baseSDMoptMiSeq_rel	[MFLRDir]/data/sdm_opt_miSeq_relaxed.txt
-
-
-
 
 
 #Databases note that these will be mostly copied to scratch dir, but since indexes are created calc to have at least twice the HD space available for these

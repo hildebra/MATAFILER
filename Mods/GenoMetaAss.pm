@@ -7,7 +7,7 @@ use Mods::IO_Tamoc_progs qw(getProgPaths);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(convertMSA2NXS gzipwrite renameFastaCnts renameFastqCnts readNCBItax gzipopen readMap 
-		readMapS renameFastHD findQsubSys emptyQsubOpt qsubSystem
+		readMapS renameFastHD findQsubSys emptyQsubOpt qsubSystem clenSplitFastas
 		readClstrRev  unzipFileARezip systemW is_integer readGFF reverse_complement reverse_complement_IUPAC
 		readFasta writeFasta readFastHD splitFastas readTabByKey convertNT2AA prefix_find runDiamond median deNovo16S);
 
@@ -24,7 +24,13 @@ sub first_index (&@) {
     return -1;
 }
 
-
+#makes sure really all previous split fasta files are removed
+sub clenSplitFastas($ $){
+	my ($inF , $path) = @_;
+	$inF =~ m/\/([^\/]+)$/;
+	my $inF2 = $1;
+	system "rm -f $path/$inF2.*";
+}
 sub splitFastas($ $ $){
 	my ($inF,$num , $path) = @_;
 	system "mkdir -p $path" unless (-d $path);
@@ -35,7 +41,7 @@ sub splitFastas($ $ $){
 	#print "$nFiles[-1]\n";
 	if ($num < 2){
 		print "No split required!\n";
-		system "rm $nFiles[-1];ln -s  $inF $nFiles[-1]";
+		system "rm -f $nFiles[-1];ln -s  $inF $nFiles[-1]";
 		return \@nFiles;
 	}
 	if (-e $nFiles[-1] && -e "$path/$inF2.".($num-1) && !-e "$path/$inF2.".($num)){
@@ -801,6 +807,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	my $queues = "\"".$optHR->{shortQueue}."\"";#"\"medium_priority\"";
 	$queues = "\"".$optHR->{longQueue}."\"" if ($optHR->{useLongQueue} ==1);#"\"medium_priority\"";
 	if ($memory > 250001){$queues = "\"scb\"";}
+	$tmpsh =~ m/^(.*\/)[^\/]+$/;
+	system "mkdir -p $1" unless (-d $1);
 	open O,">",$tmpsh or die "Can't open qsub bash script $tmpsh\n";
 
 	#die "$cmd\n";

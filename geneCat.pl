@@ -25,7 +25,7 @@ use Cwd; use English;
 use Mods::GenoMetaAss qw( splitFastas readMapS qsubSystem emptyQsubOpt systemW readGFF);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::TamocFunc qw(attachProteins attachProteins2 getSpecificDBpaths);
-use Mods::FuncTools qw(assignFuncPerGene);
+use Mods::FuncTools qw(assignFuncPerGene calc_modules);
 
 sub readSam; sub readCDHITCls;sub readFasta; 
 sub writeBucket; sub submCDHIT;
@@ -42,6 +42,7 @@ sub geneCatFunc;
 sub canopyCluster; #MGS creation
 sub krakenTax; #assign tax to each gene via kraken
 sub kaijuTax; #assign tax to each gene via kraken
+sub specITax;
 sub writeMG_COGs;
 
 #.27: added external genes support
@@ -49,11 +50,13 @@ sub writeMG_COGs;
 my $version = 0.30;
 
 die "Not enough Args\n" if (@ARGV < 2);
-my $baseOut = $ARGV[1];#"/g/scb/bork/hildebra/SNP/GNMass/";
 my $mapF = $ARGV[0];#"/g/bork5/hildebra/data/metaGgutEMBL/MM.txt";
+my $baseOut = "";
+$baseOut = $ARGV[1] if (@ARGV > 1);#"/g/scb/bork/hildebra/SNP/GNMass/";
 #die $mapF."\n@ARGV\n";
-my $BIG = $ARGV[2];
-my $cdhID = 0.95; my $minGeneL = 100;
+my $BIG = 0;
+$BIG = $ARGV[2] if (@ARGV > 2);
+my $cdhID = 95; my $minGeneL = 100;
 $cdhID = $ARGV[3] if (@ARGV > 3);
 my $extraRdsFNA = "";
 $extraRdsFNA = $ARGV[4] if (@ARGV > 4);#FNA with (predicted) genes, that are to be artificially added to the new gene catalog (and clutered with new genes)
@@ -64,12 +67,11 @@ my $justCDhit = 0;
 my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
 my $doSubmit = 1; my $qsubNow = 0;
-my $oldNameFolders= -1;
+my $oldNameFolders= 0;
 my $doFMGseparation = 1; #cluster FMGs separately?
 my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
 my $numCor = 20; my $totMem = 700; #in G
 
-$baseOut.="/" unless ($baseOut =~ m/\/$/);
 my $toLclustering=0;#just write out, no sorting etc
 
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
@@ -103,8 +105,6 @@ my $GLBtmp = "/scratch/bork/hildebra/GC/";
 #$tmpDir = "/local/hildebra/GC/";# upsilon
 #my $tmpDir =  "/alpha/data/hildebra/tmp/";#
 
-$baseOut =~ m/\/([^\/]+)\/?$/;
-$tmpDir .= $1."/"; $GLBtmp.=$1."/";
 #die $tmpDir."\n";
 my $path2nt = "/genePred/genes.shrtHD.fna";
 my $path2aa = "/genePred/proteins.shrtHD.faa";
@@ -128,8 +128,24 @@ COG0124=>94.5,COG0184=>98.2,COG0185=>99,COG0186=>99,COG0197=>99,COG0200=>98.4,CO
 #COG0124=>94.5,COG0184=>98.2,COG0185=>99.3,COG0186=>99.3,COG0197=>99.3,COG0200=>98.4,COG0201=>97.2,COG0202=>98.4,COG0256=>99,COG0522=>98.6);
 
 #my $logdir = $baseOut."LOGandSUB";
+my %map; my %AsGrps; my @samples;
+if (-e $mapF){ #start building new gene cat
+	print "MAP=".$mapF."\n";
+	if (!-f $mapF){die"Could not find map file (first arg): $mapF\n";}
+	#die $mapF."\n";
+	my ($hr,$hr2) = readMapS($mapF,$oldNameFolders);
+	%map = %{$hr};
+	$baseOut = $map{outDir} if ($baseOut eq "" && exists($map{outDir} ));
+	@samples = @{$map{smpl_order}};
+	%AsGrps = %{$hr2};
+#die $map{outDir}."\n";
+}
 
 my $selfScript=Cwd::abs_path($PROGRAM_NAME);#dirname($0)."/".basename($0);
+if ($baseOut eq "" ){die"no valid output dir specified\n";}
+$baseOut.="/" unless ($baseOut =~ m/\/$/);
+$baseOut =~ m/\/([^\/]+)\/?$/;
+$tmpDir .= $1."/"; $GLBtmp.=$1."/";
 my $OutD = $baseOut;#."GeneCatalog/";
 system "mkdir -p $OutD" unless (-d $OutD);
 if ($mapF =~ m/^\??$/){
@@ -142,12 +158,10 @@ if ($mapF =~ m/^\??$/){
 	}
 }
 #die $mapF;
-print "MAP=".$mapF."\n";
 my $qsubDir = $OutD."qsubsAlogs/";
 system "echo \'$version\' > $OutD/version.txt";
 
 #my $defaultsCDH =""; 
-my %map; my %AsGrps; my @samples;
 my $bucketCnt = 0; my $cnt = 0;
 my @bucketDirs = ();
 my $bdir = $OutD."B$bucketCnt/";#dir where to write the output files..
@@ -167,11 +181,13 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	#die "$numCor2\n";
 	canopyCluster($OutD,$tmpDir,$numCor2);
 	exit(0);
-}elsif ($mapF eq "kraken" | $mapF eq "kaiju" ){
+}elsif ($mapF eq "specI" || $mapF eq "kraken" | $mapF eq "kaiju" ){ #tax assigns
 	my $numCor2 = $numCor;
 	if (@ARGV > 2){$numCor2 = $ARGV[2];}
 	if ($mapF eq "kraken"){
 		krakenTax($OutD,$tmpDir,$numCor2);
+	}elsif($mapF eq "specI"){
+		specITax($OutD,$numCor2);
 	} else {
 		kaijuTax($OutD,$tmpDir,$numCor2);
 	}
@@ -184,17 +200,22 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	FOAMassign($OutD,$tmpDir,$mapF);
 	exit(0);
 } elsif($mapF eq "FuncAssign"){ #eggNOG functional assignment
-	geneCatFunc($OutD,$tmpDir,"NOG");
+	
+	if (@ARGV > 2){$numCor = $ARGV[2];}
+
+	my $curDB_o = "PTV";#,KGM,TCDB,CZy,NOG,ABRc,ACL"; #"mp3,PTV,KGM,TCDB,CZy,NOG,ABRc,ACL"
+	#my $curDB_o = "PTV";
+	my @DBs = split /,/,$curDB_o;
+	#die "@DBs\n";
+	foreach my $curDB (@DBs){
+		my $numCor2 = $numCor;
+		if ($curDB eq "mp3"){$numCor2=1;}
+		geneCatFunc($OutD,$tmpDir,$curDB,$numCor2);
+	}
+	
+	
 	exit(0);
-} else { #start building new gene cat
-	if (!-f $mapF){die"Could not find map file (first arg): $mapF\n";}
-	#die $mapF."\n";
-	my ($hr,$hr2) = readMapS($mapF,$oldNameFolders);
-	%map = %{$hr};
-	@samples = @{$map{smpl_order}};
-	%AsGrps = %{$hr2};
-#die $map{outDir}."\n";
-}
+} 
 if ($BIG eq "protExtract"){#was previously mergeCls.pl
 	if (@ARGV < 3){die "Not enough args for geneCat-protExtract\n";}
 	#needs GC-info file && baseOut
@@ -202,6 +223,11 @@ if ($BIG eq "protExtract"){#was previously mergeCls.pl
 	
 	protExtract($OutD,$ARGV[3]); #baseOut
 	exit(0);
+}
+
+#test if base folders even exist..
+if ($justCDhit && !-e $OutD ){
+	$justCDhit = 0;
 }
 
 if ($justCDhit==0){
@@ -245,8 +271,9 @@ my @skippedSmpls; my %uniqueSampleNames; my $doubleSmplWarnString = "";
 foreach my $smpl(@samples){
 	last if ($justCDhit==1);
 	my $dir2rd = $map{$smpl}{wrdir};
+	$dir2rd = $map{$smpl}{prefix} if ($dir2rd eq "");
 	if ($map{$smpl}{ExcludeAssem} eq "1"){next;}
-	if ($map{$smpl}{dir} eq "" ){#very specific read dir..
+	if ($dir2rd eq "" ){#very specific read dir..
 		if ($map{$smpl}{SupportReads} ne ""){
 			$dir2rd = "$baseOut$smpl/";	
 		} else {
@@ -284,9 +311,10 @@ foreach my $smpl(@samples){
 	$JNUM++;
 	last if ($justCDhit==1);
 	my $dir2rd = $map{$smpl}{wrdir};
+	$dir2rd = $map{$smpl}{prefix} if ($dir2rd eq "");
 	#die "\n".$smpl."X\n";
 	if ($map{$smpl}{ExcludeAssem} eq "1"){next;}
-	if ($map{$smpl}{dir} eq "" ){#very specific read dir..
+	if ($dir2rd eq "" ){#very specific read dir..
 		if ($map{$smpl}{SupportReads} ne ""){
 			$dir2rd = "$baseOut$smpl/";	
 		} else {
@@ -457,7 +485,7 @@ if ($justCDhit==0){
 	foreach my $cog (keys (%allFMGs)){
 		system "mkdir -p $bdir/COG/" unless (-d "$bdir/COG/");
 		my %cogFMG = %{$allFMGs{$cog}};
-		my $ccogf = "$bdir/COG/$cog.preclus.fna";
+		my $ccogf = "$bdir/COG/preclus.$cog.fna";
 		open Ox,">$ccogf" or die "Can't open COG output file $ccogf\n";
 		$FMGfileList{$cog} =  "$ccogf";
 		foreach my $geK (sort { length($cogFMG{$a}) <=> length($cogFMG{$b}) } keys %cogFMG) {
@@ -503,8 +531,27 @@ sub krakenTax{
 		$cmd .= "$krkBin-filter --db $curDB  --threshold $thrs[$j] $tmpD/rawKrak.out | $krkBin-translate --mpa-format --db $curDB > $outD/krak_$thrs[$j]".".out\n";
 	}
 	print "Starting kraken assignments of the gene catalog\n";
-	systemW $cmd;
+	systemW $cmd unless (-e "$outD/krak_0.1.out");
 	print "All kraken assignments are done\n";
+	for (my $j=0;$j< @thrs;$j++){
+		open I,"<$outD/krak_$thrs[$j].out" or die "could not find file $outD/krak_$thrs[$j].out";
+		open O,">$outD/krak_$thrs[$j].txt" or die "could not open file $outD/krak_$thrs[$j].txt";
+		while(<I>){
+			chomp;
+			s/\|/;/g;
+			print O $_."\n";
+		}
+		close I;close O;
+	}	
+	$cmd = "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/krak_$thrs[0].mat -refD $outD/krak_$thrs[0].txt\n";
+	systemW $cmd;
+}
+sub specITax{
+	my ($GCd,$nc) = @_;
+	my $siScr = getProgPaths("specIGC_scr");
+	my $cmd = "$siScr $GCd $nc\n";
+	print "Calculating tax abundance via SpecI's\n";
+	systemW $cmd;
 }
 sub kaijuTax{#different tax assignment for gene catalog
 	my ($GCd,$tmpD,$NC) = @_;
@@ -892,7 +939,7 @@ sub submCDHIT($ $ $ $ $){
 	if (1||$doGeneMatrix){
 		my $newMapp = ""; $newMapp = "-oldMapStyle" if ($oldNameFolders);
 		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Matrix $newMapp -map $mapF -refD $assDirs\n"; #add flag -useCoverage to get coverage estimates instead
-		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Mat.cov -map $mapF -refD $assDirs -useCoverage\n"; #coverage mat
+		$cmd .= "$rareBin geneMat -i $tmpDir/compl.incompl.$cdhID.fna.clstr -o $OutD/Mat.cov $newMapp -map $mapF -refD $assDirs -useCoverage\n"; #coverage mat
 		$cmd .= "$pigzBin -p $numCor $OutD/Mat.cov* \n";
 	}
 	
@@ -909,6 +956,7 @@ sub submCDHIT($ $ $ $ $){
 	$cmd .= "$selfScript MGS $OutD\n";
 	$cmd .= "$selfScript kraken $OutD\n";
 	$cmd .= "$selfScript kaiju $OutD\n";
+	$cmd .= "$selfScript specI $OutD\n";
 	
 	
 	$cmd .= "mv $tmpDir/log/Cluster.log $qsubDir\n";
@@ -1033,6 +1081,7 @@ sub mergeClsSam(){
 	my $completeFNA = $inD."compl.$idP.fna";
 
 	my $outFfna = $inD."compl.incompl.$idP.fna";
+	#die "$outFfna\n";
 	my $outFcls = $outFfna.".clstr";
 	my $clFile = $completeFNA.".clstr";
 	#system "cp $clFile $clFile.before"; #TODO, remove
@@ -1113,10 +1162,14 @@ sub mergeClsSam(){
 	
 	#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	#look for COG genes
+	print "$inD/COG/\n";
 	opendir(DIR, "$inD/COG/") or die $!;
-	my @cogfiles = grep {/^COG\d+\.\d+\.fna$/ && -f "$inD/COG/$_" } readdir(DIR); close DIR;
+	#COG0087.0.95
+	#print readdir(DIR)."\n\n";
+	my @cogfiles = sort (grep {/^COG[\d\.]*\.fna$/ } readdir(DIR)); close DIR;#&& -f "$inD/COG/$_" 
 	my $logstr = "";
-	#die @cogfiles."\n";
+	#die "@cogfiles"."\n";
+	if (@cogfiles < 40){die"\n\nless than 40 FMG genes!\n".@cogfiles."\n@cogfiles\n";}
 	my $COGcnt =0; my $inCclN2 = 0;
 	foreach my $cogFNA (@cogfiles){
 		$inCclN+=100; $COGcnt++;
@@ -1129,7 +1182,7 @@ sub mergeClsSam(){
 		$inCclN = $inCclN2;
 	}
 	print "\nFound $COGcnt FMG genes\n";
-	print "$logstr\n";
+	#print "$logstr\n";
 	open O,">$inD/FMGclusN.log"; print O $logstr; close O;
 }
 
@@ -1266,26 +1319,34 @@ sub readSam($){
 
 
 sub geneCatFunc{
-	my ($GCd,$tmpD, $DB) = @_;
+	my ($GCd,$tmpD, $DB, $ncore) = @_;
 	my $query = "$GCd/compl.incompl.95.prot.faa";
 	my $outD = $GCd."/Anno/Func/";
 	#my $DB = "NOG";
-	my $ncore = 40; my $fastaSplits=5;
+	#my $ncore = 40; 
+	my $fastaSplits=15;
 	
 	
-	my $curDB = "NOG";#CZy,ABRc,KGM,NOG
+	my $curDB = $DB;#"NOG";#CZy,ABRc,KGM,NOG
 	
-	my %optsDia = (eval=>1e-7,percID=>25,minPercSbjCov=>0.3,fastaSplits=>$fastaSplits,ncore=>$ncore,
-			splitPath=>$GLBtmp,keepSplits=>1);
+	my %optsDia = (eval=>1e-8,percID=>25,minPercSbjCov=>0.3,fastaSplits=>$fastaSplits,ncore=>$ncore,
+			splitPath=>$GLBtmp,keepSplits=>0,redo=>0,minAlignLen=>30, minBitScore=>45);
+			
+			
 	my ($allAss,$jdep) = assignFuncPerGene($query,$outD,$tmpD,$curDB,\%optsDia,$QSBoptHR);
 	my $tarAnno = "${allAss}geneAss.gz";
 	my $tmpP2 = "$tmpD/CNT_1e-7_25//";
 	#create actual COG table
 	my $cmd = "";
-	$cmd	.= "gunzip $tarAnno\n";
 	$tarAnno =~ s/\.gz$//;
+	
+	#$cmd	.= "gunzip $tarAnno.gz\n";
+	$cmd .= "zcat $tarAnno.gz | sed 's/\\t/;/g' | sed 's/;/\\t/' > $tarAnno\n";
 	#$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/${shrtDB}L1.mat -refD $GCd/NOGparse.NOG.GENE2NOG; gzip $GCd/NOGparse.NOG.GENE2NOG.gz\n";
-	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/$curDB.mat -refD $tarAnno\ngzip $tarAnno\n";
+	
+	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $outD/$curDB -refD $tarAnno\n";
+	$cmd .= "rm $tarAnno\n" if (length($tarAnno) > 2);
+	#gzip $tarAnno\n";
 	#copy interesting files to final dir
 	#if ($curDB eq "ABRc"){
 #		$cmd.= "zcat $tmpP2/ABRcparse.ALL.cnt.CATcnts.gz > $outD/ABR_res.txt\n" ;
@@ -1297,6 +1358,18 @@ sub geneCatFunc{
 #	if ($curDB eq "TCDB"){
 #		$cmd.= "zcat $tmpP2/TCDBparse.ALL.cnt.CATcnts.gz > $outD/TCDB.cats.txt\n";
 #	}
+#die $cmd."\n";
+	unless (-e "$outD/${curDB}L0.txt"){
+		if (0 && -e $tarAnno){ #already exists
+			systemW $cmd 
+		} else {
+			($cmd,$jdep) = qsubSystem($qsubDir."${curDB}_matrix.sh",$cmd,1,"5G","${curDB}_mat",$jdep,"",1,[],$QSBoptHR);
+		}
+	}
+	
+	if ($curDB eq "KGM"){
+		#calc_modules("$outD/${curDB}L0.txt","$outD/modules/",0.5,0.5);#$ModCompl,$EnzCompl);
+	}
 
 }
 
@@ -1332,7 +1405,7 @@ sub FOAMassign{
 		$cmd .= "rm -f -r $tmpOut* $subFls[$i]\n";
 		my $jobName = "$DB"."_$i";
 		#die $cmd."\n";
-		my ($jdep,$cmdRaw) = qsubSystem($qsubDir."$DB$i.sh",$cmd,$N,"1G",$jobName,"","",1,[],$QSBoptHR);
+		my ($cmdRaw,$jdep) = qsubSystem($qsubDir."$DB$i.sh",$cmd,$N,"1G",$jobName,"","",1,[],$QSBoptHR);
 		push(@jdeps,$jdep);
 		push(@allFiles,$outF);
 		#if ($i==5){die;}
@@ -1345,7 +1418,7 @@ sub FOAMassign{
 	#tr [:blank:] \\t
 	$cmd .= "$rareBin sumMat -i $GCd/Matrix.mat -o $GCd/$DB.mat -refD $assigns\n";
 	print "@jdeps\n";
-	$jdep = qsubSystem($qsubDir."collect$DB.sh",$cmd,1,"40G","$DB"."Col",join(";",@jdeps),"",1,[],$QSBoptHR);
+	($cmd,$jdep) = qsubSystem($qsubDir."collect$DB.sh",$cmd,1,"40G","$DB"."Col",join(";",@jdeps),"",1,[],$QSBoptHR);
 	#return $jdep,$outF;
 }
 

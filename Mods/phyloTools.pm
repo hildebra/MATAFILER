@@ -8,7 +8,7 @@ use strict;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(runRaxML prep40MGgenomes prepNOGSETgenomes getE100 getGenoGenes getFMG renameFMGs 
-			runFasttree runQItree fixHDs4Phylo);
+			runFasttree runQItree fixHDs4Phylo getGenoName);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::FuncTools qw(assignFuncPerGene);

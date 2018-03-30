@@ -28,7 +28,7 @@ sub createAreadSpecItax;
 #my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI/"; my $freeze11=1;
 my $SpecID="/g/bork3/home/hildebra/DB/MarkerG/specI_f11/";my $freeze11=0;
 #progenomes.specIv2_2
-my $globalCorrThreshold = 0.8; # determines cutoff, when still to accept correlating genes into specI
+my $globalCorrThreshold = 0.9; # determines cutoff, when still to accept correlating genes into specI
 my $reblast=0;#do blast again?
 
 my $rarBin = getProgPaths("rare");#"/g/bork5/hildebra/dev/C++/rare/rare";
@@ -43,6 +43,8 @@ if (@ARGV == 0){
 my $GCd = $ARGV[0];
 my $BlastCores = $ARGV[1];
 my $MGdir = "$GCd/FMG/";
+my $outD = "$GCd/Anno/Tax/";
+
 system "mkdir -p $MGdir/tax" unless (-d "$MGdir/tax");
 
 my $motuDir = "";#"/g/bork3/home/hildebra/DB/MarkerG/mOTU";
@@ -82,7 +84,7 @@ COG0092=>99,COG0093=>99,COG0094=>99,COG0096=>98.6,COG0097=>98.4,COG0098=>98.7,CO
 COG0124=>94.5,COG0184=>98.2,COG0185=>99,COG0186=>99,COG0197=>99,COG0200=>98.4,COG0201=>97.2,COG0202=>98.4,COG0256=>99,COG0522=>98.6);
 my %specItaxname; my %SpecIgenes; 
 my %COGDBLass; my %COGass;
-my %Q2S;
+my %Q2S; #assignment of GC genes to specI id (poss. several ids)
 foreach (@catsPre){
 	my %specIcnt;
 	my @spl  = split /\t/;
@@ -230,7 +232,7 @@ foreach my $k (keys %gene2specI){
 close O;
 
 #create abundance profile
-specImatrix("$MGdir/specI.mat",$specIfullTax);
+specImatrix("$outD/specI.mat",$specIfullTax);
 
 
 
@@ -259,11 +261,16 @@ sub rebase($){ #calculates the profile for each SI based on the 40 marker genes
 	my $medianC=0;
 	foreach my $sp (keys %specIs){
 	#last;
-		next if ($sp =~ m/,/); #from where do these come?
+		if ($sp =~ m/,/){
+			die "comma: $sp\n";
+			next;
+		}
 		my @tar;my $MGn=0;
 		foreach my $gid (@{$specIs{$sp}}){
 			$MGn++;
 			#now get genes from matrix
+			#print "$gid\n";
+			die "FMG entry missing: $gid\n" unless (exists($FMGmatrix{ $gid }));
 			if ($medianC){
 				for (my $j=0;$j<scalar(@{$FMGmatrix{ $gid }});$j++){push(@{$tar[$j]}, ${$FMGmatrix{ $gid }}[$j]);}
 			} else {
@@ -658,7 +665,7 @@ sub getCorrs(){
 		foreach my $c(keys %{$SpecIgenes{$k}}){
 			if ($SpecIgenes{$k}{$c} =~ m/,/){next;}#single copy, use this gene
 			my $gid = $SpecIgenes{$k}{$c};
-			if ($Q2S{$gid} =~ m/,/){$dblA++;;next;}
+			if ($Q2S{$gid} =~ m/,/){$dblA++;next;}
 			$singlA++; 
 			#if ($gcnt == 0){@tarGenes = @{$FMGmatrix{ $gid }};
 			#} else {
@@ -738,7 +745,7 @@ sub getCorrs(){
 		#and save the final specI profile..
 		$specIprofiles{$k} = \@tarGenes;
 	}
-	print "double assignment $dblAssi; assigned: $newAssigns   Stats in Run: $dblA $singlA $singlMultA $skippedSIs\n";
+	print "double assignment $dblAssi; assigned: $newAssigns   Stats in Run: mult. spec. $dblA $singlA $singlMultA $skippedSIs\n";
 }
 
 

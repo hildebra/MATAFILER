@@ -19,7 +19,10 @@ $smplID = $ARGV[3] if (@ARGV>3);
 my $saveRes = 0;
 my $tmpdb = $assemblFa.".tmp";
 
+my $redo=1;
+
 my $b8file = "$tmpdb.b8";my $cmd ="";
+unlink($b8file) if ($redo);
 $cmd .= "$blatBin -t=dna -q=dna -minIdentity=95 -minScore=100 -out=blast8 $refFa $assemblFa $b8file\n";
 system ($cmd) unless (-e $b8file);
 my $cfile = $tmpdb.".coords";

@@ -168,6 +168,7 @@ my %globalDiamondDependence = (CZy=>"",MOH=>"",NOG=>"",ABR=>"",ABRc=>"",KGB=>"",
 #removeInputAgain=remove unzipped files from scratch, after sdm; remove_reads_tmpDir = leave cleaned reads on scratch after everything finishes
 my $unfiniRew=0; my $redoCS=0; my $removeInputAgain=1; my $remove_reads_tmpDir=0;
 my $silent = 0;
+my $redoFails = 0;
 
 my $readsRpairs=-1; #are reads given in pairs? default: -1 = no clue
 my $useTrimomatic=1;
@@ -188,6 +189,7 @@ my $DoBinning = 0;
 my $doReadMerge = 0;
 my $DoAssembly = 1;  my $SpadesAlwaysHDDnode = 1;my $spadesBayHam = 0; my $useSDM = 2;my $spadesMisMatCor = 0; my $redoAssembly =0 ;
 my $map2Assembly = 0; my $SaveUnalignedReads=0;
+my $bwtIdxAssMem = 40; #total mem in GB, not core adjusted, for building index from assembly
 my $doBam2Cram= 1; my $redoAssMapping=0;
 my $DoJGIcoverage = 0; #only required for metabat binning, not required any longer..
 my $DoNP=0; #non-pareil
@@ -245,6 +247,7 @@ GetOptions(
 	"rmRawRds=i" => \$DoFreeGlbTmp,
 	"silent" => \$silent,
 	"reduceScratchUse=i" => \$rmScratchTmp,
+	"redoFails=i" =>\$redoFails, #if any step of requested analysis failed, just redo everything (extraction etc)
 	#input FQ related
 	"inputFQregex1=s" => \$rawFileSrchStr1,
 	"inputFQregex2=s" => \$rawFileSrchStr2,
@@ -268,6 +271,7 @@ GetOptions(
 	"assembleMG=i" => \$DoAssembly, #1=Spades, 2=MegaHIT
 	#mapping related (asselmbly)
 	"remap2assembly=i" => \$redoAssMapping,
+	"JGIdepths=i" => \$DoJGIcoverage,
 	"mapReadsOntoAssembly=i" => \$map2Assembly ,  #map original reads back on assembly, to estimate abundance etc
 	"saveReadsNotMap2Assembly=i" => \$SaveUnalignedReads,
 	#gene prediction on assembly
@@ -662,10 +666,10 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#if ($AsGrps{$cMapGrp}{CntAimMap} > 1 ){die "rm -r $finalMapDir $mapOut\n";	next;	}
 	
 	
-	if (-d "$finalCommAssDir/mismatch_corrector" || -d "$finalCommAssDir/tmp"){
-		print "Removing temporary Spades Dirs..\n";
-		system "rm -rf $finalCommAssDir/mismatch_corrector/ $finalCommAssDir/tmp";
-	}
+	#if (-d "$finalCommAssDir/mismatch_corrector" || -d "$finalCommAssDir/tmp"){
+	#	print "Removing temporary Spades Dirs..\n";
+	#	system "rm -rf $finalCommAssDir/mismatch_corrector/ $finalCommAssDir/tmp";
+	#}
 	
 	$AsGrps{$cAssGrp}{AssemblSmplDirs} .= $curOutDir."\n";
 	my $AssemblyGo=0; my $MappingGo=0; #controls if assemblies / mappings are done in respective groups
@@ -708,8 +712,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 #redo run - or parts thereof	
 	if ($rewrite){
 		print "Deleting previous results..\n";
-		system("rm -f -r $curOutDir $GlbTmpPath $collectFinished ");
 		system ("rm -r -f $assDir $finalCommAssDir");
+		system("rm -f -r $curOutDir $GlbTmpPath $collectFinished ");
 	} 
 	#delete assembly
 	if ($redoAssembly){
@@ -761,12 +765,12 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die "$boolAssemblyOK $AssemblyGo ass $finalCommAssDir\n";
 	#print "$boolAssemblyOK\n$finalCommAssDir/genePred/proteins.shrtHD.faa\n";
 	
-	my $boolScndMappingOK = 0; my $iix =0;
+	my $boolScndMappingOK = 1; my $iix =0;
 	my $boolScndCoverageOK = 1;
 	if ($rewrite2ndMap){ 
 		foreach my $bwt2outDTT (@bwt2outD){
 			my $expectedMapCovGZ = "$bwt2outDTT/$bwt2ndMapNmds[$iix]"."_".$SmplName."-0-smd.bam.coverage.gz";
-			system "rm $expectedMapCovGZ*";
+			system "rm -f $expectedMapCovGZ*";
 		}
 	}
 	foreach my $bwt2outDTT (@bwt2outD){
@@ -842,9 +846,13 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 				if (-e "$fromCp.gz"  ){
 					#system "zcat $fromCp.gz > $toCpy" ;
 					system "ln -s $fromCp.gz $toCpy.gz" if (!-e "$toCpy.gz");
-				} else {
+				} elsif (-e $fromCp) {
 					system "gzip $fromCp";
 					system "ln -s $fromCp.gz $toCpy.gz" ;
+				} else {#just redo..
+					system "rm -rf $curOutDir/ribos\n"; 
+					$calcRibofind = 1; $calcRiboAssign=1;
+					last;
 				}
 			}
 			#system "gzip $fromCp" unless (-e "$fromCp.gz");
@@ -887,11 +895,12 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			#die "$finalCommAssDir/genePred/genes.gff\n$finalCommAssDir/ContigStats/Coverage.median.percontig\n";
 			system("rm -r -f  $curOutDir/assemblies/metag/ContigStats ");
 		}
-
+#die "$DoBinning\n$AssemblyGo && !$CSfilesComplete || ($DoBinning && !-s $finalCommAssDir/Binning/MaxBin/MB.summary";
 		if ($AssemblyGo && !$CSfilesComplete || ($DoBinning && !-s "$finalCommAssDir/Binning/MaxBin/MB.summary") ) {
 			print "Running Contig Stats on assembly\n";
 			#print "$finalCommAssDir/ContigStats/scaff.pergene.GC\n";
 			my $subprts = "agkes"; $subprts .= "m" if ($DoBinning);
+			#die "$subprts\n";
 			contigStats($curOutDir ,"",$GlbTmpPath,$finalCommAssDir,$subprts,1,1,$samplReadLength);
 		} elsif (!$AssemblyGo && (!$CSfilesComplete || ($DoBinning && !-s "$curOutDir/Binning/MaxBin/MB.summary" )
 									|| ($DoBinning && !-s "$curOutDir/Binning/MetaBat/MeBa.sto") )){
@@ -923,7 +932,12 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		next;
 	}
 #die "X";
-	
+	if ($redoFails && ($calcRibofind||$calcDiamond || $calcDiaParse || $calcMetaPhlan)){
+		die "now recalc $curSmpl\n";
+		system ("rm -r -f $assDir $finalCommAssDir");
+		system("rm -f -r $curOutDir $GlbTmpPath $collectFinished ");
+	}
+
 	#next;
 	system("mkdir -p $logDir"); #mkdir -p $GlbTmpPath\n  mkdir -p $DBpath\n mkdir -p $assDir\n
 	#435590.58253.NC_009614
@@ -1188,7 +1202,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		#die "$finAssLoc\n";
 		my ($cmdDB,$bwtIdx) = buildMapperIdx($finAssLoc,$Assembly_Cores,0,$MapperProg);#$nCores);
 		#die "$cmdDB\n";
-		my ($jname,$tmpCmd) = qsubSystem($logDir."mapperIdx.sh",$cmdDB,(int($Assembly_Cores)),"5G","bwtIdx$JNUM","","",1,[],\%QSBopt) ;
+		my ($jname,$tmpCmd) = qsubSystem($logDir."mapperIdx.sh",$cmdDB,(int($Assembly_Cores)),int($bwtIdxAssMem/$Assembly_Cores)."G","bwtIdx$JNUM","","",1,[],\%QSBopt) ;
 		$AsGrps{$cAssGrp}{AssemblJobName} .= ";$jname";
 	}
 	
@@ -1796,7 +1810,7 @@ sub detectRibo(){
 			$jobName = $jobd;
 		}
 		if (!-e "$outP//ltsLCA/LSUriboRun_bl.hiera.txt" || !-e "$outP//ltsLCA/SSUriboRun_bl.hiera.txt" || !$allLCAstones ){ #|| !-e "$outP//ltsLCA/ITSriboRun_bl.hiera.txt" 
-			$jobd=$jobName; $mem="3G";
+			$jobd=$jobName; $mem="4G";
 			$jobd .= ";".$globalRiboDependence{DBcp} unless ($globalRiboDependence{DBcp} eq "alreadyCopied");
 			$QSBopt{useLongQueue} = 0;
 			($jobName, $tmpCmd) = qsubSystem($logDir."RiboLCA.sh",$cmd2,$numCore2,$mem,"_RA$JNUM",$jobName,"",1,[],\%QSBopt);
@@ -1887,8 +1901,8 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 			$DBcmd .= "cp $DBpath/card*.txt $DBpath/card*.map $CLrefDBD\n";
 		}
 		if ($curDB eq "PTV" && !-s "$CLrefDBD/PATRIC_VF.tab"){ 
-			system "rm -f $CLrefDBD/PATRIC_VF.tab";
-			$DBcmd .= "cp $DBpath/PATRIC_VF.tab $CLrefDBD\n";
+			system "rm -f $CLrefDBD/PATRIC_VF2.tab";
+			$DBcmd .= "cp $DBpath/PATRIC_VF2.tab $CLrefDBD\n";
 		}
 		if ($curDB eq "PAB" && !-s "$CLrefDBD/all_species_data.txt"){
 			#copy NOG taxonomy
@@ -3031,7 +3045,7 @@ sub krakHSap($ $ $ $ $ $){
 	
 	#my ($DBdir,$DBname) = @_;
 	my $DBdir = $krakenDBDirGlobal;
-	my $unsplBin = "perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/unsplit_krak.pl ";
+	my $unsplBin = getProgPaths("unsplitKrak_scr");#"perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/unsplit_krak.pl ";
 	my $DBname = "hum1stTry"; my $numThr = 6;
 	my $cmd = "\n\nmkdir -p $tmpD\n\n"; my $tmpF ="$tmpD/krak.tmp.fq";
 	my $fileDir = "";
@@ -3041,6 +3055,7 @@ sub krakHSap($ $ $ $ $ $){
 		my $gzFlag = "";$gzFlag =  "--gzip-compressed" if ($pa1[$i] =~ m/\.gz$/);
 		$cmd .= "$krkBin --paired --preload --threads $numThr  $gzFlag --fastq-input --unclassified-out $tmpF --db $DBdir/$DBname  $r1 $r2 > /dev/null\n";
 		#overwrites input files
+		$r1 =~ s/\.gz$//; $r2 =~ s/\.gz$//;
 		$cmd .= "$unsplBin $tmpF $r1 $r2\n";
 		if ($gzFlag ne ""){
 			$cmd .= "$pigzBin -p $numThr $r1 $r2\n";
