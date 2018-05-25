@@ -55,11 +55,12 @@ sub nopareil; sub calcCoverage;
 sub prepKraken;sub krakHSap; sub krakenTaxEst;
 sub d2metaDist;
 sub metphlanMapping; sub mergeMP2Table;
+sub mOTU2Mapping; sub mergeMotu2Table; sub prepMOTU2;
 sub genoSize;
 
 #bjobs | awk '$3=="CDDB" {print $1}' |xargs bkill
-#bjobs | grep 'SDM' | cut -f11 -d' ' | xargs -t -i bkill {}
-#squ | grep cIn | cut -f12 -d' ' | xargs  -t -i scancel {}
+#bjobs | grep 'dWXmOT' | cut -f11 -d' ' | xargs -t -i bkill {}
+#squ | grep dWXmOT | cut -f11 -d' ' | xargs  -t -i scancel {}
 #bhosts | cut -f1 -d' ' | grep -v HOST_NAME | xargs -t -i ssh {} 'killall -u hildebra'
 #hosts=`bhosts | grep ok | cut -d" " -f 1 | grep compute | tr "\\n" ","`; pdsh -w $hosts "rm -rf /tmp/hildebra"
 
@@ -176,12 +177,14 @@ my $unzipCores = 3;
 my $splitFastaInput = 0; #assembly as input..
 my $importMocat = 0; my  $mocatFiltPath = "reads.screened.screened.adapter.on.hg19.solexaqa/"; 
 my $gzipSDMOut = 1;#zip sdm filtered files
+my $sdmProbabilisticFilter=1;
 my $alwaysDoStats = 1; 
 my $rmScratchTmp=0;#Default; extremely important option as this adds a lot of overhead and scratch usage space, but reduces later overhead a lot and makes IO more stable
 my $humanFilter = 1; #use kraken to filter out human reads
 my $unpackZip = 0; #only goes through with read filtering, needed to get files for luis
 my $filterFromSource=0;
 my $DoMetaPhlan = 0; my $metaPhl2FailCnts=0; #non-asembly based tax + functional assignments
+my $DoMOTU2 = 0;my $mOTU2FailCnts=0; 
 my $DoRibofind = 0; my $doRiboAssembl = 0; my $RedoRiboFind = 0; my $riboFindFailCnts=0; #ITS/SSU/LSU detection
 my $RedoRiboAssign = 0; my $checkRiboNonEmpty=0; 
 my $RedoRiboThatFailed=  0;#this option is used for debugging: redo ribo completely, if something failed in run
@@ -254,6 +257,7 @@ GetOptions(
 	"inputFQregexSingle=s" => \$rawFileSrchStrSingl,
 	"splitFastaInput=i" => \$splitFastaInput,
 	"mergeReads=i" => \$doReadMerge,
+	"ProbRdFilter=i" => \$sdmProbabilisticFilter,
 	"pairedReadInput=i" => \$readsRpairs, #determines if read pairs are expected in each in dir
 	"inputReadLength=i" => \$defaultReadLength,
 	"filterHumanRds=i" => \$humanFilter,
@@ -306,6 +310,7 @@ GetOptions(
 	"thoroughCheckRiboFinish=i" => \$checkRiboNonEmpty,
 	#other tax profilers..
 	"profileMetaphlan2=i"=> \$DoMetaPhlan,
+	"profileMOTU2=i" => \$DoMOTU2,
 	"profileKraken=i"=> \$DoKraken,
 	"estGenoSize=i" => \$DoGenoSize, #estimate average size of genomes in data
 	"krakenDB=s"=> \$globalKraTaxkDB, #"virusDB";#= "minikraken_2015/";
@@ -538,6 +543,8 @@ my $mmpuOutTab = "";
 
 #fixed dirs for specific set of samples
 my $dir_MP2 = $baseOut."pseudoGC/Phylo/MP2/"; #metaphlan 2 dir
+my $dir_mOTU2 = $baseOut."pseudoGC/Phylo/mOTU2/"; #mOUT 2 dir
+
 my $dir_RibFind = $baseOut."pseudoGC/Phylo/RiboFind/"; #ribofinder dir
 my $dir_KrakFind = $baseOut."pseudoGC/Phylo/KrakenTax/$globalKraTaxkDB/"; #kraken dir
 system("mkdir -p $baseOut") unless (-d $baseOut);
@@ -580,6 +587,10 @@ my $krakDeps = ""; my $krakenDBDirGlobal = $runTmpDirGlobal;
 if ($DoKraken && $globalKraTaxkDB eq ""){die "Kraken tax specified, but no DB specified\n";}
 if ($humanFilter || ($DoKraken) || $DO_EUK_GENE_PRED){
 	$krakDeps = prepKraken();
+}
+my $mOTU2Deps = ""; my $mOTU2Bin = "";
+if ($DoMOTU2){
+	($mOTU2Deps,$mOTU2Bin) = prepMOTU2();
 }
 
 #redo d2s intersample distance?
@@ -633,11 +644,11 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		if ($map{$curSmpl}{SeqTech} eq "GAII_solexa" || $map{$curSmpl}{SeqTech} eq "GAII"){
 			#$iqualOff = 59; #really that old??
 		} elsif ($map{$curSmpl}{SeqTech} eq "miSeq"){ 
-			$baseSDMopt = $baseSDMoptMiSeq; 
+			$curSDMopt = $baseSDMoptMiSeq; 
 		}
 	} 
 	if (!exists($sampleSDMs{$samplReadLength})){
-		$sampleSDMs{$samplReadLength} = adaptSDMopt($baseSDMopt,$globalLogDir,$samplReadLength);
+		$sampleSDMs{$samplReadLength} = adaptSDMopt($curSDMopt,$globalLogDir,$samplReadLength);
 	}
 	my $cAssGrp = $JNUM;
 	#print $map{$curSmpl}{AssGroup}."\n";
@@ -863,6 +874,8 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	#die "XX $calcDiamond $calcDiaParse\n";
 	my $calcMetaPhlan=0;$calcMetaPhlan=1 if ($DoMetaPhlan &&  !-e $dir_MP2."$SmplName.MP2.sto");
 	if (!-e $dir_MP2."$SmplName.MP2.sto"){$metaPhl2FailCnts++;}
+	my $calcMOTU2=0;$calcMOTU2=1 if ($DoMOTU2 &&  !-e $dir_mOTU2."$SmplName.Motu2.sto");
+	if (!-e $dir_mOTU2."$SmplName.Motu2.sto"){$mOTU2FailCnts++;}
 	if ($redoCS){
 		system("rm -r -f $finalCommAssDir/ContigStats/ $curOutDir/assemblies/metag/ContigStats/ $curOutDir/Binning/");
 	}
@@ -918,7 +931,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 			} else {$statStr.=$curSmpl."\t$dir2rd\t".$curStats."\n"; $statStr5.=$curSmpl."\t$dir2rd\t".$curStats5."\n";}
 		}
 		#die "$boolScndMappingOK && !$DoCalcD2s && !$calcRibofind && !$calcDiamond && !$calcMetaPhlan && !$calcKraken\n";
-		if ($boolScndCoverageOK && $boolScndMappingOK && !$DoCalcD2s && !$calcRibofind&& !$calcOrthoPlacement && !$calcGenoSize && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcKraken && $scaffTarExternal eq ""){
+		if ($boolScndCoverageOK && $boolScndMappingOK && !$DoCalcD2s && !$calcRibofind&& !$calcOrthoPlacement && !$calcGenoSize && !$calcDiamond && !$calcDiaParse && !$calcMetaPhlan && !$calcMOTU2 && !$calcKraken && $scaffTarExternal eq ""){
 			#free some scratch
 			system "rm -rf $GlbTmpPath &" if ($DoFreeGlbTmp);
 			system "rm -rf $GlbTmpPath &" if ($rmScratchTmp );
@@ -932,7 +945,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		next;
 	}
 #die "X";
-	if ($redoFails && ($calcRibofind||$calcDiamond || $calcDiaParse || $calcMetaPhlan)){
+	if ($redoFails && ($calcRibofind||$calcDiamond || $calcDiaParse ||$calcMOTU2 || $calcMetaPhlan)){
 		die "now recalc $curSmpl\n";
 		system ("rm -r -f $assDir $finalCommAssDir");
 		system("rm -f -r $curOutDir $GlbTmpPath $collectFinished ");
@@ -981,7 +994,7 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 	my $pseudAssFlag = 0; $pseudAssFlag = 1 if ($pseudoAssembly && $map{$curSmpl}{ExcludeAssem} eq "0" && (!-e $pseudoAssFileFinal.".sto" || !$boolGenePredOK));
 	my $dowstreamAnalysisFlag = 0; 
 	#$unpackZip simulates dowstreamAnalysisFlag, just to get sdm running..
-	$dowstreamAnalysisFlag=1 if ( $unpackZip || ($calcOrthoPlacement || $scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag  || $nonPareilFlag || $calcGenoSize || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan) );
+	$dowstreamAnalysisFlag=1 if ( $unpackZip || ($calcOrthoPlacement || $scaffTarExternal ne "" || $assemblyFlag  || $pseudAssFlag || $scaffoldFlag  || $nonPareilFlag || $calcGenoSize || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMOTU2 || $calcMetaPhlan) );
 	
 	#die "$dowstreamAnalysisFlag  $assemblyFlag  || $pseudAssFlag || $scaffoldFlag || !$boolScndMappingOK || $nonPareilFlag || $calcDiamond || $DoCalcD2s || $calcKraken || $calcRibofind || $calcMetaPhlan\n";
 	
@@ -1141,6 +1154,13 @@ for ($JNUM=$from; $JNUM<$to;$JNUM++){
 		my $MP2jname = metphlanMapping($arp1,$arp2,$nodeSpTmpD."MP2/",$dir_MP2,$SmplName,$bwt_Cores,$sdmjN); #\@cfp1,\@cfp2
 		$AsGrps{$cAssGrp}{readDeps} .= ";$MP2jname";
 	}
+	
+	#mOTU2  - taxa abundance estimates
+	if ($calcMOTU2){
+		my $MP2jname = mOTU2Mapping($arp1,$arp2,$nodeSpTmpD."Motu2/",$dir_mOTU2,$SmplName,$bwt_Cores,$sdmjN.";".$mOTU2Deps); #\@cfp1,\@cfp2
+		$AsGrps{$cAssGrp}{readDeps} .= ";$MP2jname";
+	}
+	
 	
 	my $SmplNameX = $SmplName;
 	if ($AsGrps{$cAssGrp}{CntAss} > 1){$SmplNameX .= "M".$AsGrps{$cAssGrp}{CntAss};}
@@ -1502,8 +1522,15 @@ if ($DoKraken ){if( $KrakTaxFailCnts){print "$KrakTaxFailCnts samples with incom
 if ($DoMetaPhlan){
 	if ($metaPhl2FailCnts){print "$metaPhl2FailCnts samples with incomplete Metaphlan assignments\n";}
 	else { print "All samples have metaphlan assignments.\n";
-		mergeMP2Table($dir_MP2);
-}}
+		mergeMP2Table($dir_MP2);	
+	}
+}
+if ($DoMOTU2){
+	if ($mOTU2FailCnts){print "$mOTU2FailCnts samples with incomplete mOTU2 assignments\n";}
+	else { print "All samples have mOTU2 assignments.\n";
+		mergeMotu2Table($dir_mOTU2);
+	}
+}
 open O,">$baseOut/MMPU.txt";print O $mmpuOutTab;close O;
 
 exit(0);
@@ -1900,9 +1927,13 @@ sub prepDiamondDB($ $ $){#takes care of copying the respective DB over to scratc
 			system "rm -f $CLrefDBD/card*";
 			$DBcmd .= "cp $DBpath/card*.txt $DBpath/card*.map $CLrefDBD\n";
 		}
-		if ($curDB eq "PTV" && !-s "$CLrefDBD/PATRIC_VF.tab"){ 
+		if ($curDB eq "PTV" && !-s "$CLrefDBD/PATRIC_VF2.tab"){ 
 			system "rm -f $CLrefDBD/PATRIC_VF2.tab";
 			$DBcmd .= "cp $DBpath/PATRIC_VF2.tab $CLrefDBD\n";
+		}
+		if ($curDB eq "VDB" && !-s "$CLrefDBD/VF.tab"){ 
+			system "rm -f $CLrefDBD/VF.tab";
+			$DBcmd .= "cp $DBpath/VF.tab $CLrefDBD\n";
 		}
 		if ($curDB eq "PAB" && !-s "$CLrefDBD/all_species_data.txt"){
 			#copy NOG taxonomy
@@ -2211,6 +2242,9 @@ sub adaptSDMopt(){
 		} elsif ($RL < 90){$str =~ s/maxAccumulatedError\t\d+\.\d+/maxAccumulatedError\t1.2/;} #really shitty GAII platform
 		if ($RL < 90){$str =~ s/TrimWindowWidth	\d+/TrimWindowWidth	8/;$str =~ s/TrimWindowThreshhold	\d+/TrimWindowThreshhold	16/;	
 		$str =~ s/maxAmbiguousNT	\d+/maxAmbiguousNT	1/;}
+	}
+	if ($sdmProbabilisticFilter ==0 ){
+		$str =~ s/BinErrorModelAlpha\t.*\n/BinErrorModelAlpha\t-1\n/;
 	}
 	foreach my $so (keys %sdm_opt){$str =~ s/$so	[^\n]*\n/$so	$sdm_opt{$so}\n/;}
 	#die $str."\n";
@@ -2683,7 +2717,7 @@ sub sdmClean(){
 	if ( ($presence==0 || $assInputFlaw==1 )&& $runThis){
 		#die "yes\n";
 		$jobName = "_SDM$JNUM"; my $tmpCmd;
-		($jobName, $tmpCmd) = qsubSystem($logDir."sdmReadCleaner.sh",$cmd,1,"60G",$jobName,$jobd.";".$jdep,"",1,\@General_Hosts,\%QSBopt);
+		($jobName, $tmpCmd) = qsubSystem($logDir."sdmReadCleaner.sh",$cmd,1,"15G",$jobName,$jobd.";".$jdep,"",1,\@General_Hosts,\%QSBopt);
 	}
 	#die "$presence presi\n@ret1\n";
 	
@@ -3003,7 +3037,31 @@ sub seedUnzip2tmp(){
 }
 
 
-sub prepKraken($){
+sub prepMOTU2(){
+	my $orimotu2 = getProgPaths("motu2_dir");
+	my $m2sub="";
+	if ($orimotu2 =~ m/\/([^\/]+)\/?$/){
+		$m2sub = $1;
+	} elsif (! -d $orimotu2) {
+		die "$orimotu2 seems not to be a dir\n";
+	}
+	my $m2Glb = $runTmpDirGlobal."DB/";
+	my $m2Bin = "python $m2Glb/$m2sub/motus";
+	my $cmd = "";
+	#print "$m2Glb/$m2sub && !-e $m2Glb/$m2sub/motu2";
+	if (!-d "$m2Glb/$m2sub" && !-e "$m2Glb/$m2sub/motu2"){
+		$cmd .= "cp -r $orimotu2 $m2Glb\n";
+	}
+	#die $cmd;
+	my $tmpCmd=""; my $jobN="";
+	if ($cmd ne ""){
+		$jobN= "_m2DB";
+		($jobN, $tmpCmd) = qsubSystem("$baseOut/LOGandSUB/motu2DB.sh",$cmd,1,"1G",$jobN,"","",1,\@General_Hosts,\%QSBopt) ;
+	}
+	
+	return ($jobN,$m2Bin);
+}
+sub prepKraken(){
 	#my ($DBdir) = @_;
 	#my $oriKrakDir = "/g/scb/bork/hildebra/DB/kraken/";
 	my $oriKrakDir = getProgPaths("Kraken_path_DB");
@@ -3581,7 +3639,7 @@ sub metphlanMapping{
 	if (!$DoMetaPhlan ||  -e $stone){return;}
 	my @car1 = @{$inF1a}; my @car2 = @{$inF2a};
 	my $inF1 = join(",",@car1); my $inF2 = join(",",@car2); 
-	system "mkdir -p $finOutD" unless (-d $finOutD);
+	system "mkdir -p $finOutD\n" unless (-d $finOutD);
 	my $finOut = $finOutD."$smp.MP2.txt";
 	my $finOut_noV = $finOutD."$smp.MP2.noV.txt";
 	my $finOut_noVB = $finOutD."$smp.MP2.noV.noB.txt";
@@ -3600,6 +3658,25 @@ sub metphlanMapping{
 	my $jobN = "MP2$JNUM";
 
 	my ($jobN2,$tmpCmd) = qsubSystem($logDir."metaPhl2.sh",
+			$cmd,$Ncore,"3G",$jobN,$deps,"",1,[],\%QSBopt);
+	$jobN  = $jobN2;
+	return $jobN;
+}
+sub mOTU2Mapping{
+	my ($inF1a,$inF2a,$tmpD,$finOutD,$smp,$Ncore,$deps) = @_;
+	#die "yes\n\n";
+	my $stone = $finOutD."$smp.Motu2.sto";
+	if (!$DoMOTU2 ||  -e $stone){return;}
+	my @car1 = @{$inF1a}; my @car2 = @{$inF2a};
+	my $inF1 = join(",",@car1); my $inF2 = join(",",@car2); 
+	system "mkdir -p $finOutD\n" unless (-d $finOutD);
+	my $cmd = "mkdir -p $tmpD\n";
+	#$cmd .= "which bwa\n";
+	$cmd .= "$mOTU2Bin profile -f $inF1 -r $inF2 -n $smp -t $Ncore -q | gzip -c > $finOutD/$smp.motu2.tab.gz\n";
+	$cmd .= "touch  $stone\n";
+	my $jobN = "mOT$JNUM";
+	#die $cmd."\n";
+	my ($jobN2,$tmpCmd) = qsubSystem($logDir."mOTU2_prof.sh",
 			$cmd,$Ncore,"3G",$jobN,$deps,"",1,[],\%QSBopt);
 	$jobN  = $jobN2;
 	return $jobN;
@@ -3760,10 +3837,10 @@ sub smplStats(){
 #print $tmpassD."\n";
 	if (-e "$tmpassD/AssemblyStats.txt"){
 		my $assStats = `cat $tmpassD/AssemblyStats.txt`;
-		if ($assStats =~ m/Number of scaffolds\s+(\d+)/){ $ret{NScaff} = $1;} else { die "scfcnt wrg1\n";}
+		if ($assStats =~ m/Number of scaffolds\s+(\d+)/){ $ret{NScaff} = $1;} else { die "$tmpassD\nscfcnt wrg1\n";}
 		if ($assStats =~ m/Total size of scaffolds\s+(\d+)/){ $ret{ScaffSize} = $1;} else { die "scfcnt wrg2\n";}
 		if ($assStats =~ m/Longest scaffold\s+(\d+)/){ $ret{ScaffMaxSize} = $1;} else { die "scfcnt wrg3\n";}
-		if ($assStats =~ m/N50 scaffold length\s+(\d+)/){ $ret{ScaffN50} = $1;} else { die "scfcnt wrg4\n";}
+		if ($assStats =~ m/N50 scaffold length\s+(\d+)/){ $ret{ScaffN50} = $1;} else {$ret{ScaffN50}=-1;}# die "$tmpassD\nscfcnt wrg4\n";}
 		if ($assStats =~ m/Number of scaffolds > 1K nt\s+(\d+)/){ $ret{NScaffG1k} = $1;} else { die "scfcnt wrg5\n";}
 		if ($assStats =~ m/Number of scaffolds > 10K nt\s+(\d+)/){ $ret{NScaffG10k} = $1;} else { die "scfcnt wrg6\n";}
 		if ($assStats =~ m/Number of scaffolds > 100K nt\s+(\d+)/){ $ret{NScaffG100k} = $1;} else { die "scfcnt wrg7\n";}
@@ -3782,7 +3859,7 @@ sub smplStats(){
 		if ($assStats =~ m/Number of scaffolds\s+(\d+)/){ $ret{NScaff} = $1;} else { die "scfcnt wrg1\n";}
 		if ($assStats =~ m/Total size of scaffolds\s+(\d+)/){ $ret{ScaffSize} = $1;} else { die "scfcnt wrg2\n";}
 		if ($assStats =~ m/Longest scaffold\s+(\d+)/){ $ret{ScaffMaxSize} = $1;} else { die "scfcnt wrg3\n";}
-		if ($assStats =~ m/N50 scaffold length\s+(\d+)/){ $ret{ScaffN50} = $1;} else { die "scfcnt wrg4\n";}
+		if ($assStats =~ m/N50 scaffold length\s+(\d+)/){ $ret{ScaffN50} = $1;} else { $ret{ScaffN50}=-1;}#die "scfcnt wrg4\n";}
 		if ($assStats =~ m/Number of scaffolds > 1K nt\s+(\d+)/){ $ret{NScaffG1k} = $1;} else { die "scfcnt wrg5\n";}
 		if ($assStats =~ m/Number of scaffolds > 10K nt\s+(\d+)/){ $ret{NScaffG10k} = $1;} else { die "scfcnt wrg6\n";}
 		if ($assStats =~ m/Number of scaffolds > 100K nt\s+(\d+)/){ $ret{NScaffG100k} = $1;} else { die "scfcnt wrg7\n";}

@@ -203,7 +203,7 @@ if ($mapF eq "mergeCLs"){#was previously mergeCls.pl
 	
 	if (@ARGV > 2){$numCor = $ARGV[2];}
 
-	my $curDB_o = "PTV";#,KGM,TCDB,CZy,NOG,ABRc,ACL"; #"mp3,PTV,KGM,TCDB,CZy,NOG,ABRc,ACL"
+	my $curDB_o = "VDB";#,KGM,TCDB,CZy,NOG,ABRc,ACL"; #"mp3,PTV,KGM,TCDB,CZy,NOG,ABRc,ACL"
 	#my $curDB_o = "PTV";
 	my @DBs = split /,/,$curDB_o;
 	#die "@DBs\n";
@@ -1335,7 +1335,7 @@ sub geneCatFunc{
 			
 	my ($allAss,$jdep) = assignFuncPerGene($query,$outD,$tmpD,$curDB,\%optsDia,$QSBoptHR);
 	my $tarAnno = "${allAss}geneAss.gz";
-	my $tmpP2 = "$tmpD/CNT_1e-7_25//";
+	my $tmpP2 = "$tmpD/CNT_1e-8_25//";
 	#create actual COG table
 	my $cmd = "";
 	$tarAnno =~ s/\.gz$//;

@@ -353,13 +353,22 @@ sub readNCBItax($){
 	close I;
 }
 
-sub readFastHD($){#only reads headers
-	my ($inF) = @_;
+sub readFastHD{#only reads headers
+	my $inF = $_[0];
+	my $complH=0;
+	if (@_ > 1){$complH = $_[1];}
+	#die "$complH\n";
 	my @ret;
 	open I,"<$inF" or die "can t open $inF\n";
 	while (my $l = <I>){
+		chomp $l;
 		if ($l =~ m/^>(\S+)/){
-			push @ret,$1;
+			if (!$complH){
+				push @ret,$1;
+			} else {
+				$l =~ m/^>(.*)/;
+				push @ret,$1;
+			}
 		}
 	}
 	close I;
@@ -757,7 +766,7 @@ sub emptyQsubOpt{
 	my $xtraNodeCmds = getProgPaths("subXtraCmd",0);
 	$xtraNodeCmds = "" unless (defined $xtraNodeCmds);
 	my $longQ = "medium_priority"; my $shortQ = "medium_priority";
-	if ($qmode eq "slurm"){$shortQ = "1day"; $longQ="1month";}
+	if ($qmode eq "slurm"){$shortQ = "htc"; $longQ="htc";}#$shortQ = "1day"; $longQ="1month";}
 	my %ret = (
 		rTag => randStr(3),
 		doSubmit => $doSubm,
@@ -805,24 +814,30 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	if ($tmpSpace =~ s/G$//){$tmpSpace *= 1024 ;};
 	#die ($memory."\n");
 	my $queues = "\"".$optHR->{shortQueue}."\"";#"\"medium_priority\"";
-	$queues = "\"".$optHR->{longQueue}."\"" if ($optHR->{useLongQueue} ==1);#"\"medium_priority\"";
+	my $time = "24:00:00";
+	if ($optHR->{useLongQueue} ==1){
+		$queues = "\"".$optHR->{longQueue}."\"";#"\"medium_priority\"";
+		$time = "168:00:00";
+	}
 	if ($memory > 250001){$queues = "\"scb\"";}
 	$tmpsh =~ m/^(.*\/)[^\/]+$/;
 	system "mkdir -p $1" unless (-d $1);
 	open O,">",$tmpsh or die "Can't open qsub bash script $tmpsh\n";
-
 	#die "$cmd\n";
 	#print "$memory   $queues\n";
 	#if (`hostname` !~ m/submaster/){
 	if ($qmode eq "slurm"){$LSF = 2;$qbin="sbatch";
 		if ($memory > 250001){$queues = "\"bigmem\"";}
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
-		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH --cpus-per-task  $ncores\n#SBATCH -o $tmpsh.otxt\n"; #\n#SBATCH -n  $ncores
+		print O "#!/bin/bash\n#SBATCH -N 1\n#SBATCH --cpus-per-task=$ncores\n#SBATCH -o $tmpsh.otxt\n"; #\n#SBATCH -n  $ncores
+		print O "#SBATCH -e $tmpsh.etxt\n#SBATCH --mem=$memory\n#SBATCH --export=ALL\n";
+		#print O "#SBATCH --kill-on-invalid-dep=yes\n";
 		print O "#SBATCH --tmp=$tmpSpace\n" if ($tmpSpace>0);
-		print O "#SBATCH -e $tmpsh.etxt\n#SBATCH --mem $memory\n#\$ --export ALL\n";
 		print O "#SBATCH -p $queues\n";
-		print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";##\$ -v TMPDIR=/dev/shm\n";
-		print O "#\$ -V\n";
+		print O "#SBATCH --time=$time\n";
+		print O "#SBATCH --chdir=$cwd" if ($cwd ne "");
+		#print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";##\$ -v TMPDIR=/dev/shm\n";
+		#print O "#\$ -V\n";
 		#print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n"; #causes problems..
 	} elsif ($qmode eq "sge"){
 		system "rm -f $tmpsh.otxt $tmpsh.etxt";
@@ -850,7 +865,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 	print O "$xtraNodeCmds\n";
 	#prevent core dump files
 	#file location check availability
-	print O $optHR->{LocationCheckStrg};
+	#print O $optHR->{LocationCheckStrg};
 
 	print O $cmd."\n";
 	close O;
@@ -893,7 +908,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		}
 			#$waitJID =~ s/;/,/g;$xtra.="-hold_jid $waitJID ";}
 	}
-	if ($cwd ne ""){if ($LSF==2){$xtra .= "--workdir $cwd";} elsif ($LSF==1) {$xtra.="-cwd $cwd"; }  else {$xtra.="-wd $cwd";} }
+	if ($cwd ne ""){if ($LSF==1) {$xtra.="-cwd $cwd"; }  else {$xtra.="-wd $cwd";} }
 	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}

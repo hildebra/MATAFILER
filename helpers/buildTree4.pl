@@ -25,6 +25,7 @@ sub mergeMSAs;
 sub synPosOnly;
 sub calcDisPos;#gets only the dissimilar positions of an MSA, as well as %id similarity
 sub calcDisPos2;#de novo aligns pairwise via vsearch and calcs id (iddef 2)
+sub calcDiffDNA;
 sub runCodeml;
 sub runFastgear;
 sub mergePids;
@@ -62,7 +63,7 @@ my $calcDistMatExtGo = 0;
 
 my $ntCnt =0; my $bootStrap=0;
 my ($fnFna, $aaFna,$cogCats,$outD,$ncore,$Ete, $filt,$smplDef,$smplSep,$calcSyn,$calcNonSyn,
-			$useAA4tree) = ("","","","",12,0,0.8,1,"_",1,0,0);
+			$useAA4tree,$calcDNAdiff) = ("","","","",12,0,0.8,1,"_",1,0,0,0);
 my ($continue,$isAligned) = (0,0);#overwrite already existing files?
 my $outgroup="";
 my $fixHeaders = 0;
@@ -76,6 +77,7 @@ my $doFastGear=0;
 my $doFastGearSummary=0;
 my $clusterName="";
 my $MSAreq = 1;
+my $iqFast=0;
 
 die "no input args!\n" if (@ARGV == 0 );
 
@@ -96,8 +98,10 @@ GetOptions(
 	"AAtree=i" => \$useAA4tree,
 	"calcDistMat=i" => \$calcDistMat,
 	"calcDistMatExt=i" => \$calcDistMatExt,
+	"calcDiffDNA=i" => \$calcDNAdiff,
 	"SynTree=i"	=> \$calcSyn,
 	"continue=i" => \$continue,
+	"fast=i" => \$iqFast,
 	"bootstrap=i" => \$bootStrap,
 	"isAligned=i" => \$isAligned,
 	"runRAxML=i" => \$doRAXML,
@@ -448,22 +452,28 @@ if ($doMSA && $cogCats ne ""){
 #die;
 
 #-------------------------------------------
-#Tree building part with RaxML
-#die $multAli."\n";
+#Tree prep phase (MSA clean up, conversion, 4fold sites etc)
 #convert fasta again
 
 my @thrs;
-#convert MSA to phyllip
-my $tcmd = "rm -f $multAli.ph*; $fasta2phylip -c 50 $multAli > $multAli.ph\n";
-if (!$useAA4tree){
-	$tcmd .= "rm -f $multAliSyn.ph*; $fasta2phylip -c 50 $multAliSyn >$multAliSyn.ph\n" if ($calcSyn);
-	$tcmd .= "rm -f $multAliNonSyn.ph*; $fasta2phylip -c 50 $multAliNonSyn >$multAliNonSyn.ph\n"if ($calcNonSyn);
-}
-#die "$tcmd\n";	##--> rm -f /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna.ph*; perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl -c 50 /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna > /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna.ph
-if (system $tcmd) {die "fasta2phylim failed:\n$tcmd\n";}
 
+if ($doRAXML){ #convert MSA to phyllip (RAXML requires this..)
+	my $tcmd = "rm -f $multAli.ph*; $fasta2phylip -c 50 $multAli > $multAli.ph\n";
+	if (!$useAA4tree){
+		$tcmd .= "rm -f $multAliSyn.ph*; $fasta2phylip -c 50 $multAliSyn >$multAliSyn.ph\n" if ($calcSyn);
+		$tcmd .= "rm -f $multAliNonSyn.ph*; $fasta2phylip -c 50 $multAliNonSyn >$multAliNonSyn.ph\n"if ($calcNonSyn);
+	}
+	#die "$tcmd\n";	##--> rm -f /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna.ph*; perl /g/bork3/home/hildebra/dev/Perl/formating/fasta2phylip.pl -c 50 /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna > /g/scb/bork/luetge/pangenomics/speciation/dNdS/outFiles/test//MSA/MSAli.fna.ph
+	if (system $tcmd) {die "fasta2phylim failed:\n$tcmd\n";}
+}
 #convert MSA to NEXUS
 #convertMSA2NXS($multAli,"$multAli.nxs");
+
+if ($calcDNAdiff){
+	calcDiffDNA($multAli,"$outD/MSA/percID_2.txt");
+}
+
+
 my $phyloTree = "";
 if ($doGubbins){
 	my $outDG = "$outD/gubbins/"; 
@@ -500,6 +510,9 @@ if (0 && !$useAA4tree){ #this is outdated
 	calcDisPos($multAli,"$outD/MSA/AA_percID.txt",1) unless(-e "$outD/MSA/percID.txt" && $continue);
 }
 
+#-------------------------------------------
+#Tree building part with RaxML, IQtree, fasttree2, phyml
+
 if ($doFastTree){
 	#system "mkdir -p $treeDFT" unless (-d $treeDFT);
 	my $fasttree = "$treeD/FASTTREE_allsites.nwk";
@@ -510,7 +523,7 @@ if ($doFastTree){
 if ($doIQTree){
 	my $IQtree = "$treeD/IQtree.nwk";
 	unless ($continue && -e "$IQtree.treefile"){
-		my $iqFast=0;my$iqAutoModel=1;
+		my$iqAutoModel=1;
 		runQItree($multAli,$IQtree,$ncore,$outgroup,$bootStrap,$useAA4tree,$iqFast,$iqAutoModel);
 	}
 	$IQtree = "$treeD/IQtree_allsites";
@@ -540,7 +553,9 @@ if ($doCFML){
 }
 
 #phyml
+
 if ($doPhym){
+	my $tcmd = "";
 	my $nwkFile = "$treeD/tree_phyml_all.nwk";
 	my $nwkFile2 = "$treeD/tree_phyml_syn.nwk";
 	$tcmd = "$phymlBin --quiet -m GTR --no_memory_check -d nt -f m -v e -o tlr --nclasses 4 -b 2 -a e -i $multAli.ph > $nwkFile\n";
@@ -823,6 +838,98 @@ sub calcDisPos2($ $ $){
 	unlink "$MSA.db.dmnd" if (!$isNT);
 	return 1;
 }
+
+
+#just get positions different between alignments, and their relative position
+sub calcDiffDNA($ $){
+	my ($MSA,$opID) = @_;
+	my $kr = readFasta($MSA);
+	my %MS = %{$kr};
+	my $isNT = 1;
+	my %diffArs;my %perID;
+	print "Calculating distance matrix..\n";
+	foreach my $k1 (keys %MS){
+		$MS{$k1} = uc ($MS{$k1});
+	}
+	foreach my $k1 (keys %MS){
+		my $ss1 = $MS{$k1};
+		foreach my $k2 (keys %MS){
+			next if ($k2 eq $k1);
+			my $ss2 = $MS{$k2};
+			my $mask = $ss1 ^ $ss2;
+			my $diff=0;
+			my$N2=($ss2 =~ tr/[-]//);
+			my$N1=($ss1 =~ tr/[-]//);
+			if ($isNT){
+				$N1+=($ss1 =~ tr/[N]//);$N2+=($ss2 =~ tr/[N]//);
+				while ($mask =~ /[^\0]/g) {
+					my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
+					if ($s1 eq "-"){
+						$N2++;next;
+					}
+					if ($s2 eq "-" ){#missing data, position doesn't matter
+						$N1++;next;
+					}
+					$diffArs{$-[0]}=1;
+					$diff++;
+				}
+			} else {
+				while ($mask =~ /[^\0]/g) {
+					my ($s1,$s2) = ( substr($ss1,$-[0],1),  substr($ss2,$-[0],1));#, ' ', $-[0], "\n";
+					if ($s1 eq "N" ||$s1 eq "-"){
+						$N2++;next;
+					}
+					if ($s2 eq "N" ||$s2 eq "-" ){#missing data, position doesn't matter
+						$N1++;next;
+					}
+					$diffArs{$-[0]}=1;
+					$diff++;
+				}
+			}
+			my $nonDiff = ($mask =~ tr/[\0]//);
+			$nonDiff -= $N1;
+			$perID{$k1}{$k2}= $nonDiff/($diff+$nonDiff)*100;
+		}
+	}
+	open O,">$opID" or die "Cant open out perc ID file $opID\n";
+	my @smpls = keys %MS;
+	print O "percID\t".join("\t",@smpls)."";
+	foreach my $k1 (@smpls){
+		print O "\n$k1\t";
+		foreach my $k2 (@smpls){
+			if ($k1 eq $k2){print O "\t100";
+			} else {
+				print O "\t".$perID{$k1}{$k2};
+			}
+		}
+	}
+	close O;
+	my @NTdiffs = sort {$a <=> $b} (keys %diffArs);
+	#die "Cant open out perc ID file $opID\n";
+	my $MSAredF = $MSA; $MSAredF =~ s/\.[^\.]+$//;
+	my $NSAposF = $MSAredF; $MSAredF.=".reduced.fna";
+	$NSAposF .= ".reduced.pos";
+	open O2,">$NSAposF" or die "Can't open reduced MSA position file $NSAposF\n";
+	foreach my $i (@NTdiffs){
+		print O2 "$i\n";
+	} close O2;
+
+	open O,">$MSAredF" or die "Can't open reduced MSA file $MSAredF\n";
+	foreach my $k1 (@smpls){
+		my $seq1 = $MS{$k1};
+		my $seq = "";my $pos="";
+		foreach my $i (@NTdiffs){
+			$seq.=substr($seq1,$i,1);
+			$pos .="$i\n";
+		}
+		print O ">$k1\n$seq\n";
+
+	}
+	close O;
+	print "Dont calculating Distance matrix\n";
+	#die "done\n";
+}
+
 
 sub calcDisPos($ $ $){
 	my ($MSA,$opID, $isNT) = @_;

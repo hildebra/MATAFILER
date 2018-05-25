@@ -40,6 +40,7 @@ sub assignFuncPerGene{
 	my $ncore = 10;
 	my %opts = %{$otpsHR};
 	$ncore = $opts{ncore} if (exists($opts{ncore}));
+	$ncore = 1 if ($curDB eq "mp3"); #global override, since prog can't have more cores ..
 	$fastaSplits = $opts{fastaSplits} if (exists($opts{fastaSplits}));
 	$opts{splitPath} = $tmpD if (!exists($opts{splitPath}));
 	$opts{redo} = 0 if (!exists($opts{redo}));
@@ -54,15 +55,21 @@ sub assignFuncPerGene{
 	
 	
 	#build DB
-	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB,1);
+	my ($DBpath ,$refDB ,$shrtDB) = getSpecificDBpaths($curDB,0);
+	#die "$DBpath\n";
 	if ($DBpath ne "" && !-e "$DBpath$refDB.db.dmnd"){
 		my $DBcmd .= "$diaBin makedb --in $DBpath$refDB -d $DBpath$refDB.db -p $ncore\n";
+		unless (-e "$DBpath/$refDB.length"){
+			my $genelengthScript = getProgPaths("genelength_scr");#= "/g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/secScripts/geneLengthFasta.pl";
+			$DBcmd .= "$genelengthScript $DBpath$refDB $DBpath$refDB.length\n";
+		}
 		if ($doQsub){
 			my ($jN, $tmpCmd) = qsubSystem($qsubDir."DiamondDBprep.sh",$DBcmd,$ncore,"2G","diaDB","","",1,[],$QSBoptHR);
 			$globalDiamondDependence = $jN;
 		} else {
 			systemW $DBcmd;
 		}
+		#die "$DBcmd\n";
 	}
 	
 	my @subFls ;
@@ -105,15 +112,16 @@ sub assignFuncPerGene{
 				#$CWD = $mp3Dir;
 				chdir $mp3Dir;	
 				$cmd .= "$mp3Dir/./mp3 $subFls[$i] 1 50 0.2\n";#1=complete genes,2=metag prots
+				$subFls[$i] =~ m/\/([^\/]+$)/; my $fnm=$1;
 				if ($localTmp){
-					$subFls[$i] =~ m/\/([^\/]+$)/; my $fnm=$1;
 					$outF = "$outD/$fnm.Hybrid.result.gz"; #this is sometimes shared, sometimes local tmp
-					#$cmd .= "cp $subFls[$i].Hybrid.result $outF\n";
 					$cmd .= "$prsMP3_scr $subFls[$i].Hybrid.result $outF\n";
-					#$cmd .= "rm $tmpD\n";
+					
 				} else {
 					$outF = "$subFls[$i].Hybrid.result.gz";
+					$cmd .= "$prsMP3_scr $subFls[$i].Hybrid.result $outF\n";
 				}
+				$cmd .= "rm $subFls[$i].Hybrid.result\n";
 			} else {
 				#my $outF = "$GCd/DiaAssignment.sub.$i";
 				if ($localTmp){
@@ -126,7 +134,7 @@ sub assignFuncPerGene{
 				#$cmd .= "$diaBin view -a $outF.tmp -o $outF -f tab\nrm $outF.tmp* $subFls[$i] \n";
 				$cmd .= "rm -r $tmpD\n" if ($localTmp);
 			}
-			my $tmpCmd;
+			#die "$cmd\n";
 			system "rm -f $outF" if ($redo);
 			if ($calcDia && !-e $outF){
 						#die "$cmd\n";
@@ -163,12 +171,14 @@ sub assignFuncPerGene{
 		$cmd .= "$catcmd ".join(" ",@allFiles). " > $allAss\n";
 		$cmd .= "rm -f ".join(" ",@allFiles) . "\n";
 	}
-	#die "$cmd";
 	if ($curDB eq "mp3"){
-		$cmd .= "mv $allAss ${allAss}geneAss.gz mp3\ntouch $allAss\n";
+		$cmd .= "mv $allAss ${allAss}geneAss.gz\ntouch $allAss\n";
 	} else {
 		$cmd .= "$secCogBin -i $allAss -DB $shrtDB -singleSpecies 1  -bacNOG $opts{bacNOG} -KOfromNOG 0 -eggNOGmap 1 -calcGeneLengthNorm 0 -lenientCardAssignments 2 -mode 2 -CPU $ncore -percID 25 -LF $DBpath/$refDB.length -DButil $DBpath -tmp $tmpD -eggNOGmap 0 -minPercSbjCov 0.3 -minBitScore 60 -minAlignLen 60 -eval 1e-7\n";
 	}
+	
+
+	#die "$cmd";
 	$cmd .= "rm -f ".join(" ",@subFls)."\n" unless($opts{keepSplits});
 	if ($interpDia && $doQsub){
 		($jdep,$qCmd) = qsubSystem($qsubDir."colDIA$shrtDB.sh",$cmd,1,"40G","ColDIA",join(";",@jdeps),"",1,[],$QSBoptHR);

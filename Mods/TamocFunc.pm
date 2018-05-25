@@ -7,7 +7,8 @@ use strict;
 #use Mods::GenoMetaAss qw(qsubSystem);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw( sortgzblast attachProteins attachProteins2 uniq getFMG readTabbed readTabbed2 readTabbed3 getSpecificDBpaths renameFMGs);
+our @EXPORT_OK = qw( sortgzblast attachProteins attachProteins2 uniq getFMG readTabbed readTabbed2 
+					readTabbed3 getSpecificDBpaths renameFMGs);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
@@ -99,9 +100,10 @@ sub readTabbed3($ $){
 	my %ret;
 	my ($It,$OK) = gzipopen($inF,"Tabbed file",1);
 	#open It,"<$inF" or die "Cant open tabbed infile $inF\n";
-	while (<$It>){
-		chomp;
-		my @spl = split /\t/;
+	while (my$l = <$It>){
+		#chomp;
+		$l =~ s/\n$//;
+		my @spl = split /\t/,$l,-1;
 		if (@spl < $col){die"Requested column $col, but file $inF has only ".@spl." columns\n";}
 		$ret{$spl[0]} = $spl[$col];
 	}
@@ -116,9 +118,9 @@ sub readTabbed2{
 	my %ret;my $maxDepth=0;
 	open It,"<$inF" or die "Cant open tabbed infile $inF\n";
 	
-	while (<It>){
-		chomp;
-		my @spl = split /\t/;
+	while (my $l=<It>){
+		chomp $l;
+		my @spl = split /\t/,$l,-1;
 		my $ke;
 		if ($useLast==1){
 			$ke	= pop @spl;
@@ -161,6 +163,7 @@ sub getSpecificDBpaths($ $){
 	elsif ($curDB eq "TCDB"){$DBpath = getProgPaths("TCDB_path_DB"); $refDB = "tcdb.faa";$shrtDB = $curDB; }
 	elsif ($curDB eq "PTV"){$DBpath = getProgPaths("PATRIC_VIR_path_DB"); $refDB = "PATRIC_VF.faa";$shrtDB = $curDB; }
 	elsif ($curDB eq "PAB"){$DBpath = getProgPaths("ABprod_path_DB"); $refDB = "dedup_best_prod_predictions.faa";$shrtDB = $curDB; }
+	elsif ($curDB eq "VDB"){$DBpath = getProgPaths("VirDB_path_DB"); $refDB = "VFDB_setB_pro.fas";$shrtDB = $curDB; }
 	else {die"Unknown DB for Diamond: $curDB\n";}
 	
 	if ($checkDBpreped){

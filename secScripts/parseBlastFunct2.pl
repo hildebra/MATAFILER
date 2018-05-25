@@ -110,7 +110,7 @@ $blInf = sortgzblast($blInf,$tmpD) unless ($mode == 3 || $mode == 4);
 
 my $bl2dbF ;my $cogDefF ;my $NOGtaxf ;
 my $KEGGlink ;my $KEGGtaxDb ; my $TCDBhir;
-my $PATRVIRanno;
+my $PATRVIRanno; my $VIRDBannp;
 if ($DButil ne ""){
 	$bl2dbF = "$DButil/NOG.members.tsv";
 	$bl2dbF = "$DButil/bactNOG.members.tsv" if ($useBacNOG);
@@ -120,6 +120,7 @@ if ($DButil ne ""){
 	$KEGGtaxDb = "$DButil/kegg.tax.list";
 	$TCDBhir = "$DButil/TCDBhir.txt";
 	$PATRVIRanno = "$DButil/PATRIC_VF2.tab";
+	$VIRDBannp = "$DButil/VF.tab";
 }
 
 $blInf =~ m/(.*)\/([^\/]+$)/;
@@ -174,7 +175,7 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 	%COGdef = %{$hr1}; $tabCats = 1;
 	%NOGkingd = readNogKingdom($NOGtaxf);
 
-} elsif ($DBmode eq "TCDB" || $DBmode eq "PTV" ){
+} elsif ($DBmode eq "TCDB" || $DBmode eq "PTV"|| $DBmode eq "VDB" ){
 	@kgdOpts = qw (3);
 	@kgdName = ("","","","ALL");
 	@kgdNameShrt = ("","","","ALL");
@@ -184,6 +185,17 @@ if ($mode == 3 || $mode == 4){ #scan for all reads finished
 		my $hr = readTCDBdef($TCDBhir);
 		%TCdef = %{$hr};
 		print "transporter DB\n";
+	}
+	if ($DBmode eq "VDB"){
+		$tabCats = 8;
+		print "VIRDB DB\n";
+		my $hr = readTabbed3($VIRDBannp,4);
+		%PTVcat = %{$hr};
+		$hr = readTabbed3($VIRDBannp,1);
+		%PTVgene = %{$hr};
+		$hr = readTabbed3($VIRDBannp,2);
+		%PTVgene_def = %{$hr};
+
 	}
 	if ($DBmode eq "PTV"){
 		$tabCats=8;

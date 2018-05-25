@@ -49,7 +49,7 @@ sub runQItree{
 	my $iqTree  = getProgPaths("iqtree");
 	$treeOut =~ s/\.nwk$//;
 	my $treNM = "IQtree";
-	my $cmd = "$iqTree -s $inMSA -nt $ncore -pre $treeOut ";
+	my $cmd = "$iqTree -s $inMSA -nt $ncore -pre $treeOut -seed 678 "; #-nt AUTO -ntmax $ncore
 	$cmd .= "-o $outgr " unless ($outgr eq "" && $outgr !~ m/,/);
 	unless ($fast == 0){$cmd .= "-fast "; print "IQtree - fast\n"; $treNM .= "_fast";}
 	if ($autoModel){$treNM .= "_autoMOD";}
@@ -79,6 +79,8 @@ sub runQItree{
 	} else {
 		$cmd .= "-alrt 1000 ";
 	}
+	#TODO: include booster for better bootstrap values
+	#booster -a tbe -i 40MG.IQtree.treefile -b 40MG.IQtree.boottrees -@ 8 -o 40MG.IQtree_booster.tre
 	$cmd .= "";
 	#die $cmd;
 	systemW $cmd;
@@ -89,7 +91,7 @@ sub runFasttree{
 	my ($inMSA,$treeOut,$isAA,$ncore) = @_;
 	my $fsttreeBin  = getProgPaths("fasttree");
 	my $ntFlag = "";
-	$ntFlag = "-nt -gtr" if ($isAA);
+	$ntFlag = "-nt -gtr" if (!$isAA);
 	my $cmd = "$fsttreeBin $ntFlag $inMSA > $treeOut\n";
 	systemW $cmd;
 }
