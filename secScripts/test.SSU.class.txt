@@ -1,0 +1,23 @@
+	GGC1.SSU.hiera.txt.gz
+Bacteria;?;?	78
+Bacteria;Actinobacteria;Actinobacteria	3
+Bacteria;Cyanobacteria;Chloroplast	3
+Bacteria;Cyanobacteria;Cyanobacteria	2
+Bacteria;Firmicutes;Bacilli	154
+Bacteria;Firmicutes;Clostridia	4
+Bacteria;Planctomycetes;OM190	4
+Bacteria;Proteobacteria;ARKICE-90	1
+Bacteria;Proteobacteria;Alphaproteobacteria	5
+Bacteria;Proteobacteria;Betaproteobacteria	4
+Bacteria;Proteobacteria;Gammaproteobacteria	5973
+Bacteria;Proteobacteria;pItb-vmat-80	1
+Bacteria;Spirochaetae;Spirochaetes	1
+Bacteria;Tenericutes;?	1
+Bacteria;Tenericutes;Mollicutes	124
+Bacteria;Verrucomicrobia;Arctic97B-4 marine group	1
+Eukaryota;Alveolata;Apicomplexa_X	1
+Eukaryota;Opisthokonta;?	1
+Eukaryota;Opisthokonta;Ascomycota	1
+Eukaryota;Opisthokonta;Chytridiomycota	7
+Eukaryota;Opisthokonta;Mollusca	82
+Eukaryota;Opisthokonta;Nematoda	191

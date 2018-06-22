@@ -8,7 +8,7 @@ use strict;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw( sortgzblast attachProteins attachProteins2 uniq getFMG readTabbed readTabbed2 
-					readTabbed3 getSpecificDBpaths renameFMGs);
+					readTabbed3 getSpecificDBpaths renameFMGs getFileStr);
 use Mods::GenoMetaAss qw(systemW readFasta renameFastHD gzipwrite gzipopen);
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 
@@ -16,7 +16,17 @@ use Mods::IO_Tamoc_progs qw(getProgPaths);
 #gets required FA genes via samtools faidx and saves them to file
 #Usage: [text file with target genes] [out faa] [in faa(search genes in this fna)] [new names for output]
 
-
+sub getFileStr{
+	my $inF = $_[0];
+	my $req = 1;
+	my $str = "";
+	$req = $_[1] if (@_ > 1);
+	my ($I,$OK) = gzipopen($inF,"",$req,$req) ;
+	die "getFileStr: Can't open $inF\n" if (!$OK && $req);
+	return $str if (!$OK);
+	while (my $l = <$I>){$str.=$l;}
+	return $str;
+}
 sub attachProteins2{
 	my ($inT,$prF,$protIn) = ($_[0],$_[1],$_[2]);
 	

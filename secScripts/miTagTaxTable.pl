@@ -52,7 +52,7 @@ foreach my $file (@ARGV) {
 foreach my $l (@tlvls){
 	my @taxa_keys = sort keys %{$taxa{$l}};
 	my @sites_keys = sort keys %{$sites{$l}};
-	open O,">$outF.$l.txt";
+	open O,">$outF.$l.txt"; print O "$l";
 	foreach my $site (@sites_keys) { print O "\t$site"; }
 	print O "\n";
 	foreach my $key (@taxa_keys) {

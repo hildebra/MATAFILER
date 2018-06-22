@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use threads;
 use Mods::GenoMetaAss qw(reverse_complement_IUPAC readFasta systemW writeFasta);
-use Mods::IO_Tamoc_progs qw(getProgPaths);
+use Mods::IO_Tamoc_progs qw(getProgPaths setConfigFile);
 
 
 
@@ -17,17 +17,12 @@ sub merge;
 sub fastq2fna; sub flashed;
 sub rework_tmpLines;
 
-#binaries
-my $flashBin = getProgPaths("flash");#"/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash";
-my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
-#my $lambdaIdxBin = $lambdaBin."_indexer";#getProgPaths("");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
-my $LCAbin = getProgPaths("LCA");#"/g/bork3/home/hildebra/dev/C++/LCA/./LCA";
-my $srtMRNA_path = getProgPaths("srtMRNA_path");
 
 
 #some more pars for LCA	
 my @idThr = (97,95,93,91,88,78);
 my $lengthTolerance = 0.85;
+my $maxRds = 50000;
 my $maxHitOnly = 0;
 my $DoPar = 0;
 
@@ -49,26 +44,53 @@ if (@ARGV > 4){
 }
 my $mergeD = $tmpD."flashMerge/";
 my $readsRpairs=0;
+my $cfgFile="";
+my $extractDNA = 0;
 if (@ARGV > 5){
 	$readsRpairs = $ARGV[5];
+}
+if (@ARGV > 6){
+	$cfgFile = $ARGV[6];
+}
+if (@ARGV > 7){
+	$extractDNA = $ARGV[7];
 }
 #die "$readsRpairs\n";
 my $DBdir = $ARGV[3];
 
+setConfigFile($cfgFile);
+#binaries
+my $flashBin = getProgPaths("flash");#"/g/bork3/home/hildebra/bin/FLASH-1.2.10/flash";
+my $lambdaBin = getProgPaths("lambda");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda";
+#my $lambdaIdxBin = $lambdaBin."_indexer";#getProgPaths("");#"/g/bork3/home/hildebra/dev/lotus//bin//lambda/lambda_indexer";
+my $LCAbin = getProgPaths("LCA");#"/g/bork3/home/hildebra/dev/C++/LCA/./LCA";
+my $srtMRNA_path = getProgPaths("srtMRNA_path");
+
+my @DBn = ("LSUdbFA","LSUtax","SSUdbFA","SSUtax","ITSdbFA","ITStax","PR2dbFA","PR2tax");
+my $LCAar = getProgPaths(\@DBn,0);
+my @LCAdbs = @{$LCAar}; 
+#reduce to files
+for (my $i=0;$i<@LCAdbs;$i++){
+	next if ($LCAdbs[$i] eq "");
+	$LCAdbs[$i] =~ m/\/([^\/]+)$/;
+	$LCAdbs[$i] = $1;
+}
+
 #datbases
 #datbases
-my $LSUdbFA = "$DBdir/SLV_128_LSU.fasta";
-my $LSUtax = "$DBdir/SLV_128_LSU.tax";
-my $SSUdbFA= "$DBdir/SLV_128_SSU.fasta";
-my $SSUtax = "$DBdir/SLV_128_SSU.tax";
-#my $ITSdbFA = "$DBdir/sh_refs_qiime_ver7_99_02.03.2015.fasta";my $ITStax = "$DBdir/sh_taxonomy_qiime_ver7_99_02.03.2015.txt";
-my $ITSdbFA = getProgPaths("ITSdbFA"); $ITSdbFA =~ m/([^\/]+)$/; $ITSdbFA = $1; $ITSdbFA = "$DBdir/$ITSdbFA";
-my $ITStax = getProgPaths("ITStax");$ITStax =~ m/([^\/]+)$/; $ITStax = $1;$ITStax = "$DBdir/$ITStax";
- 
-
-my $PR2dbFA = "$DBdir/gb203_pr2_all_10_28_99p.fasta";
-my $PR2tax = "$DBdir/PR2_taxonomy.txt";
-
+my ($LSUdbFA,$LSUtax) = ("","");
+unless ($LCAdbs[0] eq ""){$LSUdbFA = "$DBdir/$LCAdbs[0]";$LSUtax = "$DBdir/$LCAdbs[1]";}
+my ($SSUdbFA,$SSUtax) = ("","");
+unless ($LCAdbs[2]  eq ""){$SSUdbFA = "$DBdir/$LCAdbs[2]";$SSUtax = "$DBdir/$LCAdbs[3]";}
+my ($ITSdbFA,$ITStax) = ("","");
+unless ($LCAdbs[4] eq ""){$ITSdbFA = "$DBdir/$LCAdbs[4]";$ITStax = "$DBdir/$LCAdbs[5]";}
+my ($PR2dbFA,$PR2tax) = ("","");
+unless ($LCAdbs[6] eq ""){$PR2dbFA = "$DBdir/$LCAdbs[6]";$PR2tax = "$DBdir/$LCAdbs[7]";}
+#my $ITSdbFA = getProgPaths("ITSdbFA"); $ITSdbFA =~ m/([^\/]+)$/; $ITSdbFA = $1; $ITSdbFA = "$DBdir/$ITSdbFA";
+#my $ITStax = getProgPaths("ITStax");$ITStax =~ m/([^\/]+)$/; $ITStax = $1;$ITStax = "$DBdir/$ITStax";
+#my $PR2dbFA = "$DBdir/gb203_pr2_all_10_28_99p.fasta";
+#my $PR2tax = "$DBdir/PR2_taxonomy.txt";
+#die "$SSUdbFA\n";
 #some cleanups (includes prev runs)
 system "rm -f  $inD/*.blast $outdir/*riboRun_bl"; #$inD/reads_SSU.fq $inD/reads_LSU.fq $inD/reads_ITS.fq
 
@@ -128,7 +150,7 @@ for (my $i=0;$i<@tags;$i++){
 		}elsif ($tags[$i] eq "SSU"){ @dbfa = ($PR2dbFA,$SSUdbFA); @dbtax = ($PR2tax,$SSUtax) ;
 		}elsif ($tags[$i] eq "ITS"){ @dbfa = ($ITSdbFA); @dbtax = ($ITStax) ;
 		}else {die "Unrecognized tag $tags[$i]\n";}
-		
+		if ($dbfa[0] eq ""){next;}
 		#merge
 		my $go=1;
 		#die "XX$readsRpairs\nXX";
@@ -152,7 +174,7 @@ for (my $i=0;$i<@tags;$i++){
 		system "touch $curStone";
 	}
 }
-
+#die("not yet\n");
 #cleanup
 system "rm -rf $tmpD" if ($tmpD ne "");
 
@@ -329,6 +351,14 @@ sub runBlastLCA(){
 	my $fullBlastTaxRi = {}; my $fullBlastTaxR = {};
 	my $simName = ""; my $leftover = 111;
 	
+	#takes too long, first check how many reads (and if this can be reduced)
+	if ($maxRds>0){
+		my $hr = readFasta($query,0);
+		my $maxRds = $maxRds;
+		print "Found ". keys(%{$hr})." candidates in $query\n";
+		print "Using max maxRds $maxRds of these.\n" if (scalar(keys(%{$hr})) > $maxRds);
+		writeFasta($hr,$query,$maxRds);
+	}
 	my @taxouts=(); my @taxouts_inter = ();
 	for (my $DBi=0;$DBi<@DBa; $DBi++){
 		my $DB = $DBa[$DBi]; my $DBtax = $DBtaxa[$DBi];
@@ -390,13 +420,6 @@ sub runBlastLCA(){
 				$cmd .= "$lambdaBin $defLopt -q $query -i $DB.lambda -o $taxblastf\n";
 			}
 			
-			#takes too long, first check how many reads (and if this can be reduced)
-			my $hr = readFasta($query,0);
-			my $maxRds = 50000;
-			print "Found ". keys(%{$hr})." candidates in $query\n";
-			print "Using max maxRds $maxRds of these.\n" if (scalar(keys(%{$hr})) > $maxRds);
-			writeFasta($hr,$query,$maxRds);
-			
 			#$cmd .= "\nmv $tmptaxblastf $taxblastf\n";
 			#die "$doQuery \n$cmd\n";
 			print "\n\n$cmd\n\n";
@@ -432,15 +455,18 @@ sub runBlastLCA(){
 		#die;
 	print "Running LCA..\n";
 	my $LCcmd = "";
-	
-	
-
 	#$hof1 = writeBlastHiera($fullBlastTaxR,$id,$simName);  undef $BlastTaxR ;
 	$LCcmd .= "$LCAbin -i ". join(",",@taxouts) . " -r ".join(",",@DBtaxa)." -o $hof1 -LCAfrac 0.8 -showHitRead\n";
+	
+	
 	#merging of interleave results
 	if (0&&$doInter){
 		$LCcmd .= "$LCAbin -i ". join(",",@taxouts_inter) . " -r ".join(",",@DBtaxa)." -o $hof2 -LCAfrac 0.8 -showHitRead\n";
 		$LCcmd.= "tail -n+2 $hof2 >> $hof1; rm $hof2;"; #remove header from LCA
+	}
+
+	if ($extractDNA){
+		my $hr = readFasta($query);my%FNA = %{$hr};
 	}
 	
 	#die $LCcmd."\n";

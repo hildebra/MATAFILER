@@ -321,6 +321,8 @@ sub gzipopen{
 	my ($inF,$descr) = @_;
 	my $dodie = 1;
 	if (@_ > 2){$dodie = $_[2];}
+	my $verbose=1;
+	if (@_ > 3){$verbose = $_[3];}
 	$inF .= ".gz" if (!-e $inF && -e $inF.".gz");
 	if ($inF =~ m/\.gz$/){
 		my $inFwo = $inF; $inFwo =~ s/\.gz$//;
@@ -331,10 +333,10 @@ sub gzipopen{
 	my $I; my $OK = 1;
 	if($inF =~ m/\.gz$/ ){
 		my $msg = "Can't open a pipe to $descr file $inF\n";
-		if (!open($I, "gunzip -c $inF |")) {if ($dodie){die $msg;} else { $OK=0;print $msg;}}
+		if (!open($I, "gunzip -c $inF |")) {if ($dodie){die $msg;} else { $OK=0;print $msg if ($verbose);}}
 	} else{
 		my $msg = "Can't open $descr file $inF\n";
-		if (!open($I, "<", "$inF") ) {if ($dodie){die $msg;} else {$OK=0; print $msg;}}
+		if (!open($I, "<", "$inF") ) {if ($dodie){die $msg;} else {$OK=0; print $msg if ($verbose);}}
 	}
 	return ($I,$OK);
 }
@@ -835,7 +837,8 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		print O "#SBATCH --tmp=$tmpSpace\n" if ($tmpSpace>0);
 		print O "#SBATCH -p $queues\n";
 		print O "#SBATCH --time=$time\n";
-		print O "#SBATCH --chdir=$cwd" if ($cwd ne "");
+		print O "#SBATCH --chdir=$cwd\n" if ($cwd ne "");
+		print O "#SBATCH -J $rTag$jname\n" if ($jname ne "");
 		#print O "#\$ -S /bin/bash\n#\$ -v LD_LIBRARY_PATH=".$optHR->{cpplib}."\n";##\$ -v TMPDIR=/dev/shm\n";
 		#print O "#\$ -V\n";
 		#print O "#\$ -v PERL5LIB=".$optHR->{perl5lib}."\n"; #causes problems..
@@ -869,6 +872,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 
 	print O $cmd."\n";
 	close O;
+	#sleep (1);
 	my $depSet=0;
 	my @jspl = split(";",$waitJID); @jspl = grep /\S/, @jspl;
 	if ($LSF==2){#slurm
@@ -882,9 +886,11 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 			#$depSet=1;
 			for (@jspl) {s/$rTag//;}
 			$xtra .= "--dependency=afterok:".join(":",@jspl)." " if (@jspl > 0);
+			#use this one for now, as slurm currently faults without a reason..
+			#$xtra .= "--dependency=afterany:".join(":",@jspl)." " if (@jspl > 0);
+			
 			#print $xtra;
 		}
-		if ($jname ne ""){$xtra.="-J $rTag$jname ";}
 		#finish up
 		$xtra .= " ";
 	} elsif ($LSF==1){ #bsub #-M memLimit; -q queueName;  -m "host_name[@cluster_name]; -n minProcessors; 
@@ -908,7 +914,7 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 		}
 			#$waitJID =~ s/;/,/g;$xtra.="-hold_jid $waitJID ";}
 	}
-	if ($cwd ne ""){if ($LSF==1) {$xtra.="-cwd $cwd"; }  else {$xtra.="-wd $cwd";} }
+	if ($cwd ne ""){if ($LSF==1) {$xtra.="-cwd $cwd"; }  elsif ($LSF == 0) {$xtra.="-wd $cwd";} }
 	my $qcm = "$qbin $xtra $tmpsh \n";
 	my $LOGhandle = "";
 	if (exists $optHR->{LOG}){ $LOGhandle = $optHR->{LOG};}
@@ -922,9 +928,12 @@ sub qsubSystem($ $ $ $ $ $ $ $ $ $){
 			chomp $ret; $ret =~ m/(\d+)$/; #$ret = $1;
 			$jname=$1;
 		}
+		#die "$qcm\n";
 		#die "$qcm\n$cmd\n$ret XX\n";
 		#if ($depSet){die "$qcm";}
 	}
+	
+	#die "$qcm\n";
 
 	if ($immSubm==0){
 		return "$rTag$jname",$qcm;

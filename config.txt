@@ -131,7 +131,7 @@ readCov	[MFLRDir]/bin/./rdCover
 
 #local scripts 	ESSENTIAL
 cLSUSSU_scr	perl [MFLRDir]/miTag/catchLSUSSU.pl
-lotusLCA_cLSU_scr	[MFLRDir]/miTag/lotus_LCA_blast2.pl
+lotusLCA_cLSU_scr	[MFLRDir]/miTag/lotus_LCA_blast3.pl
 krakCnts_scr	[MFLRDir]/secScripts/krak_count_tax.pl
 genelength_scr	[MFLRDir]/secScripts/geneLengthFasta.pl
 secCogBin_scr	[MFLRDir]/secScripts/parseBlastFunct2.pl
@@ -158,7 +158,7 @@ growth_scr	perl [MFLRDir]/helpers/growthRate.pl
 consCntupVCF_scr	perl /g/bork3/home/hildebra/dev/Perl/reAssemble2Spec/helpers/SNP/consFNA2vcf.pl
 mp3Prs	perl [MFLRDir]/secScripts/parseMP3.pl
 unsplitKrak_scr	perl [MFLRDir]/secScripts/unsplit_krak.pl
-specIGC_scr	perl [MFLRDir]/helpers/GC/annotateMGwMotus.pl
+specIGC_scr	perl [MFLRDir]/helpers/GC/annotateMGwSpecIs.pl
 
 
 #options for filters etc	ESSENTIAL

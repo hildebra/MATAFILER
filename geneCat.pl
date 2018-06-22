@@ -26,19 +26,19 @@ use Mods::GenoMetaAss qw( splitFastas readMapS qsubSystem emptyQsubOpt systemW r
 use Mods::IO_Tamoc_progs qw(getProgPaths);
 use Mods::TamocFunc qw(attachProteins attachProteins2 getSpecificDBpaths);
 use Mods::FuncTools qw(assignFuncPerGene calc_modules);
+use Mods::geneCat qw(readGeneIdx);
 
-sub readSam; sub readCDHITCls;sub readFasta; 
+sub readCDHITCls;sub readFasta; 
 sub writeBucket; sub submCDHIT;
 sub mergeClsSam; sub secondaryCls;
 sub cleanUpGC; sub nt2aa; sub clusterFNA;
 #sub systemW; #system execution (stops this program upon error)
 sub protExtract; #extracts proteins seqs for each cluster
 sub combineClstr;#rewrites cd-hit cluster names to my gene Idx numbers
-sub readGeneIdx;
 sub rewriteFastaHdIdx; #replaces ">MM2__C122;_23" with number from gene catalog
 sub FOAMassign;
 sub geneCatFunc;
-
+sub readSam;
 sub canopyCluster; #MGS creation
 sub krakenTax; #assign tax to each gene via kraken
 sub kaijuTax; #assign tax to each gene via kraken
@@ -48,6 +48,18 @@ sub writeMG_COGs;
 #.27: added external genes support
 #.28: gene length filter
 my $version = 0.30;
+my $justCDhit = 0;
+my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
+my $doSubmit = 1; my $qsubNow = 0;
+my $oldNameFolders= 0;
+my $doFMGseparation = 1; #cluster FMGs separately?
+my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
+my $numCor = 40; my $totMem = 700; #in G
+
+my $toLclustering=0;#just write out, no sorting etc
+
+
+
 
 die "Not enough Args\n" if (@ARGV < 2);
 my $mapF = $ARGV[0];#"/g/bork5/hildebra/data/metaGgutEMBL/MM.txt";
@@ -63,16 +75,7 @@ $extraRdsFNA = $ARGV[4] if (@ARGV > 4);#FNA with (predicted) genes, that are to 
 my $extraRdsFAA = "";
 $extraRdsFAA = $ARGV[5] if (@ARGV > 5);#FAA with proteins corresponding to  $extraRdsFNA
 #die $cdhID."\n";
-my $justCDhit = 0;
-my $bactGenesOnly = 0; #set to zero if no double euk/bac predication was made
 my $clustMMseq = 0;#mmseqs2Bin
-my $doSubmit = 1; my $qsubNow = 0;
-my $oldNameFolders= 0;
-my $doFMGseparation = 1; #cluster FMGs separately?
-my $doGeneMatrix =1; #in case of SOIL I really don't need to have a gene abudance matrix / sample
-my $numCor = 20; my $totMem = 700; #in G
-
-my $toLclustering=0;#just write out, no sorting etc
 
 #--------------------------------------------------------------program Paths--------------------------------------------------------------
 my $cdhitBin = getProgPaths("cdhit");#/g/bork5/hildebra/bin/cd-hit-v4.6.1-2012-08-27/cd-hit
@@ -128,6 +131,15 @@ COG0124=>94.5,COG0184=>98.2,COG0185=>99,COG0186=>99,COG0197=>99,COG0200=>98.4,CO
 #COG0124=>94.5,COG0184=>98.2,COG0185=>99.3,COG0186=>99.3,COG0197=>99.3,COG0200=>98.4,COG0201=>97.2,COG0202=>98.4,COG0256=>99,COG0522=>98.6);
 
 #my $logdir = $baseOut."LOGandSUB";
+if ($mapF =~ m/^\??$/){
+	if (-e "$baseOut/LOGandSUB/GCmaps.inf"){
+		$mapF = `cat $baseOut/LOGandSUB/GCmaps.inf`;
+		die "extracted mapf from $baseOut/LOGandSUB/GCmaps.inf\n does not exist:\n$mapF\n" if (!-e $mapF);
+	} else {
+		die "Can't find expected copy of inmap in GC outdir: $baseOut\n";
+		#$mapF = "$baseOut/LOGandSUB/inmap.txt";
+	}
+}
 my %map; my %AsGrps; my @samples;
 if (-e $mapF){ #start building new gene cat
 	print "MAP=".$mapF."\n";
@@ -138,7 +150,7 @@ if (-e $mapF){ #start building new gene cat
 	$baseOut = $map{outDir} if ($baseOut eq "" && exists($map{outDir} ));
 	@samples = @{$map{smpl_order}};
 	%AsGrps = %{$hr2};
-#die $map{outDir}."\n";
+	#die $map{outDir}."XX\n";
 }
 
 my $selfScript=Cwd::abs_path($PROGRAM_NAME);#dirname($0)."/".basename($0);
@@ -148,15 +160,6 @@ $baseOut =~ m/\/([^\/]+)\/?$/;
 $tmpDir .= $1."/"; $GLBtmp.=$1."/";
 my $OutD = $baseOut;#."GeneCatalog/";
 system "mkdir -p $OutD" unless (-d $OutD);
-if ($mapF =~ m/^\??$/){
-	if (-e "$baseOut/LOGandSUB/GCmaps.inf"){
-		$mapF = `cat $baseOut/LOGandSUB/GCmaps.inf`;
-		die "extracted mapf from $baseOut/LOGandSUB/GCmaps.inf\n does not exist:\n$mapF\n" if (!-e $mapF);
-	} else {
-		die "Can't find expected copy of inmap in GC outdir: $baseOut\n";
-		#$mapF = "$baseOut/LOGandSUB/inmap.txt";
-	}
-}
 #die $mapF;
 my $qsubDir = $OutD."qsubsAlogs/";
 system "echo \'$version\' > $OutD/version.txt";
@@ -220,7 +223,7 @@ if ($BIG eq "protExtract"){#was previously mergeCls.pl
 	if (@ARGV < 3){die "Not enough args for geneCat-protExtract\n";}
 	#needs GC-info file && baseOut
 	#$OutD =~ s/\/GeneCatalog//;
-	
+	#die $map{outDir}." DA\n";
 	protExtract($OutD,$ARGV[3]); #baseOut
 	exit(0);
 }
@@ -610,55 +613,12 @@ sub cleanUpGC(){#not used any longer
 }
 
 
-sub readGeneIdx($){
-	my ($in) = @_;
-	my %ret; my $gCnt=0;
-	open I,"<$in" or die "Can't read gene index file $in\n";
-	while(my $line=<I>){
-		next if ($line =~ m/#/);
-		chomp $line;
-		my @spl = split(/\t/,$line);
-		$ret{$spl[2]} = $spl[0];
-		$gCnt++;
-		#print $spl[2] ." ". $spl[0]."\n";
-	}
-	close I;
-	print "Gene Index read\n";
-	return (\%ret,$gCnt);
-}
-#simply rewrites original fasta names to counts used in my genecats
-sub rewriteFastaHdIdx($ $){
-	my ($inf,$hr) = @_;
-	my %gene2num = %{$hr};
-	my $numHd =0;
-	open I,"<$inf" or die "Can't open fasta file $inf\n"; 
-	open O,">$inf.tmp" or die "can't open tmp fasta out $inf.tmp\n";
-	while (my $l = <I>){
-		if ($numHd > 100){
-			print "Seems like $inf heads were already reformated to number sheme!\n";
-			 close I; close O; system "rm $inf.tmp"; return;
-		}
-		if ($l =~ m/^>/){
-			chomp $l;
-			my $name = substr($l,1);
-			if ($name =~ m/^\d+$/ && !exists($gene2num{$name})){
-				$numHd++;
-				print O ">".$name."\n";
-			} else {
-				unless(exists($gene2num{$name})){die "can not identify $name gene in index file while rewritign nt fna names $inf\n";}
-				print O ">".$gene2num{$name}."\n";
-			}
-		} else {
-			print O $l;
-		}
-	}
-	close I; close O;
-	systemW "rm -f $inf; mv $inf.tmp $inf";
-}
+
 sub protExtract{
 	my ($inD,$protXtrF) =@_;
 	#gets the AA seqs for each "master" protein
 	#1 read 
+	#die keys %map;
 	
 	my $protF = $inD."compl.incompl.95.prot.faa";
 	#my $incl = $inD."Matrix.genes2rows.txt";
@@ -667,6 +627,7 @@ sub protExtract{
 	
 	my ($geneIdxH,$numGenes) = readGeneIdx($inD."Matrix.genes2rows.txt");
 	rewriteFastaHdIdx($inD."compl.incompl.95.fna",$geneIdxH);
+	
 	
 	my %linV = %{$geneIdxH}; #represent gene name to matrix ID
 	my @ordG = sort keys %linV;
@@ -693,7 +654,7 @@ sub protExtract{
 			} else {
 				unless (exists ($map{$curSmpl})){$curSmpl = $map{altNms}{$curSmpl} if (exists ($map{altNms}{$curSmpl}));}
 				unless (exists ($map{$curSmpl})){#also extra protein, but with __ marker in them
-					print "sk"; $ctchStrXtr .= $ctchStr; $ctchStr="";$curSmpl="";next;
+					print "sk_ $curSmpl\n"; $ctchStrXtr .= $ctchStr; $ctchStr="";$curSmpl="";next;
 				}
 				print $curSmpl." $cnt\n";
 				#if (!exists($map{$curSmpl}) || !exists($map{$curSmpl}{wrdir}) ){die "$curSmpl not in mapping file\n";}
@@ -755,33 +716,58 @@ sub protExtract{
 }
 sub combineClstr(){
 	my ($clstr,$idx) = @_;
+	#currently can only be run first time!
 	print "Combining cluster strings.. \n";
-	open I,"<$clstr"; open O,">$clstr.2"; open Oi,">$clstr.idx"; open C,"<$idx"; 
-	my $chLine = <C>;
-	my $oil = "";
+	#tmp out files, copied over to correct locations later!
+	open I,"<$clstr"; open O,">$clstr.2"; open Oi,">$clstr.idx2"; open C,"<$idx"; 
+	my $chLine = <C>; my $newOil=0;
+	#counts if already formated?
+	my $evidence=0; my $eviNo=0;
+	my $oil = ""; #collects for current cluster genes
 	print Oi "#Gene	members\n";
 	while (my $line = <I>){
 		chomp $line;
 		if ($line =~ m/^>/){
-			chop $oil;
-			print Oi $oil."\n";
+			$line =~ m/^>(.*)/;
+			#chop $oil;
+			print Oi $oil."\n" if ($oil ne "");
 			$chLine = <C>;
+			
 			my @spl = split(/\t/,$chLine);
+			if ($1 eq $spl[0]){
+				$evidence++;
+				if ($evidence>10 && $eviNo == 0){
+					print "It seems like index file was already created, aborting coversion..\n";
+					systemW "rm $clstr.idx2 $clstr.2";
+					return;
+				}
+			} else {
+				$eviNo ++;
+			}
 			if ($spl[1] ne $line){
 				die "Can;t match \n$line \n$spl[1]\n";
 			}
+			
 			$line = ">$spl[0]";
 			$oil = $spl[0]."\t";
+			$newOil = 1;
 			#die "FND :: $line\n";
 		} else {
 			$line =~ m/\s+(>.*)\.\.\.\s.*/;
-			$oil.=$1.",";
+			if ($newOil){
+				$oil.=$1;
+				$newOil=0;
+			} else {
+				$oil.=",".$1;
+			}
 		}
 		print O $line."\n";
 	}
 	#insert last entry
 	print Oi $oil."\n";
 	systemW "rm $clstr; mv $clstr.2 $clstr";
+	systemW "rm $clstr.idx" if (-e "$clstr.idx");
+	systemW "mv $clstr.idx2 $clstr.idx";
 	print "Done rewriting cluster numbers & creating cluster index\n";
 	close I; close O;close C; close Oi;
 }
@@ -948,14 +934,15 @@ sub submCDHIT($ $ $ $ $){
 
 	#move to final location
 	$cmd .= "mv $tmpDir/compl.incompl.$cdhID.fna* $OutD\n";
-	$cmd .= "cp $tmpDir/COG/*.fna.clstr $tmpDir/FMGclusN.log $qsubDir\n" if (@COGlst > 0);
+	
+	$cmd .= "mkdir -p $qsubDir/FMG\ncp $tmpDir/COG/*.fna.clstr $tmpDir/FMGclusN.log $qsubDir/FMG\n" if (@COGlst > 0);
 
 	#get protein sequences for each gene & rewrite seq names to numbers
 	$cmd .= "perl $selfScript ? $baseOut protExtract \"$extraRdsFAA\"\n";
 	$cmd .= "$extre100Scr $OutD $oldNameFolders\n";
 	$cmd .= "$selfScript MGS $OutD\n";
 	$cmd .= "$selfScript kraken $OutD\n";
-	$cmd .= "$selfScript kaiju $OutD\n";
+	#$cmd .= "$selfScript kaiju $OutD\n"; #kaiju is too instable.. don't use
 	$cmd .= "$selfScript specI $OutD\n";
 	
 	
@@ -1001,9 +988,9 @@ sub writeBucket(){
 		open O,">$bdir"."compl.fna" or die "Can't open B0 compl.fna\n"; 
 		foreach(sort {length $b <=> length $a} @{$OCOMPLar} ){print O $_;} close O; @{$OCOMPLar} = ();
 		my @O5P = @{$O5Par};
-		open O,">$bdir"."5Pcompl.fna" or die "Can't open B0 5P.fna\n"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O; @O3P=();
+		open O,">$bdir"."5Pcompl.fna" or die "Can't open B0 5P.fna\n"; foreach(sort {length $b <=> length $a} @O5P ){print O $_;} close O; @O5P=();
 		my @O3P = @{$O3Par};  
-		open O,">$bdir"."3Pcompl.fna" or die "Can't open B0 3P.fna\n"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O; @O5P=();
+		open O,">$bdir"."3Pcompl.fna" or die "Can't open B0 3P.fna\n"; foreach(sort {length $b <=> length $a} @O3P ){print O $_;} close O; @O3P=();
 		 my @OINC = @{$OINCar}; 
 		open O,">$bdir"."incompl.fna" or die "Can't open B0 incompl.fna\n";foreach(sort {length $b <=> length $a} @OINC ){print O $_;} close O;  @OINC=();
 	}
@@ -1264,57 +1251,6 @@ sub readCDHITCls(){
 }
 
 
-sub readSam($){
-	my ($iF,$OO) = @_;#$fref,
-	#my %fas = %{$fref};
-	open I,"<$iF" or die "Can't open $iF\n";
-	my $cnt = 0; my $totLines = 0;
-	my $add2file=0; my $add2cls=0;
-	my %ret; #my $fasStr = "";
-	print $OO "\n";
-	while (my $line = <I>){
-		chomp $line; $totLines++;
-		my @sam = split(/\t/,$line);
-		my $qu = $sam[0]; my $ref = $sam[2];
-		#if ($qu =~ m/MM28__C41733_L=413;_1/){print "TRHERE\n";}
-		my $xtrField = join("\t",@sam[11..$#sam]);
-		#die $xtrField;
-		$xtrField =~ m/XM:i:(\d+)\s.*XO:i:(\d+)\s.*XG:i:(\d+)/;
-		my $refL = length($sam[9]);
-		#print "$1 $2 $3 $refL ".$1/$refL." ".($2+$3)/$refL."\n";
-		#95% id || 90% seq length
-		my $pid = $1/($refL-$2-$3);
-		if ( ($2+$3)/$refL > 0.1 || $pid > 0.05){ #not good enough hit criteria, attach to fasta
-			#print $qu."\n";
-			my $nqu = ">".$qu;
-			#die "Can't find $qu in ref fasta\n" unless(exists($fas{$nqu}));
-			#experimental TODO
-			if (length($sam[9]) > 100){ #too short hits don't need to be attached..
-				print $OO $nqu."\n".$sam[9]."\n";#$fas{$nqu}."\n";
-				$add2file++;
-			}
-			#die $nqu."\n".$sam[9]."\n";
-			next;
-		}
-		my $mism = $1; my $gaps = $2+$3;
-		#$cnt++;
-		my $clsStr = $refL-$2-$3."nt, >".$qu."... at +\/". int((1-$pid)*100) .".00%";
-		if (exists($ret{$ref})){
-			$ret{$ref} .= "\n".$clsStr
-		} else {
-			$ret{$ref} = $clsStr;
-		}
-		$add2cls++;
-		#if ($qu =~ m/MM28__C41733_L=413;_1/){print "print\n";}
-
-		#print $ret{$ref}."\n";
-		#die if ($cnt == 10);
-	}
-	close I;
-	print LOG $add2cls." hits to clusters, $add2file added FNAs to be reclustered (of ".$totLines." lines) in $iF\n";
-	return (\%ret);
-}
-
 
 
 
@@ -1371,6 +1307,86 @@ sub geneCatFunc{
 		#calc_modules("$outD/${curDB}L0.txt","$outD/modules/",0.5,0.5);#$ModCompl,$EnzCompl);
 	}
 
+}
+
+#simply rewrites original fasta names to counts used in my genecats
+sub rewriteFastaHdIdx{ # #replaces ">MM2__C122;_23" with number from gene catalog
+	my ($inf,$hr) = @_;
+	my %gene2num = %{$hr};
+	my $numHd =0;
+	open I,"<$inf" or die "Can't open fasta file $inf\n"; 
+	open O,">$inf.tmp" or die "can't open tmp fasta out $inf.tmp\n";
+	while (my $l = <I>){
+		if ($numHd > 100){
+			print "Seems like $inf heads were already reformated to number sheme!\n";
+			 close I; close O; system "rm $inf.tmp"; return;
+		}
+		if ($l =~ m/^>/){
+			chomp $l;
+			my $name = substr($l,1);
+			if ($name =~ m/^\d+$/ && !exists($gene2num{$name})){
+				$numHd++;
+				print O ">".$name."\n";
+			} else {
+				unless(exists($gene2num{$name})){die "can not identify $name gene in index file while rewritign nt fna names $inf\n";}
+				print O ">".$gene2num{$name}."\n";
+			}
+		} else {
+			print O $l;
+		}
+	}
+	close I; close O;
+	systemW "rm -f $inf; mv $inf.tmp $inf";
+}
+sub readSam($$){
+	my ($iF,$OO) = @_;#$fref,
+	#my %fas = %{$fref};
+	open I,"<$iF" or die "Can't open $iF\n";
+	my $cnt = 0; my $totLines = 0;
+	my $add2file=0; my $add2cls=0;
+	my %ret; #my $fasStr = "";
+	print $OO "\n";
+	while (my $line = <I>){
+		chomp $line; $totLines++;
+		my @sam = split(/\t/,$line);
+		my $qu = $sam[0]; my $ref = $sam[2];
+		#if ($qu =~ m/MM28__C41733_L=413;_1/){print "TRHERE\n";}
+		my $xtrField = join("\t",@sam[11..$#sam]);
+		#die $xtrField;
+		$xtrField =~ m/XM:i:(\d+)\s.*XO:i:(\d+)\s.*XG:i:(\d+)/;
+		my $refL = length($sam[9]);
+		#print "$1 $2 $3 $refL ".$1/$refL." ".($2+$3)/$refL."\n";
+		#95% id || 90% seq length
+		my $pid = $1/($refL-$2-$3);
+		if ( ($2+$3)/$refL > 0.1 || $pid > 0.05){ #not good enough hit criteria, attach to fasta
+			#print $qu."\n";
+			my $nqu = ">".$qu;
+			#die "Can't find $qu in ref fasta\n" unless(exists($fas{$nqu}));
+			#experimental TODO
+			if (length($sam[9]) > 100){ #too short hits don't need to be attached..
+				print $OO $nqu."\n".$sam[9]."\n";#$fas{$nqu}."\n";
+				$add2file++;
+			}
+			#die $nqu."\n".$sam[9]."\n";
+			next;
+		}
+		my $mism = $1; my $gaps = $2+$3;
+		#$cnt++;
+		my $clsStr = $refL-$2-$3."nt, >".$qu."... at +\/". int((1-$pid)*100) .".00%";
+		if (exists($ret{$ref})){
+			$ret{$ref} .= "\n".$clsStr
+		} else {
+			$ret{$ref} = $clsStr;
+		}
+		$add2cls++;
+		#if ($qu =~ m/MM28__C41733_L=413;_1/){print "print\n";}
+
+		#print $ret{$ref}."\n";
+		#die if ($cnt == 10);
+	}
+	close I;
+	print LOG $add2cls." hits to clusters, $add2file added FNAs to be reclustered (of ".$totLines." lines) in $iF\n";
+	return (\%ret);
 }
 
 sub FOAMassign{

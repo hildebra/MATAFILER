@@ -1,0 +1,38 @@
+	GGC1.SSU.hiera.txt.gz
+Bacteria;?;?;?	78
+Bacteria;Actinobacteria;Actinobacteria;Micrococcales	2
+Bacteria;Actinobacteria;Actinobacteria;Propionibacteriales	1
+Bacteria;Cyanobacteria;Chloroplast;Quercus robur	2
+Bacteria;Cyanobacteria;Chloroplast;Ziziphus jujuba	1
+Bacteria;Cyanobacteria;Cyanobacteria;?	2
+Bacteria;Firmicutes;Bacilli;Bacillales	76
+Bacteria;Firmicutes;Bacilli;Lactobacillales	78
+Bacteria;Firmicutes;Clostridia;Clostridiales	4
+Bacteria;Planctomycetes;OM190;uncultured planctomycete	4
+Bacteria;Proteobacteria;ARKICE-90;uncultured gamma proteobacterium	1
+Bacteria;Proteobacteria;Alphaproteobacteria;Caulobacterales	3
+Bacteria;Proteobacteria;Alphaproteobacteria;Rhizobiales	2
+Bacteria;Proteobacteria;Betaproteobacteria;Burkholderiales	4
+Bacteria;Proteobacteria;Gammaproteobacteria;?	133
+Bacteria;Proteobacteria;Gammaproteobacteria;Alteromonadales	4
+Bacteria;Proteobacteria;Gammaproteobacteria;Cellvibrionales	33
+Bacteria;Proteobacteria;Gammaproteobacteria;Enterobacteriales	329
+Bacteria;Proteobacteria;Gammaproteobacteria;Gammaproteobacteria Incertae Sedis	1
+Bacteria;Proteobacteria;Gammaproteobacteria;Oceanospirillales	1
+Bacteria;Proteobacteria;Gammaproteobacteria;Pasteurellales	1
+Bacteria;Proteobacteria;Gammaproteobacteria;Pseudomonadales	5434
+Bacteria;Proteobacteria;Gammaproteobacteria;Thiotrichales	27
+Bacteria;Proteobacteria;Gammaproteobacteria;Xanthomonadales	10
+Bacteria;Proteobacteria;pItb-vmat-80;?	1
+Bacteria;Spirochaetae;Spirochaetes;Spirochaetales	1
+Bacteria;Tenericutes;?;?	1
+Bacteria;Tenericutes;Mollicutes;?	80
+Bacteria;Tenericutes;Mollicutes;Mollicutes Incertae Sedis	43
+Bacteria;Tenericutes;Mollicutes;Mycoplasmatales	1
+Bacteria;Verrucomicrobia;Arctic97B-4 marine group;uncultured marine bacterium	1
+Eukaryota;Alveolata;Apicomplexa_X;Haemosporida	1
+Eukaryota;Opisthokonta;?;?	1
+Eukaryota;Opisthokonta;Ascomycota;Pezizomycotina	1
+Eukaryota;Opisthokonta;Chytridiomycota;Chytridiomycotina	7
+Eukaryota;Opisthokonta;Mollusca;Gastropoda	82
+Eukaryota;Opisthokonta;Nematoda;Chromadorea	191

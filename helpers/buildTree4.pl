@@ -41,6 +41,7 @@ my $msapBin = getProgPaths("msaprobs");
 my $trimalBin = getProgPaths("trimal");
 my $pigzBin  = getProgPaths("pigz");
 my $trDist = getProgPaths("treeDistScr");
+my $eteBin = "";
 my $gubbinsBin = "/g/bork3/home/hildebra/bin/gubbins/python/scripts/run_gubbins.py";
 my $pamlBin = "/g/bork3/home/luetge/softs/paml4.9e/bin/codeml";
 
@@ -79,6 +80,19 @@ my $clusterName="";
 my $MSAreq = 1;
 my $iqFast=0;
 
+
+## parameters for codeml
+my $selGene=0; 		#run dnds just on subset (given by genesForDNDS) of genes 
+my @genesExtra;	#list with selected genes just for dnds
+my $locTmpD= "";
+my @model= (0,1,2);  # codeml models: 0 -> neutral selection,  (1,2,7,8) -> test for postive selection
+my @omegas = (0.3, 1.3); #try different omega values to check for convergence	
+my $repeatCounts=2;	#set how often each model should be repeated to check for convergence 
+my $MsaD=""; #directory to MSAs for codeml # MSA files need to be named ($gene*.fna) 
+my $codemlOutD=""; 
+my $treeFile="";
+
+
 die "no input args!\n" if (@ARGV == 0 );
 
 
@@ -110,12 +124,33 @@ GetOptions(
 	"runClonalFrameML=i" => \$doCFML,
 	"runGubbins=i" => \$doGubbins,
 	"runLengthCheck=i" => \$doLengthCheck,		#check that sequence length can be divided by 3
+
 	"runDNDS=i" => \$doDNDS,			#run dNdS analysis
+	"genesForDNDS=s{,}" => \@genesExtra,		#list with selected genes just for dnds
+	"DNDSonSubset=i" => \$selGene,			#run dnds just on subset (given by genesForDNDS) of genes
+	"DNDS_TmpD=s" => \$locTmpD,
+	"codemlRepeats=i" => \$repeatCounts,
+	"treefileCodeml=s" => \$treeFile,
+	"MSAdirCodeml=s" => \$MsaD,			#directory to MSAs for codeml # MSA files need to be named ($gene*.fna) 
+	"outDCodeml=s"=> \$codemlOutD,
+
 	"genesToPhylip=i" => \$doGenesToPh,	
 	"runFastgear=i" => \$doFastGear,
 	"runFastGearPostProcessing=i" => \$doFastGearSummary,
 	"clustername=s" => \$clusterName,
 ) or die("Error in command line arguments\n");
+
+
+##### files for codeml
+$codemlOutD = "$outD/codeml" if ($codemlOutD eq "");;	
+system "mkdir -p  $codemlOutD" unless(-d "$codemlOutD");
+
+if ($doDNDS == 1 && $treeFile eq ""){	die "treefile required for codeml. Set treefileCodeml\n";}
+if ($doDNDS == 1 && $MsaD eq ""){	die "Directory to MSAs required for codeml. Set MSAdirCodeml\n";}
+if ($doDNDS == 1 && $locTmpD eq ""){	die "TmpD required for codeml. Set DNDS_TmpD\n";}
+######
+
+
 if ($doCFML && !$doRAXML){die "Need RaxML alignment, if Clonal fram is to be run..\n";}
 
 if ($aaFna eq "" || $useAA4tree){	$calcSyn=0;$calcNonSyn=0;}
@@ -576,7 +611,7 @@ for (my $t=0;$t<@thrs;$t++){
 #### compute dNdS values ######
 
 if($doDNDS){
-	if($continue){
+	if($cogCats ne ""){
 		open I,"<$cogCats" or die "Can't open cogcats $cogCats\n"; 
 		while (<I>){
 			my $cnt2 =0;
@@ -604,6 +639,10 @@ if($doDNDS){
 	
 	runCodeml(\@geneList, $dndsDir, $treeFile, $treeD, $phylipD, $codemlOutD, $MsaD, $Model);   # MSA files and Phylip files need to be named ($gene.$cnt.fna) and ($gene.$cnt.fna.ph)
 	
+	#if($selGene){		@geneList=@genesExtra;}		#die "@geneList\n";
+	#my $tmpDir = $locTmpD;	system "mkdir -p  $tmpDir" unless(-d $tmpDir);	
+	#	runCodeml(\@geneList, $treeFile, $codemlOutD, $MsaD, $tmpDir);   
+
 	die;
 
 }
@@ -1262,85 +1301,141 @@ sub synPosOnly{#now finished, version is cleaner
 
 
 
-sub runCodeml($ $ $ $ $ $ $ $){
-	my ($geneListRef, $dndsD, $nwkFile, $treeDir, $phylipDir, $codemlOutD, $MSADir, $model) = @_;
+sub runCodeml($ $ $ $ $){
+	my ($geneListRef, $nwkFile, $codemlOutD, $MSADir, $codemlOutDTmp) = @_;
 	my @geneListFin = @{$geneListRef};
-	system "mkdir -p  $dndsD/ctlFiles" unless(-d "$dndsD/ctlFiles");
-	system "mkdir -p  $treeDir/sub" unless(-d "$treeDir/sub");
-
-	my @genomeList; my @FNAheader; my $MSAfile; my $contrFileM01278; my $nwkFile_gene;
+	my @omegaStart = @omegas;			
+	
+	my @FNAheader; my $nwkFile_gene; 
 	foreach my $gene (@geneListFin){
 		my $cnt = 0;
-		@FNAheader = `grep '^>' $MSADir/$gene.$cnt.fna`;
+		my @genomeList;
+				
+		opendir(DIR, $MSADir);
+		my @MSAfile = grep(/$gene.*\.fna/,readdir(DIR));
+		closedir(DIR);
+		#die "@MSAfile\n";
+		
+		my $MSAfile2 = "$MSADir/$MSAfile[0]";
+		#die "$MSAfile2\n";
+
+		open(FNA, "<$MSAfile2" ) or die "could not find $!";
+		my @FNAheader = grep(/^>/, <FNA> );
+		close FNA;		
+		#die @FNAheader;
+
 		foreach my $genome (@FNAheader){
 			my ($genome2) = $genome =~ m/>(.*)?$smplSep/;
 			push (@genomeList, $genome2);
 			} 
+
+		next if(scalar @genomeList <3);
 		#die "@genomeList\n";
 		#die "$nwkFile\n";
+		
+		my $codemlOutDFile = "$codemlOutD/${gene}_run2";
+		system "mkdir -p  $codemlOutDFile" unless(-d $codemlOutDFile);
+				
+		$nwkFile_gene = "$codemlOutDTmp/subtree_$gene.nwk";
 
-		$MSAfile = "$phylipDir/$gene.$cnt.fna.ph";
-		#die "$MSAfile\n";
-		$contrFileM01278 = "codeml_M0_$gene.c";
+		####################### Prepare tree ################################## 
+		my $cmd_prune = "python $eteBin mod -t $nwkFile --prune @genomeList --unroot -o $nwkFile_gene";
+		#my $cmd_prune = "ete3 mod -t $nwkFile --prune @genomeList -o $nwkFile_gene";
+		
+		system $cmd_prune . "> $nwkFile_gene";
+		#die;
 
-		## prune tree and map it to order in .fna
-		my $nwkTree = Bio::Phylo::IO->parse( -file => $nwkFile, 
-			-format => 'newick',
-                        -keep   => \@genomeList)->first -> to_newick;
-			
-		#die "$nwkTree\n";
-		#die "$tree\n";
-			
-		my $ind = 1; 
+		my $treeio = Bio::TreeIO->new(-file => $nwkFile_gene, -format => 'newick');
+		my $nwkTree_all = $treeio->next_tree;
+		my $nwkTree = $nwkTree_all->as_text('newick');
+ 
 		foreach my $genom (@genomeList){
-			$nwkTree =~ s/$genom/$ind/g;
-			$ind++;
+			$nwkTree =~ s/$genom/$genom\_$gene/g;
 		}
-		#die "$nwkTree\n";
-			
-		#write nwk file with pruned tree and indices as names
-		$nwkFile_gene = "$treeDir/sub/subtree_$gene.nwk";
-		open N, ">$nwkFile_gene"; 
+		
+		$nwkTree =~ s/\)1:/\):/g;
+	
+		my $nwkFile_gene2 = "$codemlOutDTmp/subtree2_$gene.nwk";
+		open N, ">$nwkFile_gene2"; 
 		print N $nwkTree;
 		close N;
-		#die;
 
-		## write controlfile Model X
-		open M0,">$dndsD/ctlFiles/$contrFileM01278" or die "Can;t open control file for codeml: $contrFileM01278\n";
+
+		####################################################################
+
+		chdir $codemlOutDTmp;
+		my $modelName;
+		for (my $mod=0; $mod < scalar(@model); $mod++){		
+			$modelName = $model[$mod];
+			my @repSel;
+			for (my $rep=1; $rep <= $repeatCounts; $rep++) {
+
+				open M0,">$codemlOutDTmp/${gene}_${rep}_${modelName}.c" or die "Can't open control file for codeml: $gene\n";
 		
-		print M0 "seqfile = $MSAfile\n";
-		print M0 "treefile = $nwkFile_gene\n";
-		print M0 "outfile = $codemlOutD/codemlOut_$gene.txt\n";
-		print M0 "runmode = 0\n";
-		print M0 "seqtype = 1\n";
-		print M0 "CodonFreq = 2\n";
-		print M0 "ndata = 1\n";
-		print M0 "clock = 0\n";
-		print M0 "model = 0\n";
-		print M0 "NSsites = $model\n";
-		#print M0 "NSsites = 0 1 2 7 8\n";	## lnL with several models (0:one w;1:neutral;2:selection;7:beta;8:beta&w;)
-		print M0 "icode = 0\n";
-		print M0 "fix_omega = 0\n";
-		print M0 "omega = .4\n";
-		print M0 "cleandata = 0\n";
+				print M0 "seqfile = $MSAfile2\n";
+				print M0 "verbose = 2\n";
+				print M0 "treefile = $nwkFile_gene2\n";
+				print M0 "outfile = $codemlOutDTmp/codemlOut_${gene}_${rep}_${modelName}.txt\n";
+				print M0 "aaDist = 0\n";
+				print M0 "fix_blength = 0\n";
+				print M0 "runmode = 0\n";
+				print M0 "seqtype = 1\n";
+				print M0 "CodonFreq = 2\n";
+				print M0 "clock = 0\n";
+				print M0 "model = 0\n";
+				print M0 "NSsites = $modelName\n";
+				print M0 "fix_omega = 0\n";
+				print M0 "omega = $omegaStart[($rep-1)]\n";
+				print M0 "cleandata = 0\n";
+				print M0 "getSE = 0\n";	
+				print M0 "icode = 0\n";
+				print M0 "fix_kappa = 0\n";
+				print M0 "kappa = 2\n";
+				print M0 "Mgene = 0\n";
+				print M0 "ncatG = 8\n";
+				print M0 "RateAncestor = 0\n";
+				print M0 "Small_Diff = 1e-6\n";
+				print M0 "noisy = 0\n";
+				
 
-		close M0;
+				close M0;
 
-		## run codeml  
-		$cmd = "$pamlBin $dndsD/ctlFiles/$contrFileM01278\n";
-		#$cmd = "codeml $dndsD/ctlFiles/$contrFileM01278\n";
-		#die "$cmd\n";
-		system $cmd; 
-		print "finished codeml Model $model on $gene\n";
+				## run codeml  
+				$cmd = "$pamlBin $codemlOutDTmp/${gene}_${rep}_${modelName}.c\n";			
+				#die "$cmd\n";
+				systemW $cmd; 
+				print "finished codeml Model $modelName run $rep on $gene\n";
+				#die;
+				
+				#get lnL and push to array
+				open(CM, "<$codemlOutDTmp/codemlOut_${gene}_${rep}_${modelName}.txt" ) or die "could not find $!";
+				while (my $line = <CM>) {
+        				if ($line =~ /^lnL*/) {
+            					$line =~ m/^.*\):\s*([-+]?[0-9]*\.?[0-9]+)\s.*$/;
+						push @repSel, $1;
+						last;
+        				}				
+				}
+				close CM;
+				#system "rm $codemlOutDTmp/rst1";
+
+			} 
+			
+			my $idxMax = 0;
+    			$repSel[$idxMax] > $repSel[$_] or $idxMax = $_ for 1 .. $#repSel; 
+			my $repSelected = $idxMax+1;
+			#die "@repSel\n$repSelected\n";
+			system "cp $codemlOutDTmp/codemlOut_${gene}_${repSelected}_${modelName}.txt $codemlOutDFile/out_M$modelName.txt";
+		}	
+		
+		system "rm -r $codemlOutDTmp";
+		#system "rm $nwkFile_gene2";
+		#system "rm $nwkFile_gene";
 		#die;
-		$cnt ++;
-		#if($cnt==5){
-		#die;
-		#}
+
 	}
 
-	system "rm -r $dndsD/ctlFiles/";
-	system "rm -r $treeDir/sub/";
+
 }
 
 ### Fastgear -> test for recombination 
