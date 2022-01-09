@@ -2,6 +2,7 @@
 
 Author:  
 Falk Hildebrand <Falk.Hildebrand@gmail.com>
+[![DOI](https://zenodo.org/badge/81440941.svg)](https://zenodo.org/badge/latestdoi/81440941)
 
 MATAFILER is a pipeline developed to 
 - Assemble metagenomes, profile miTags, profile functions, profile taxonomy using a variety of approaches (MATAFILER.pl)
