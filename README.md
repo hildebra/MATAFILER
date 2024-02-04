@@ -8,6 +8,10 @@ MATAFILER is a pipeline developed to
 - Assemble metagenomes, profile miTags, profile functions, profile taxonomy using a variety of approaches (MATAFILER.pl)
 - Build a gene catalog based on these assemblies and predicted genes, build abundance matrices from these and annotate the genes functionally (geneCat.pl)
 
+## Important notice
+
+Please do not use this version of MATAFILER any longer, it can be considered deprecated at this point. Please refer instead to our upcoming release of https://github.com/hildebra/MATAF3 (at the time of writing not released yet).
+
 ### License
 
  Copyright (c) 2017 Falk Hildebrand
