@@ -10,7 +10,7 @@ MATAFILER is a pipeline developed to
 
 ## Important notice
 
-Please do not use this version of MATAFILER any longer, it can be considered deprecated at this point. Please refer instead to our upcoming release of https://github.com/hildebra/MATAF3 (at the time of writing not released yet).
+Please do not use this version of MATAFILER any longer, it can be considered deprecated at this point. Please refer instead to our upcoming release of https://github.com/hildebra/MG-TK 
 
 ### License
 
