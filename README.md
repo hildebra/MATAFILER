@@ -2,7 +2,9 @@
 
 ## OUTDATED version
 
-Please use https://github.com/hildebra/MATAFILER4 for the latest version.
+Please do not use this version of MATAFILER any longer, it can be considered deprecated at this point. Please refer instead to our upcoming release of https://github.com/hildebra/MATAFILER4 for the latest version.
+
+## READEM
 
 Author:  
 Falk Hildebrand <Falk.Hildebrand@gmail.com>
@@ -12,9 +14,6 @@ MATAFILER is a pipeline developed to
 - Assemble metagenomes, profile miTags, profile functions, profile taxonomy using a variety of approaches (MATAFILER.pl)
 - Build a gene catalog based on these assemblies and predicted genes, build abundance matrices from these and annotate the genes functionally (geneCat.pl)
 
-## Important notice
-
-Please do not use this version of MATAFILER any longer, it can be considered deprecated at this point. Please refer instead to our upcoming release of https://github.com/hildebra/MG-TK 
 
 ### License
 
