@@ -1,5 +1,9 @@
 # MATAFILER
 
+## OUTDATED version
+
+Please use https://github.com/hildebra/MATAFILER4 for the latest version.
+
 Author:  
 Falk Hildebrand <Falk.Hildebrand@gmail.com>
 [![DOI](https://zenodo.org/badge/81440941.svg)](https://zenodo.org/badge/latestdoi/81440941)
